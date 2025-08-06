@@ -9,7 +9,7 @@
 
 2. 通过web界面访问项目
 
-http://<ip-address>:8080
+http://ip-address:8080
 
 
 
