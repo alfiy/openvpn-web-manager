@@ -164,31 +164,63 @@ def add_client():
 
 @app.route('/revoke_client', methods=['POST'])
 def revoke_client():
-    client_number = request.form.get('client_number')
-    if not client_number:
-        return jsonify({'status': 'error', 'message': 'Client number is required'})
+    client_name = request.form.get('client_name')
+    if not client_name:
+        return jsonify({'status': 'error', 'message': 'Client name is required'})
     
     try:
-        # Execute the script with the appropriate options to revoke a client
-        process = subprocess.Popen(['sudo', 'bash', SCRIPT_PATH], 
-                                  stdin=subprocess.PIPE,
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE)
+        # Direct revocation commands without interactive script
+        commands = [
+            # Change to easy-rsa directory and revoke the client
+            ['sudo', 'bash', '-c', f'cd /etc/openvpn/easy-rsa && ./easyrsa --batch revoke "{client_name}"'],
+            
+            # Generate new CRL (Certificate Revocation List)
+            ['sudo', 'bash', '-c', 'cd /etc/openvpn/easy-rsa && ./easyrsa gen-crl'],
+            
+            # Update the CRL file in OpenVPN directory
+            ['sudo', 'rm', '-f', '/etc/openvpn/crl.pem'],
+            ['sudo', 'cp', '/etc/openvpn/easy-rsa/pki/crl.pem', '/etc/openvpn/crl.pem'],
+            ['sudo', 'chmod', '644', '/etc/openvpn/crl.pem'],
+            
+            # Remove client configuration file
+            ['sudo', 'rm', '-f', f'/root/{client_name}.ovpn'],
+            
+            # Remove client from IP persistence file
+            ['sudo', 'sed', '-i', f'/^{client_name},/d', '/etc/openvpn/ipp.txt'],
+            
+            # Remove client-specific configuration if exists
+            ['sudo', 'rm', '-f', f'/etc/openvpn/ccd/{client_name}'],
+            
+            # Restart OpenVPN service to apply changes
+            ['sudo', 'systemctl', 'restart', 'openvpn@server']
+        ]
         
-        # Select option 2 (Revoke existing user)
-        process.stdin.write(b'2\n')
-        process.stdin.flush()
-        time.sleep(0.5)
+        failed_commands = []
+        for cmd in commands:
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                if result.returncode != 0:
+                    # Some commands may fail if files don't exist, which is okay
+                    if 'rm' not in cmd[1] and 'sed' not in cmd[1]:
+                        failed_commands.append(f"{' '.join(cmd)}: {result.stderr}")
+            except subprocess.TimeoutExpired:
+                failed_commands.append(f"{' '.join(cmd)}: Command timed out")
+            except Exception as cmd_error:
+                failed_commands.append(f"{' '.join(cmd)}: {str(cmd_error)}")
         
-        # Enter client number
-        process.stdin.write(f"{client_number}\n".encode())
-        process.stdin.flush()
-        
-        process.communicate()
-        
-        return jsonify({'status': 'success', 'message': 'Client revoked successfully'})
+        if failed_commands:
+            return jsonify({
+                'status': 'warning', 
+                'message': f'Client {client_name} partially revoked. Some operations failed: {"; ".join(failed_commands)}'
+            })
+        else:
+            return jsonify({
+                'status': 'success', 
+                'message': f'Client {client_name} successfully revoked and removed from all configurations'
+            })
+            
     except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Error: {str(e)}'})
+        return jsonify({'status': 'error', 'message': f'Revocation error: {str(e)}'})
 
 @app.route('/uninstall', methods=['POST'])
 def uninstall():
