@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenVPN管理界面</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            padding-top: 20px;
+        }
+        .card {
+            margin-bottom: 20px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .status-running {
+            background-color: #28a745;
+        }
+        .status-installed {
+            background-color: #ffc107;
+        }
+        .status-not-installed {
+            background-color: #dc3545;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+            display: none;
+            margin: 10px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">OpenVPN管理界面</h1>
+        
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>OpenVPN状态</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if status == 'running' %}
+                            <p><span class="status-indicator status-running"></span> OpenVPN正在运行</p>
+                        {% elif status == 'installed' %}
+                            <p><span class="status-indicator status-installed"></span> OpenVPN已安装但未运行</p>
+                        {% else %}
+                            <p><span class="status-indicator status-not-installed"></span> OpenVPN未安装</p>
+                        {% endif %}
+                        
+                        <div id="status-message" class="alert alert-info d-none"></div>
+                        
+                        {% if status == 'not_installed' %}
+                            <button id="install-btn" class="btn btn-primary">安装OpenVPN</button>
+                            <div class="loader" id="install-loader"></div>
+                        {% endif %}
+                        
+                        {% if status in ['running', 'installed'] %}
+                            <button id="uninstall-btn" class="btn btn-danger">卸载OpenVPN</button>
+                            <div class="loader" id="uninstall-loader"></div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {% if status in ['running', 'installed'] %}
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>添加客户端</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="add-client-form">
+                            <div class="mb-3">
+                                <label for="client_name" class="form-label">客户端名称</label>
+                                <input type="text" class="form-control" id="client_name" name="client_name" required>
+                                <div class="form-text">仅允许字母、数字、下划线和破折号</div>
+                            </div>
+                            <button type="submit" class="btn btn-success">添加客户端</button>
+                            <div class="loader" id="add-client-loader"></div>
+                        </form>
+                        <div id="add-client-message" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>客户端管理</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if clients %}
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>客户端名称</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for client in clients %}
+                                    <tr>
+                                        <td>{{ loop.index }}</td>
+                                        <td>{{ client }}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-primary download-btn" data-client="{{ client }}">下载配置</button>
+                                            <button class="btn btn-sm btn-danger revoke-btn" data-client="{{ client }}" data-number="{{ loop.index }}">撤销</button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            <div class="loader" id="revoke-loader"></div>
+                            <div id="revoke-message" class="mt-3"></div>
+                        {% else %}
+                            <p>没有客户端证书。请添加新客户端。</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-refresh functionality
+        let autoRefreshInterval;
+        
+        function refreshPage() {
+            fetch('/')
+            .then(response => response.text())
+            .then(html => {
+                // Parse the response and update the entire page content
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // Update the entire container content
+                const currentContainer = document.querySelector('.container');
+                const newContainer = doc.querySelector('.container');
+                if (currentContainer && newContainer) {
+                    // Save current scroll position
+                    const scrollTop = window.scrollY;
+                    
+                    // Replace container content
+                    currentContainer.innerHTML = newContainer.innerHTML;
+                    
+                    // Restore scroll position
+                    window.scrollTo(0, scrollTop);
+                    
+                    // Re-bind all event handlers
+                    bindEventHandlers();
+                }
+                
+                console.log('Page refreshed at:', new Date().toLocaleTimeString());
+            })
+            .catch(error => {
+                console.error('Auto-refresh error:', error);
+            });
+        }
+        
+        function startAutoRefresh() {
+            autoRefreshInterval = setInterval(refreshPage, 5000); // Refresh every 5 seconds
+        }
+        
+        function bindEventHandlers() {
+            // Re-bind all event handlers after page update
+            bindInstallHandler();
+            bindAddClientHandler();  
+            bindRevokeHandlers();
+            bindDownloadHandlers();
+            bindUninstallHandler();
+        }
+        
+        function bindInstallHandler() {
+            const installBtn = document.getElementById('install-btn');
+            if (installBtn && !installBtn.hasAttribute('data-bound')) {
+                installBtn.setAttribute('data-bound', 'true');
+                installBtn.addEventListener('click', function() {
+                    const loader = document.getElementById('install-loader');
+                    const statusMessage = document.getElementById('status-message');
+                    
+                    loader.style.display = 'block';
+                    statusMessage.classList.remove('d-none');
+                    statusMessage.textContent = '正在安装OpenVPN，这可能需要几分钟时间...';
+                    
+                    fetch('/install', {
+                        method: 'POST',
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        loader.style.display = 'none';
+                        statusMessage.textContent = data.message;
+                        if (data.status === 'started') {
+                            statusMessage.classList.remove('alert-danger');
+                            statusMessage.classList.add('alert-info');
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 60000); // Reload after 1 minute
+                        } else {
+                            statusMessage.classList.remove('alert-info');
+                            statusMessage.classList.add('alert-danger');
+                        }
+                    })
+                    .catch(error => {
+                        loader.style.display = 'none';
+                        statusMessage.textContent = '安装失败: ' + error;
+                        statusMessage.classList.remove('alert-info');
+                        statusMessage.classList.add('alert-danger');
+                    });
+                });
+            }
+        }
+        
+        function bindAddClientHandler() {
+            const addClientForm = document.getElementById('add-client-form');
+            if (addClientForm && !addClientForm.hasAttribute('data-bound')) {
+                addClientForm.setAttribute('data-bound', 'true');
+                addClientForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const loader = document.getElementById('add-client-loader');
+                    const messageDiv = document.getElementById('add-client-message');
+                    const clientName = document.getElementById('client_name').value;
+                    
+                    loader.style.display = 'block';
+                    
+                    const formData = new FormData();
+                    formData.append('client_name', clientName);
+                    
+                    fetch('/add_client', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        loader.style.display = 'none';
+                        
+                        const alertClass = data.status === 'success' ? 'alert-success' : 'alert-danger';
+                        messageDiv.innerHTML = `<div class="alert ${alertClass}">${data.message}</div>`;
+                        
+                        if (data.status === 'success') {
+                            setTimeout(() => {
+                                refreshPage(); // Use refreshPage instead of full reload
+                            }, 2000);
+                        }
+                    })
+                    .catch(error => {
+                        loader.style.display = 'none';
+                        messageDiv.innerHTML = `<div class="alert alert-danger">操作失败: ${error}</div>`;
+                    });
+                });
+            }
+        }
+        
+        function bindRevokeHandlers() {
+            const revokeBtns = document.querySelectorAll('.revoke-btn:not([data-bound])');
+            revokeBtns.forEach(btn => {
+                btn.setAttribute('data-bound', 'true');
+                btn.addEventListener('click', function() {
+                    const clientNumber = this.getAttribute('data-number');
+                    const clientName = this.getAttribute('data-client');
+                    const loader = document.getElementById('revoke-loader');
+                    const messageDiv = document.getElementById('revoke-message');
+                    
+                    if (confirm(`确定要撤销客户端 "${clientName}" 的证书吗?`)) {
+                        loader.style.display = 'block';
+                        
+                        const formData = new FormData();
+                        formData.append('client_number', clientNumber);
+                        
+                        fetch('/revoke_client', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            loader.style.display = 'none';
+                            
+                            const alertClass = data.status === 'success' ? 'alert-success' : 'alert-danger';
+                            messageDiv.innerHTML = `<div class="alert ${alertClass}">${data.message}</div>`;
+                            
+                            if (data.status === 'success') {
+                                setTimeout(() => {
+                                    refreshPage(); // Use refreshPage instead of full reload
+                                }, 2000);
+                            }
+                        })
+                        .catch(error => {
+                            loader.style.display = 'none';
+                            messageDiv.innerHTML = `<div class="alert alert-danger">操作失败: ${error}</div>`;
+                        });
+                    }
+                });
+            });
+        }
+        
+        function bindDownloadHandlers() {
+            const downloadBtns = document.querySelectorAll('.download-btn:not([data-bound])');
+            downloadBtns.forEach(btn => {
+                btn.setAttribute('data-bound', 'true');
+                btn.addEventListener('click', function() {
+                    const clientName = this.getAttribute('data-client');
+                    window.location.href = `/download_client/${clientName}`;
+                });
+            });
+        }
+        
+        function bindUninstallHandler() {
+            const uninstallBtn = document.getElementById('uninstall-btn');
+            if (uninstallBtn && !uninstallBtn.hasAttribute('data-bound')) {
+                uninstallBtn.setAttribute('data-bound', 'true');
+                uninstallBtn.addEventListener('click', function() {
+                    if (confirm('确定要卸载OpenVPN吗? 所有客户端配置将被删除!')) {
+                        const loader = document.getElementById('uninstall-loader');
+                        const statusMessage = document.getElementById('status-message');
+                        
+                        loader.style.display = 'block';
+                        statusMessage.classList.remove('d-none');
+                        statusMessage.textContent = '正在卸载OpenVPN...';
+                        
+                        fetch('/uninstall', {
+                            method: 'POST',
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            loader.style.display = 'none';
+                            statusMessage.textContent = data.message;
+                            if (data.status === 'success') {
+                                statusMessage.classList.remove('alert-danger');
+                                statusMessage.classList.add('alert-success');
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 3000);
+                            } else {
+                                statusMessage.classList.remove('alert-success');
+                                statusMessage.classList.add('alert-danger');
+                            }
+                        })
+                        .catch(error => {
+                            loader.style.display = 'none';
+                            statusMessage.textContent = '卸载失败: ' + error;
+                            statusMessage.classList.remove('alert-success');
+                            statusMessage.classList.add('alert-danger');
+                        });
+                    }
+                });
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Start auto-refresh
+            startAutoRefresh();
+            
+            // Initial event binding
+            bindEventHandlers();
+        });
+    </script>
+</body>
+</html>
