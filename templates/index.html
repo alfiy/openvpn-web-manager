@@ -162,8 +162,18 @@
                     // Save current scroll position
                     const scrollTop = window.scrollY;
                     
+                    // Save current form input values
+                    const clientNameInput = document.getElementById('client_name');
+                    const savedClientName = clientNameInput ? clientNameInput.value : '';
+                    
                     // Replace container content
                     currentContainer.innerHTML = newContainer.innerHTML;
+                    
+                    // Restore form input values
+                    const newClientNameInput = document.getElementById('client_name');
+                    if (newClientNameInput && savedClientName) {
+                        newClientNameInput.value = savedClientName;
+                    }
                     
                     // Restore scroll position
                     window.scrollTo(0, scrollTop);
@@ -234,8 +244,20 @@
         
         function bindAddClientHandler() {
             const addClientForm = document.getElementById('add-client-form');
+            const clientNameInput = document.getElementById('client_name');
+            
             if (addClientForm && !addClientForm.hasAttribute('data-bound')) {
                 addClientForm.setAttribute('data-bound', 'true');
+                
+                // Add focus event listener to clear saved input when user focuses
+                if (clientNameInput && !clientNameInput.hasAttribute('data-focus-bound')) {
+                    clientNameInput.setAttribute('data-focus-bound', 'true');
+                    clientNameInput.addEventListener('focus', function() {
+                        // Clear the input field when user focuses on it
+                        this.value = '';
+                    });
+                }
+                
                 addClientForm.addEventListener('submit', function(e) {
                     e.preventDefault();
                     
@@ -287,7 +309,7 @@
                         loader.style.display = 'block';
                         
                         const formData = new FormData();
-                        formData.append('client_number', clientNumber);
+                        formData.append('client_name', clientName);
                         
                         fetch('/revoke_client', {
                             method: 'POST',
