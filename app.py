@@ -259,20 +259,26 @@ def revoke_client():
             # Continue even if index cleanup fails
             pass
         
-        # Step 7: Restart OpenVPN service
-        restart_result = subprocess.run([
-            'sudo', 'systemctl', 'restart', 'openvpn@server'
+        # Step 7: Reload OpenVPN using signal (no service interruption)
+        reload_result = subprocess.run([
+            'sudo', 'killall', '-SIGUSR1', 'openvpn'
         ], capture_output=True, text=True, timeout=30)
         
-        if restart_result.returncode != 0:
-            return jsonify({
-                'status': 'warning', 
-                'message': f'Client {client_name} revoked but OpenVPN service restart failed: {restart_result.stderr}'
-            })
+        if reload_result.returncode != 0:
+            # If killall fails, try alternative method using systemctl reload
+            reload_result = subprocess.run([
+                'sudo', 'systemctl', 'reload', 'openvpn@server'
+            ], capture_output=True, text=True, timeout=30)
+            
+            if reload_result.returncode != 0:
+                return jsonify({
+                    'status': 'warning', 
+                    'message': f'Client {client_name} revoked but CRL reload failed. Changes will take effect on next client reconnection: {reload_result.stderr}'
+                })
         
         return jsonify({
             'status': 'success', 
-            'message': f'Client {client_name} successfully revoked and completely removed from all configurations including PKI database'
+            'message': f'Client {client_name} successfully revoked and CRL reloaded without disconnecting active users'
         })
             
     except subprocess.TimeoutExpired:
