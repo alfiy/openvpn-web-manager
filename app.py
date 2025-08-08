@@ -6,6 +6,9 @@ import re
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file
 
 app = Flask(__name__)
+# ✅ 设置 EasyRSA 的路径（你自己的路径）
+#EASYRSA_DIR = "/etc/openvpn/easy-rsa"
+
 # Update script path to same directory as app.py
 SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ubuntu-openvpn-install.sh')
 
@@ -162,65 +165,107 @@ def add_client():
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Error: {str(e)}'})
 
+
+
+# @app.route('/test_revoke')
+# def test_revoke():
+#     import subprocess
+
+#     try:
+#         result = subprocess.run(
+#             ['./easyrsa', '--batch', 'revoke', 'alfiy'],
+#             capture_output=True,
+#             text=True,
+#             cwd='/etc/openvpn/easy-rsa'  # ✅ 指定工作目录
+#         )
+#         return f"<pre>{result.stdout}\n{result.stderr}</pre>"
+#     except Exception as e:
+#         return f"<pre>Exception: {str(e)}</pre>"
+
+EASYRSA_DIR = '/etc/openvpn/easy-rsa'
+OPENVPN_SERVICE_NAME = 'openvpn'  # 根据实际服务名修改，比如 openvpn@server
+
 @app.route('/revoke_client', methods=['POST'])
 def revoke_client():
-    client_name = request.form.get('client_name')
-    if not client_name:
-        return jsonify({'status': 'error', 'message': 'Client name is required'})
-    
+    import subprocess
+    from flask import request, jsonify
+
     try:
-        # Direct revocation commands without interactive script
-        commands = [
-            # Change to easy-rsa directory and revoke the client
-            ['sudo', 'bash', '-c', f'cd /etc/openvpn/easy-rsa && ./easyrsa --batch revoke "{client_name}"'],
-            
-            # Generate new CRL (Certificate Revocation List)
-            ['sudo', 'bash', '-c', 'cd /etc/openvpn/easy-rsa && ./easyrsa gen-crl'],
-            
-            # Update the CRL file in OpenVPN directory
-            ['sudo', 'rm', '-f', '/etc/openvpn/crl.pem'],
-            ['sudo', 'cp', '/etc/openvpn/easy-rsa/pki/crl.pem', '/etc/openvpn/crl.pem'],
-            ['sudo', 'chmod', '644', '/etc/openvpn/crl.pem'],
-            
-            # Remove client configuration file
-            ['sudo', 'rm', '-f', f'/root/{client_name}.ovpn'],
-            
-            # Remove client from IP persistence file
-            ['sudo', 'sed', '-i', f'/^{client_name},/d', '/etc/openvpn/ipp.txt'],
-            
-            # Remove client-specific configuration if exists
-            ['sudo', 'rm', '-f', f'/etc/openvpn/ccd/{client_name}'],
-            
-            # Restart OpenVPN service to apply changes
-            ['sudo', 'systemctl', 'restart', 'openvpn@server']
-        ]
-        
-        failed_commands = []
-        for cmd in commands:
-            try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-                if result.returncode != 0:
-                    # Some commands may fail if files don't exist, which is okay
-                    if 'rm' not in cmd[1] and 'sed' not in cmd[1]:
-                        failed_commands.append(f"{' '.join(cmd)}: {result.stderr}")
-            except subprocess.TimeoutExpired:
-                failed_commands.append(f"{' '.join(cmd)}: Command timed out")
-            except Exception as cmd_error:
-                failed_commands.append(f"{' '.join(cmd)}: {str(cmd_error)}")
-        
-        if failed_commands:
-            return jsonify({
-                'status': 'warning', 
-                'message': f'Client {client_name} partially revoked. Some operations failed: {"; ".join(failed_commands)}'
-            })
-        else:
-            return jsonify({
-                'status': 'success', 
-                'message': f'Client {client_name} successfully revoked and removed from all configurations'
-            })
-            
+        data = request.get_json(force=True)
+        app.logger.debug(f"Received revoke request data: {data}")
+        client_name = data.get("client_name")
     except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Revocation error: {str(e)}'})
+        app.logger.error(f"Error parsing JSON: {e}")
+        return jsonify({"error": "Invalid JSON format"}), 400
+
+    if not client_name:
+        return jsonify({"error": "client_name is required"}), 400
+
+    try:
+        # 调用 EasyRSA revoke
+        result = subprocess.run(
+            ['./easyrsa', '--batch', 'revoke', client_name],
+            capture_output=True,
+            text=True,
+            cwd='/etc/openvpn/easy-rsa'
+        )
+
+        if result.returncode != 0:
+            app.logger.error(f"EasyRSA revoke error: {result.stderr}")
+            return jsonify({
+                "status": "error",
+                "stdout": result.stdout,
+                "stderr": result.stderr
+            }), 500
+
+        # 生成 CRL
+        crl_result = subprocess.run(
+            ['./easyrsa', 'gen-crl'],
+            capture_output=True,
+            text=True,
+            cwd='/etc/openvpn/easy-rsa'
+        )
+
+        if crl_result.returncode != 0:
+            app.logger.error(f"EasyRSA gen-crl error: {crl_result.stderr}")
+            return jsonify({
+                "status": "error",
+                "message": "Failed to generate CRL",
+                "stdout": crl_result.stdout,
+                "stderr": crl_result.stderr
+            }), 500
+
+        # 重启 openvpn 服务（改用 restart，避免 reload 错误）
+        restart_result = subprocess.run(
+            ['sudo', 'systemctl', 'restart', 'openvpn@server'],
+            capture_output=True,
+            text=True
+        )
+
+        if restart_result.returncode != 0:
+            app.logger.error(f"Failed to restart openvpn service: {restart_result.stderr}")
+            return jsonify({
+                "status": "error",
+                "message": "Failed to restart OpenVPN service",
+                "stdout": restart_result.stdout,
+                "stderr": restart_result.stderr
+            }), 500
+
+        return jsonify({
+            "status": "success",
+            "message": f"客户端 {client_name} 的证书已成功撤销，CRL已更新，OpenVPN服务已重启",
+            "revoke_stdout": result.stdout,
+            "revoke_stderr": result.stderr,
+            "crl_stdout": crl_result.stdout,
+            "crl_stderr": crl_result.stderr,
+            "restart_stdout": restart_result.stdout,
+            "restart_stderr": restart_result.stderr
+        })
+
+    except Exception as e:
+        app.logger.error(f"Exception during revoke_client: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route('/uninstall', methods=['POST'])
 def uninstall():

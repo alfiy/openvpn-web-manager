@@ -295,7 +295,8 @@
             }
         }
         
-        function bindRevokeHandlers() {
+
+		function bindRevokeHandlers() {
             const revokeBtns = document.querySelectorAll('.revoke-btn:not([data-bound])');
             revokeBtns.forEach(btn => {
                 btn.setAttribute('data-bound', 'true');
@@ -304,38 +305,39 @@
                     const clientName = this.getAttribute('data-client');
                     const loader = document.getElementById('revoke-loader');
                     const messageDiv = document.getElementById('revoke-message');
-                    
+
                     if (confirm(`确定要撤销客户端 "${clientName}" 的证书吗?`)) {
                         loader.style.display = 'block';
-                        
-                        const formData = new FormData();
-                        formData.append('client_name', clientName);
-                        
+
                         fetch('/revoke_client', {
                             method: 'POST',
-                            body: formData
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ client_name: clientName })
                         })
                         .then(response => response.json())
                         .then(data => {
                             loader.style.display = 'none';
-                            
+
                             const alertClass = data.status === 'success' ? 'alert-success' : 'alert-danger';
-                            messageDiv.innerHTML = `<div class="alert ${alertClass}">${data.message}</div>`;
-                            
+                            messageDiv.innerHTML = `<div class="alert ${alertClass}">${data.message || data.stderr || '未知错误'}</div>`;
+
                             if (data.status === 'success') {
                                 setTimeout(() => {
-                                    refreshPage(); // Use refreshPage instead of full reload
+                                    refreshPage(); // 使用局部刷新代替整页刷新
                                 }, 2000);
                             }
                         })
                         .catch(error => {
                             loader.style.display = 'none';
-                            messageDiv.innerHTML = `<div class="alert alert-danger">操作失败: ${error}</div>`;
+                            messageDiv.innerHTML = `<div class="alert alert-danger">操作失败: ${error.message}</div>`;
                         });
                     }
                 });
             });
         }
+
         
         function bindDownloadHandlers() {
             const downloadBtns = document.querySelectorAll('.download-btn:not([data-bound])');
