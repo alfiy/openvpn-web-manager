@@ -154,28 +154,45 @@ def add_client():
         return jsonify({'status': 'error', 'message': 'Client name is required'})
     
     try:
-        # Execute the script with the appropriate options to add a new client
-        # In production, you would set up a proper way to communicate with the script
-        process = subprocess.Popen(['sudo', 'bash', SCRIPT_PATH], 
-                                  stdin=subprocess.PIPE,
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE)
+        # Use a more direct approach to add the client
+        # Create the client certificate directly using easy-rsa commands
+        commands = [
+            # Change to easy-rsa directory and create client certificate
+            ['sudo', 'bash', '-c', f'cd /etc/openvpn/easy-rsa && EASYRSA_CERT_EXPIRE=3650 ./easyrsa --batch build-client-full "{client_name}" nopass'],
+            # Generate client configuration file
+            ['sudo', 'bash', '-c', f'''
+            cd /etc/openvpn/easy-rsa
+            cp /etc/openvpn/client-template.txt "/tmp/{client_name}.ovpn"
+            {{
+                echo "<ca>"
+                cat "/etc/openvpn/easy-rsa/pki/ca.crt"
+                echo "</ca>"
+                echo "<cert>"
+                awk '/BEGIN/,/END CERTIFICATE/' "/etc/openvpn/easy-rsa/pki/issued/{client_name}.crt"
+                echo "</cert>"
+                echo "<key>"
+                cat "/etc/openvpn/easy-rsa/pki/private/{client_name}.key"
+                echo "</key>"
+                echo "<tls-crypt>"
+                cat /etc/openvpn/tls-crypt.key
+                echo "</tls-crypt>"
+            }} >> "/tmp/{client_name}.ovpn"
+            ''']
+        ]
         
-        # Select option 1 (Add a new user)
-        process.stdin.write(b'1\n')
-        process.stdin.flush()
-        time.sleep(0.5)
-        
-        # Enter client name
-        process.stdin.write(f"{client_name}\n".encode())
-        process.stdin.flush()
-        time.sleep(0.5)
-        
-        # Select option 1 (passwordless client)
-        process.stdin.write(b'1\n')
-        process.stdin.flush()
-        
-        process.communicate()
+        for cmd in commands:
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                if result.returncode != 0:
+                    return jsonify({
+                        'status': 'error', 
+                        'message': f'Failed to execute command: {result.stderr}'
+                    })
+            except subprocess.TimeoutExpired:
+                return jsonify({
+                    'status': 'error', 
+                    'message': f'Command timed out while adding client {client_name}'
+                })
         
         return jsonify({'status': 'success', 'message': f'Client {client_name} added successfully'})
     except Exception as e:
@@ -233,7 +250,7 @@ def revoke_client():
         # Step 5: Clean up all client files
         cleanup_commands = [
             # Remove client configuration file
-            ['sudo', 'rm', '-f', f'/tmp/{client_name}.ovpn'],
+            ['sudo', 'rm', '-f', f'/root/{client_name}.ovpn'],
             # Remove from IP persistence file
             ['sudo', 'sed', '-i', f'/^{client_name},/d', '/etc/openvpn/ipp.txt'],
             # Remove client-specific configuration
@@ -333,8 +350,8 @@ def uninstall():
             ['sudo', 'rm', '-f', '/etc/sysctl.d/99-openvpn.conf'],
             ['sudo', 'rm', '-rf', '/var/log/openvpn'],
             
-            # Remove client config files from tmp
-            ['sudo', 'find', '/tmp/', '-maxdepth', '1', '-name', '*.ovpn', '-delete'],
+            # Remove client config files from root
+            ['sudo', 'find', '/root/', '-maxdepth', '1', '-name', '*.ovpn', '-delete'],
             
             # Restore IP forwarding
             ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=0'],
@@ -362,7 +379,7 @@ def uninstall():
 @app.route('/download_client/<client_name>', methods=['GET'])
 def download_client(client_name):
     # Path to the client config file
-    client_path = f"/tmp/{client_name}.ovpn"
+    client_path = f"/root/{client_name}.ovpn"
     
     if os.path.exists(client_path):
         return send_file(client_path, as_attachment=True)
