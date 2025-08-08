@@ -134,6 +134,7 @@ def install():
 @app.route('/add_client', methods=['POST'])
 def add_client():
     client_name = request.form.get('client_name')
+
     if not client_name:
         return jsonify({'status': 'error', 'message': 'Client name is required'})
     
@@ -194,6 +195,8 @@ def revoke_client():
         data = request.get_json(force=True)
         app.logger.debug(f"Received revoke request data: {data}")
         client_name = data.get("client_name")
+        if client_name:
+            client_name = client_name.strip()
     except Exception as e:
         app.logger.error(f"Error parsing JSON: {e}")
         return jsonify({"error": "Invalid JSON format"}), 400

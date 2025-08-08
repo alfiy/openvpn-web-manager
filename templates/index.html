@@ -268,7 +268,7 @@
                     loader.style.display = 'block';
                     
                     const formData = new FormData();
-                    formData.append('client_name', clientName);
+                    formData.append('client_name', clientName.trim());
                     
                     fetch('/add_client', {
                         method: 'POST',
