@@ -94,6 +94,29 @@
                                 <input type="text" class="form-control" id="client_name" name="client_name" required>
                                 <div class="form-text">仅允许字母、数字、下划线和破折号</div>
                             </div>
+                            <div class="mb-3">
+                                <label for="expiry_type" class="form-label">证书有效期设置方式</label>
+                                <select class="form-select" id="expiry_type" name="expiry_type" onchange="toggleExpiryOptions()">
+                                    <option value="preset" selected>预设天数</option>
+                                    <option value="calendar">选择到期日期</option>
+                                </select>
+                            </div>
+                            <div class="mb-3" id="preset_expiry_div">
+                                <label for="expiry_days" class="form-label">预设有效期</label>
+                                <select class="form-select" id="expiry_days" name="expiry_days">
+                                    <option value="30">30天</option>
+                                    <option value="90">90天</option>
+                                    <option value="180">180天</option>
+                                    <option value="365">1年</option>
+                                    <option value="1095">3年</option>
+                                    <option value="3650" selected>10年</option>
+                                </select>
+                            </div>
+                            <div class="mb-3" id="calendar_expiry_div" style="display: none;">
+                                <label for="expiry_date" class="form-label">选择到期日期</label>
+                                <input type="date" class="form-control" id="expiry_date" name="expiry_date">
+                                <div class="form-text">选择证书的具体到期日期</div>
+                            </div>
                             <button type="submit" class="btn btn-success">添加客户端</button>
                             <div class="loader" id="add-client-loader"></div>
                         </form>
@@ -114,6 +137,7 @@
                                     <tr>
                                         <th>#</th>
                                         <th>客户端名称</th>
+                                        <th>到期时间</th>
                                         <th>操作</th>
                                     </tr>
                                 </thead>
@@ -121,10 +145,17 @@
                                     {% for client in clients %}
                                     <tr>
                                         <td>{{ loop.index }}</td>
-                                        <td>{{ client }}</td>
+                                        <td>{{ client.name if client is mapping else client }}</td>
                                         <td>
-                                            <button class="btn btn-sm btn-primary download-btn" data-client="{{ client }}">下载配置</button>
-                                            <button class="btn btn-sm btn-danger revoke-btn" data-client="{{ client }}" data-number="{{ loop.index }}">撤销</button>
+                                            {% if client is mapping and client.expiry %}
+                                                <small class="text-muted">{{ client.expiry }}</small>
+                                            {% else %}
+                                                <small class="text-muted">未知</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-primary download-btn" data-client="{{ client.name if client is mapping else client }}">下载配置</button>
+                                            <button class="btn btn-sm btn-danger revoke-btn" data-client="{{ client.name if client is mapping else client }}" data-number="{{ loop.index }}">撤销</button>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -144,6 +175,34 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Function to toggle between preset days and calendar date selection
+        function toggleExpiryOptions() {
+            const expiryType = document.getElementById('expiry_type').value;
+            const presetDiv = document.getElementById('preset_expiry_div');
+            const calendarDiv = document.getElementById('calendar_expiry_div');
+            
+            if (expiryType === 'preset') {
+                presetDiv.style.display = 'block';
+                calendarDiv.style.display = 'none';
+                // Set minimum date to tomorrow
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                document.getElementById('expiry_date').value = '';
+            } else {
+                presetDiv.style.display = 'none';
+                calendarDiv.style.display = 'block';
+                // Set minimum date to tomorrow
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                document.getElementById('expiry_date').min = tomorrow.toISOString().split('T')[0];
+                
+                // Set default date to 1 year from now
+                const oneYearLater = new Date();
+                oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+                document.getElementById('expiry_date').value = oneYearLater.toISOString().split('T')[0];
+            }
+        }
+
         // Auto-refresh functionality
         let autoRefreshInterval;
         
@@ -151,38 +210,65 @@
             fetch('/')
             .then(response => response.text())
             .then(html => {
-                // Parse the response and update the entire page content
+                // Parse the response and update selective content
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
                 
-                // Update the entire container content
-                const currentContainer = document.querySelector('.container');
-                const newContainer = doc.querySelector('.container');
-                if (currentContainer && newContainer) {
-                    // Save current scroll position
-                    const scrollTop = window.scrollY;
-                    
-                    // Save current form input values
-                    const clientNameInput = document.getElementById('client_name');
-                    const savedClientName = clientNameInput ? clientNameInput.value : '';
-                    
-                    // Replace container content
-                    currentContainer.innerHTML = newContainer.innerHTML;
-                    
-                    // Restore form input values
-                    const newClientNameInput = document.getElementById('client_name');
-                    if (newClientNameInput && savedClientName) {
-                        newClientNameInput.value = savedClientName;
-                    }
-                    
-                    // Restore scroll position
-                    window.scrollTo(0, scrollTop);
-                    
-                    // Re-bind all event handlers
-                    bindEventHandlers();
+                // Save current scroll position
+                const scrollTop = window.scrollY;
+                
+                // Save current form state before refresh
+                const addClientForm = document.getElementById('add-client-form');
+                let formState = {};
+                if (addClientForm) {
+                    formState.clientName = document.getElementById('client_name')?.value || '';
+                    formState.expiryType = document.getElementById('expiry_type')?.value || 'preset';
+                    formState.expiryDays = document.getElementById('expiry_days')?.value || '3650';
+                    formState.expiryDate = document.getElementById('expiry_date')?.value || '';
                 }
                 
-                console.log('Page refreshed at:', new Date().toLocaleTimeString());
+                // Update OpenVPN status section only
+                const currentStatusCard = document.querySelector('.card:first-child .card-body');
+                const newStatusCard = doc.querySelector('.card:first-child .card-body');
+                if (currentStatusCard && newStatusCard) {
+                    currentStatusCard.innerHTML = newStatusCard.innerHTML;
+                }
+                
+                // Update client management section only (right side)
+                const currentClientCard = document.querySelector('.col-md-6:last-child .card-body');
+                const newClientCard = doc.querySelector('.col-md-6:last-child .card-body');
+                if (currentClientCard && newClientCard) {
+                    currentClientCard.innerHTML = newClientCard.innerHTML;
+                }
+                
+                // Restore form state (add client form is NOT refreshed)
+                if (addClientForm && formState.clientName) {
+                    const clientNameInput = document.getElementById('client_name');
+                    const expiryTypeInput = document.getElementById('expiry_type');
+                    const expiryDaysInput = document.getElementById('expiry_days');
+                    const expiryDateInput = document.getElementById('expiry_date');
+                    
+                    if (clientNameInput) clientNameInput.value = formState.clientName;
+                    if (expiryTypeInput) expiryTypeInput.value = formState.expiryType;
+                    if (expiryDaysInput) expiryDaysInput.value = formState.expiryDays;
+                    if (expiryDateInput) expiryDateInput.value = formState.expiryDate;
+                    
+                    // Trigger expiry type change to show correct div
+                    if (expiryTypeInput) {
+                        toggleExpiryOptions();
+                    }
+                }
+                
+                // Restore scroll position
+                window.scrollTo(0, scrollTop);
+                
+                // Re-bind event handlers for updated sections only
+                bindInstallHandler();
+                bindRevokeHandlers();
+                bindDownloadHandlers();
+                bindUninstallHandler();
+                
+                console.log('Page refreshed (excluding add client form) at:', new Date().toLocaleTimeString());
             })
             .catch(error => {
                 console.error('Auto-refresh error:', error);
@@ -270,6 +356,32 @@
                     const formData = new FormData();
                     formData.append('client_name', clientName);
                     
+                    const expiryType = document.getElementById('expiry_type').value;
+                    if (expiryType === 'preset') {
+                        const expiryDays = document.getElementById('expiry_days').value;
+                        formData.append('expiry_days', expiryDays);
+                    } else {
+                        const expiryDate = document.getElementById('expiry_date').value;
+                        if (!expiryDate) {
+                            messageDiv.innerHTML = '<div class="alert alert-danger">请选择到期日期</div>';
+                            loader.style.display = 'none';
+                            return;
+                        }
+                        // Calculate days from today to selected date
+                        const today = new Date();
+                        const selectedDate = new Date(expiryDate);
+                        const timeDiff = selectedDate.getTime() - today.getTime();
+                        const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+                        
+                        if (daysDiff <= 0) {
+                            messageDiv.innerHTML = '<div class="alert alert-danger">到期日期必须是将来的日期</div>';
+                            loader.style.display = 'none';
+                            return;
+                        }
+                        
+                        formData.append('expiry_days', daysDiff.toString());
+                    }
+                    
                     fetch('/add_client', {
                         method: 'POST',
                         body: formData
@@ -282,9 +394,21 @@
                         messageDiv.innerHTML = `<div class="alert ${alertClass}">${data.message}</div>`;
                         
                         if (data.status === 'success') {
+                            // Clear and reset the form
+                            document.getElementById('client_name').value = '';
+                            document.getElementById('expiry_type').value = 'preset';
+                            document.getElementById('expiry_days').value = '3650';
+                            document.getElementById('expiry_date').value = '';
+                            
+                            // Reset to preset mode display
+                            document.getElementById('preset_expiry_div').style.display = 'block';
+                            document.getElementById('calendar_expiry_div').style.display = 'none';
+                            
+                            // Clear the success message after 3 seconds
                             setTimeout(() => {
-                                refreshPage(); // Use refreshPage instead of full reload
-                            }, 2000);
+                                messageDiv.innerHTML = '';
+                                refreshPage(); // Refresh other sections
+                            }, 3000);
                         }
                     })
                     .catch(error => {
@@ -391,6 +515,11 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize date picker minimum date
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            document.getElementById('expiry_date').min = tomorrow.toISOString().split('T')[0];
+            
             // Start auto-refresh
             startAutoRefresh();
             

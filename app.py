@@ -28,17 +28,39 @@ def check_openvpn_status():
         return f'error: {str(e)}'
 
 def get_openvpn_clients():
-    """Get list of OpenVPN clients"""
+    """Get list of OpenVPN clients with expiration dates"""
     clients = []
     try:
         if os.path.exists('/etc/openvpn/easy-rsa/pki/index.txt'):
             with open('/etc/openvpn/easy-rsa/pki/index.txt', 'r') as f:
                 for line in f:
                     if line.startswith('V'):
-                        # Extract client name from the CN field
-                        match = re.search(r'CN=([^/]+)', line)
-                        if match:
-                            clients.append(match.group(1))
+                        # Extract client name and expiration date from the index
+                        parts = line.strip().split('\t')
+                        if len(parts) >= 6:
+                            expiry_date = parts[1]  # YYMMDDHHMMSSZ format
+                            cn_field = parts[5]
+                            match = re.search(r'CN=([^/]+)', cn_field)
+                            if match:
+                                client_name = match.group(1)
+                                # Convert expiry date to readable format
+                                try:
+                                    from datetime import datetime
+                                    # Parse YYMMDDHHMMSSZ format (e.g., 341205000000Z)
+                                    if len(expiry_date) == 13 and expiry_date.endswith('Z'):
+                                        year = 2000 + int(expiry_date[:2])
+                                        month = int(expiry_date[2:4])
+                                        day = int(expiry_date[4:6])
+                                        expiry_readable = f"{year}-{month:02d}-{day:02d}"
+                                    else:
+                                        expiry_readable = "Unknown"
+                                except:
+                                    expiry_readable = "Unknown"
+                                
+                                clients.append({
+                                    'name': client_name,
+                                    'expiry': expiry_readable
+                                })
     except Exception as e:
         print(f"Error getting clients: {e}")
     return clients
@@ -153,12 +175,21 @@ def add_client():
     if not client_name:
         return jsonify({'status': 'error', 'message': 'Client name is required'})
     
+    # Get expiration days from form (default to 3650 days if not provided)
+    expiry_days = request.form.get('expiry_days', '3650')
+    try:
+        expiry_days = int(expiry_days)
+        if expiry_days <= 0:
+            expiry_days = 3650
+    except:
+        expiry_days = 3650
+    
     try:
         # Use a more direct approach to add the client
         # Create the client certificate directly using easy-rsa commands
         commands = [
-            # Change to easy-rsa directory and create client certificate
-            ['sudo', 'bash', '-c', f'cd /etc/openvpn/easy-rsa && EASYRSA_CERT_EXPIRE=3650 ./easyrsa --batch build-client-full "{client_name}" nopass'],
+            # Change to easy-rsa directory and create client certificate with custom expiration
+            ['sudo', 'bash', '-c', f'cd /etc/openvpn/easy-rsa && EASYRSA_CERT_EXPIRE={expiry_days} ./easyrsa --batch build-client-full "{client_name}" nopass'],
             # Generate client configuration file
             ['sudo', 'bash', '-c', f'''
             cd /etc/openvpn/easy-rsa
@@ -194,7 +225,12 @@ def add_client():
                     'message': f'Command timed out while adding client {client_name}'
                 })
         
-        return jsonify({'status': 'success', 'message': f'Client {client_name} added successfully'})
+        # Calculate expiry date for display
+        from datetime import datetime, timedelta
+        expiry_date = datetime.now() + timedelta(days=expiry_days)
+        expiry_date_str = expiry_date.strftime('%Y-%m-%d')
+        
+        return jsonify({'status': 'success', 'message': f'Client {client_name} added successfully with {expiry_days} days validity (expires: {expiry_date_str})'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Error: {str(e)}'})
 
@@ -250,7 +286,7 @@ def revoke_client():
         # Step 5: Clean up all client files
         cleanup_commands = [
             # Remove client configuration file
-            ['sudo', 'rm', '-f', f'/root/{client_name}.ovpn'],
+            ['sudo', 'rm', '-f', f'/tmp/{client_name}.ovpn'],
             # Remove from IP persistence file
             ['sudo', 'sed', '-i', f'/^{client_name},/d', '/etc/openvpn/ipp.txt'],
             # Remove client-specific configuration
@@ -351,7 +387,7 @@ def uninstall():
             ['sudo', 'rm', '-rf', '/var/log/openvpn'],
             
             # Remove client config files from root
-            ['sudo', 'find', '/root/', '-maxdepth', '1', '-name', '*.ovpn', '-delete'],
+            ['sudo', 'find', '/tmp/', '-maxdepth', '1', '-name', '*.ovpn', '-delete'],
             
             # Restore IP forwarding
             ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=0'],
@@ -379,7 +415,7 @@ def uninstall():
 @app.route('/download_client/<client_name>', methods=['GET'])
 def download_client(client_name):
     # Path to the client config file
-    client_path = f"/root/{client_name}.ovpn"
+    client_path = f"/tmp/{client_name}.ovpn"
     
     if os.path.exists(client_path):
         return send_file(client_path, as_attachment=True)

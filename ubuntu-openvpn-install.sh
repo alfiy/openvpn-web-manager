@@ -302,7 +302,7 @@ function revokeClient() {
     rm -f /etc/openvpn/crl.pem
     cp /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn/crl.pem
     chmod 644 /etc/openvpn/crl.pem
-    rm -f "/root/$CLIENT.ovpn"
+    rm -f "/tmp/$CLIENT.ovpn"
     sed -i "/^$CLIENT,.*/d" /etc/openvpn/ipp.txt
 
     echo "✅ Certificate for client $CLIENT revoked."
@@ -336,7 +336,7 @@ function removeOpenVPN() {
         
         # Clean up files
         echo "🗑️ Cleaning up configuration files..."
-        find /root/ -maxdepth 1 -name "*.ovpn" -delete
+        find /tmp/ -maxdepth 1 -name "*.ovpn" -delete
         rm -rf /etc/openvpn
         rm -f /etc/sysctl.d/99-openvpn.conf
         rm -rf /var/log/openvpn
