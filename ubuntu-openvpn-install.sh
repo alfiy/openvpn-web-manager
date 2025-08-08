@@ -260,7 +260,7 @@ function newClient() {
     echo "✅ Client $CLIENT added."
 
     # Generate client config
-    cp /etc/openvpn/client-template.txt "/root/$CLIENT.ovpn"
+    cp /etc/openvpn/client-template.txt "/tmp/$CLIENT.ovpn"
     {
         echo "<ca>"
         cat "/etc/openvpn/easy-rsa/pki/ca.crt"
@@ -277,10 +277,10 @@ function newClient() {
         echo "<tls-crypt>"
         cat /etc/openvpn/tls-crypt.key
         echo "</tls-crypt>"
-    } >>"/root/$CLIENT.ovpn"
+    } >>"/tmp/$CLIENT.ovpn"
 
     echo ""
-    echo "📄 Configuration file written to /root/$CLIENT.ovpn"
+    echo "📄 Configuration file written to /tmp/$CLIENT.ovpn"
 }
 
 # Function to revoke a client
@@ -399,6 +399,33 @@ if [[ -e /etc/openvpn/server.conf ]]; then
     manageMenu
 else
     installOpenVPN
-    newClient
+    # Generate default "server" client after installation
+    echo "📱 Generating default server client configuration..."
+    cd /etc/openvpn/easy-rsa/ || exit
+    EASYRSA_CERT_EXPIRE=3650 ./easyrsa --batch build-client-full "server" nopass
+    echo "✅ Client server added."
+
+    # Generate client config
+    cp /etc/openvpn/client-template.txt "/tmp/server.ovpn"
+    {
+        echo "<ca>"
+        cat "/etc/openvpn/easy-rsa/pki/ca.crt"
+        echo "</ca>"
+
+        echo "<cert>"
+        awk '/BEGIN/,/END CERTIFICATE/' "/etc/openvpn/easy-rsa/pki/issued/server.crt"
+        echo "</cert>"
+
+        echo "<key>"
+        cat "/etc/openvpn/easy-rsa/pki/private/server.key"
+        echo "</key>"
+
+        echo "<tls-crypt>"
+        cat /etc/openvpn/tls-crypt.key
+        echo "</tls-crypt>"
+    } >>"/tmp/server.ovpn"
+
+    echo ""
+    echo "📄 Default client configuration written to /tmp/server.ovpn"
 fi
 
