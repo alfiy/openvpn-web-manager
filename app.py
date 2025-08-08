@@ -6,8 +6,8 @@ import re
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file
 
 app = Flask(__name__)
-# Update script path to same directory as app.py
-SCRIPT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ubuntu-openvpn-install.sh')
+# Update script path to workspace directory
+SCRIPT_PATH = './ubuntu-openvpn-install.sh'
 
 def check_openvpn_status():
     """Check if OpenVPN is installed and running"""
@@ -56,6 +56,13 @@ def index():
 
 @app.route('/install', methods=['POST'])
 def install():
+    # Check if the OpenVPN script exists
+    if not os.path.exists(SCRIPT_PATH):
+        return jsonify({
+            'status': 'error', 
+            'message': f'OpenVPN安装脚本不存在: {SCRIPT_PATH}。请确保ubuntu-openvpn-install.sh文件存在于工作目录中。'
+        })
+    
     try:
         # Get internal IP address for NAT environment
         def get_internal_ip():
@@ -130,6 +137,13 @@ def install():
 
 @app.route('/add_client', methods=['POST'])
 def add_client():
+    # Check if the OpenVPN script exists
+    if not os.path.exists(SCRIPT_PATH):
+        return jsonify({
+            'status': 'error', 
+            'message': f'OpenVPN安装脚本不存在: {SCRIPT_PATH}。请确保ubuntu-openvpn-install.sh文件存在于工作目录中。'
+        })
+    
     client_name = request.form.get('client_name')
     if not client_name:
         return jsonify({'status': 'error', 'message': 'Client name is required'})
@@ -219,7 +233,7 @@ def revoke_client():
         # Step 5: Clean up all client files
         cleanup_commands = [
             # Remove client configuration file
-            ['sudo', 'rm', '-f', f'/root/{client_name}.ovpn'],
+            ['sudo', 'rm', '-f', f'/tmp/{client_name}.ovpn'],
             # Remove from IP persistence file
             ['sudo', 'sed', '-i', f'/^{client_name},/d', '/etc/openvpn/ipp.txt'],
             # Remove client-specific configuration
@@ -319,8 +333,8 @@ def uninstall():
             ['sudo', 'rm', '-f', '/etc/sysctl.d/99-openvpn.conf'],
             ['sudo', 'rm', '-rf', '/var/log/openvpn'],
             
-            # Remove client config files from root
-            ['sudo', 'find', '/root/', '-maxdepth', '1', '-name', '*.ovpn', '-delete'],
+            # Remove client config files from tmp
+            ['sudo', 'find', '/tmp/', '-maxdepth', '1', '-name', '*.ovpn', '-delete'],
             
             # Restore IP forwarding
             ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=0'],
@@ -348,7 +362,7 @@ def uninstall():
 @app.route('/download_client/<client_name>', methods=['GET'])
 def download_client(client_name):
     # Path to the client config file
-    client_path = f"/root/{client_name}.ovpn"
+    client_path = f"/tmp/{client_name}.ovpn"
     
     if os.path.exists(client_path):
         return send_file(client_path, as_attachment=True)
