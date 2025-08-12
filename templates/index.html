@@ -49,6 +49,21 @@
     <div class="container">
         <h1 class="text-center mb-4">OpenVPN管理界面</h1>
         
+        <!-- 安全通知区域 -->
+        <div id="security-notifications" class="mb-4" style="display: none;">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        🚨 安全警报
+                        <button type="button" class="btn btn-sm btn-outline-dark float-right" onclick="clearNotifications()">清空通知</button>
+                    </h5>
+                </div>
+                <div class="card-body" id="notifications-content">
+                    <!-- 通知内容将在这里显示 -->
+                </div>
+            </div>
+        </div>
+        
         <div class="row">
             <div class="col-md-12">
                 <div class="card">
@@ -181,7 +196,7 @@
                                             {% else %}
                                                 <button class="btn btn-sm btn-primary download-btn" data-client="{{ client.name if client is mapping else client }}">下载配置</button>
                                                 {% if client is mapping and client.online %}
-                                                    <button class="btn btn-sm btn-warning disconnect-btn" data-client="{{ client.name }}">禁用</button>
+                                                    <button class="btn btn-sm btn-warning disconnect-btn" data-client="{{ client.name }}">强制下线</button>
                                                 {% endif %}
                                                 <button class="btn btn-sm btn-danger revoke-btn" data-client="{{ client.name if client is mapping else client }}" data-number="{{ loop.index }}">撤销</button>
                                             {% endif %}
@@ -234,6 +249,72 @@
 
         // Auto-refresh functionality
         let autoRefreshInterval;
+        
+        function loadSecurityNotifications() {
+            fetch('/notifications')
+            .then(response => response.json())
+            .then(data => {
+                const notifications = data.notifications || [];
+                const notificationDiv = document.getElementById('security-notifications');
+                const contentDiv = document.getElementById('notifications-content');
+                
+                if (notifications.length > 0) {
+                    // 显示最近5条通知
+                    const recentNotifications = notifications.slice(0, 5);
+                    let html = '';
+                    
+                    recentNotifications.forEach(notification => {
+                        const timestamp = new Date(notification.timestamp).toLocaleString('zh-CN');
+                        html += `
+                            <div class="alert alert-warning alert-dismissible fade show mb-2" role="alert">
+                                <strong>异地登录警报</strong><br>
+                                <small>客户端: <code>${notification.client_name}</code></small><br>
+                                <small>原连接: ${notification.old_connection.ip} (${notification.old_connection.location}) 
+                                于 ${new Date(notification.old_connection.time).toLocaleString('zh-CN')}</small><br>
+                                <small>新连接: ${notification.new_connection.ip} (${notification.new_connection.location}) 
+                                于 ${new Date(notification.new_connection.time).toLocaleString('zh-CN')}</small><br>
+                                <small class="text-muted">通知时间: ${timestamp}</small>
+                                <button type="button" class="close" data-dismiss="alert">
+                                    <span>&times;</span>
+                                </button>
+                            </div>
+                        `;
+                    });
+                    
+                    contentDiv.innerHTML = html;
+                    notificationDiv.style.display = 'block';
+                } else {
+                    notificationDiv.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading notifications:', error);
+            });
+        }
+        
+        function clearNotifications() {
+            if (confirm('确定要清空所有安全通知吗？')) {
+                fetch('/clear_notifications', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        document.getElementById('security-notifications').style.display = 'none';
+                        showMessage('所有通知已清空', 'success');
+                    } else {
+                        showMessage('清空通知失败: ' + data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error clearing notifications:', error);
+                    showMessage('清空通知时出错', 'error');
+                });
+            }
+        }
         
         function refreshPage() {
             fetch('/')
@@ -300,6 +381,9 @@
                 bindUninstallHandler();
                 
                 console.log('Page refreshed (excluding add client form) at:', new Date().toLocaleTimeString());
+                
+                // 同时刷新安全通知
+                loadSecurityNotifications();
             })
             .catch(error => {
                 console.error('Auto-refresh error:', error);
@@ -572,12 +656,12 @@
         }
         
         function disconnectClient(clientName) {
-            console.log(`[FRONTEND] 点击禁用按钮 - 客户端: ${clientName}`);
+            console.log(`[FRONTEND] 点击强制下线按钮 - 客户端: ${clientName}`);
             console.log(`[FRONTEND] 准备发送POST请求到 /disconnect_client`);
             console.log(`[FRONTEND] 请求参数: client_name=${clientName}`);
             
-            if (confirm(`确认要禁用客户端 "${clientName}" 吗？`)) {
-                console.log(`[FRONTEND] 用户确认禁用客户端 - 开始发送请求`);
+            if (confirm(`确认要强制下线客户端 "${clientName}" 吗？`)) {
+                console.log(`[FRONTEND] 用户确认强制下线 - 开始发送请求`);
                 
                 const requestBody = `client_name=${encodeURIComponent(clientName)}`;
                 console.log(`[FRONTEND] 请求体: ${requestBody}`);
@@ -596,7 +680,7 @@
                 .then(data => {
                     console.log(`[FRONTEND] 响应数据:`, data);
                     if (data.status === 'success') {
-                        console.log(`[FRONTEND] 客户端禁用成功: ${data.message}`);
+                        console.log(`[FRONTEND] 强制下线成功: ${data.message}`);
                         showMessage(data.message, 'success');
                         // Refresh the page to update client status
                         setTimeout(() => {
@@ -604,16 +688,16 @@
                             refreshPage();
                         }, 2000);
                     } else {
-                        console.log(`[FRONTEND] 客户端禁用失败: ${data.message}`);
+                        console.log(`[FRONTEND] 强制下线失败: ${data.message}`);
                         showMessage(data.message, 'error');
                     }
                 })
                 .catch(error => {
                     console.error('[FRONTEND] 请求错误:', error);
-                    showMessage('客户端禁用失败: ' + error.message, 'error');
+                    showMessage('强制下线失败: ' + error.message, 'error');
                 });
             } else {
-                console.log(`[FRONTEND] 用户取消了客户端禁用操作`);
+                console.log(`[FRONTEND] 用户取消了强制下线操作`);
             }
         }
         
@@ -678,6 +762,9 @@
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
             document.getElementById('expiry_date').min = tomorrow.toISOString().split('T')[0];
+            
+            // Load security notifications first
+            loadSecurityNotifications();
             
             // Start auto-refresh
             startAutoRefresh();

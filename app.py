@@ -4,6 +4,9 @@ import subprocess
 import time
 import re
 import sys
+import json
+from datetime import datetime, timedelta
+from collections import defaultdict
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file
 
 app = Flask(__name__)
@@ -112,6 +115,9 @@ def get_openvpn_clients():
 def get_online_clients():
     """Get currently connected OpenVPN clients with VPN IP and connection info"""
     online_clients = {}
+    
+    # Check for suspicious login patterns (异地登录检测)
+    check_suspicious_logins()
     
     # Check OpenVPN status file - try the correct location first
     status_file = "/var/log/openvpn/status.log"
@@ -355,6 +361,375 @@ def get_online_clients():
         print(f"Error reading OpenVPN status: {e}")
     
     return online_clients
+
+def check_suspicious_logins():
+    """检测异地登录并发送通知"""
+    try:
+        # 读取OpenVPN日志文件 - 优先使用真实日志
+        log_files = [
+            '/var/log/openvpn/openvpn.log',  # 真实OpenVPN日志文件
+            '/var/log/openvpn/server.log', 
+            '/var/log/openvpn.log',
+            '/var/log/syslog',
+            '/tmp/openvpn_test/openvpn.log'  # 测试日志文件作为后备
+        ]</to_replace>
+</Editor.edit_file_by_replace>
+
+<Editor.edit_file_by_replace>
+<file_name>/workspace/openvpn-web/app.py</file_name>
+<to_replace>                try:
+                    # 读取最近1000行日志 - 不使用sudo以适配当前环境
+                    if os.access(log_file, os.R_OK):
+                        with open(log_file, 'r') as f:
+                            lines = f.readlines()
+                            # 取最后1000行
+                            lines = lines[-1000:] if len(lines) > 1000 else lines
+                            result_stdout = ''.join(lines)
+                            result_returncode = 0
+                    else:
+                        # 尝试使用tail命令
+                        result = subprocess.run([
+                            'tail', '-n', '1000', log_file
+                        ], capture_output=True, text=True, timeout=10)
+                        result_stdout = result.stdout
+                        result_returncode = result.returncode</to_replace>
+<new_content>                try:
+                    # 优先尝试直接读取文件
+                    if os.access(log_file, os.R_OK):
+                        try:
+                            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                                lines = f.readlines()
+                                # 取最后1000行
+                                lines = lines[-1000:] if len(lines) > 1000 else lines
+                                result_stdout = ''.join(lines)
+                                result_returncode = 0
+                        except Exception as read_error:
+                            print(f"[SECURITY] Direct read failed for {log_file}: {read_error}")
+                            # 如果直接读取失败，尝试使用系统命令
+                            result = subprocess.run([
+                                'cat', log_file
+                            ], capture_output=True, text=True, timeout=30)
+                            if result.returncode == 0:
+                                lines = result.stdout.split('\n')
+                                lines = lines[-1000:] if len(lines) > 1000 else lines
+                                result_stdout = '\n'.join(lines)
+                                result_returncode = 0
+                            else:
+                                result_stdout = ''
+                                result_returncode = 1
+                    else:
+                        # 文件无法直接访问，尝试使用系统命令
+                        commands_to_try = [
+                            ['cat', log_file],
+                            ['tail', '-n', '1000', log_file],
+                            ['head', '-n', '1000', log_file]
+                        ]
+                        
+                        result_stdout = ''
+                        result_returncode = 1
+                        
+                        for cmd in commands_to_try:
+                            try:
+                                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                                if result.returncode == 0 and result.stdout.strip():
+                                    result_stdout = result.stdout
+                                    result_returncode = 0
+                                    print(f"[SECURITY] Successfully read {log_file} using {' '.join(cmd)}")
+                                    break
+                            except Exception as cmd_error:
+                                print(f"[SECURITY] Command {' '.join(cmd)} failed: {cmd_error}")
+                                continue
+        
+        log_content = []
+        used_log_file = None
+        
+        for log_file in log_files:
+            if os.path.exists(log_file):
+                try:
+                    # 读取最近1000行日志 - 不使用sudo以适配当前环境
+                    if os.access(log_file, os.R_OK):
+                        with open(log_file, 'r') as f:
+                            lines = f.readlines()
+                            # 取最后1000行
+                            lines = lines[-1000:] if len(lines) > 1000 else lines
+                            result_stdout = ''.join(lines)
+                            result_returncode = 0
+                    else:
+                        # 尝试使用tail命令
+                        result = subprocess.run([
+                            'tail', '-n', '1000', log_file
+                        ], capture_output=True, text=True, timeout=10)
+                        result_stdout = result.stdout
+                        result_returncode = result.returncode
+                    
+                    if result.returncode == 0 and result.stdout.strip():
+                        lines = result.stdout.split('\n')
+                        log_content.extend(lines)
+                        used_log_file = log_file
+                        print(f"[SECURITY] Read {len(lines)} lines from {log_file}")
+                        
+                        # 显示一些样本日志行用于调试
+                        sample_lines = [line for line in lines[:10] if line.strip()]
+                        if sample_lines:
+                            print(f"[SECURITY] Sample log lines from {log_file}:")
+                            for i, line in enumerate(sample_lines[:3]):
+                                print(f"[SECURITY]   {i+1}: {line}")
+                        break
+                except Exception as e:
+                    print(f"[SECURITY] Error reading {log_file}: {e}")
+                    continue
+        
+        if not log_content:
+            print("[SECURITY] No OpenVPN log files found or all files are empty")
+            print("[SECURITY] Available log files:")
+            for log_file in log_files:
+                if os.path.exists(log_file):
+                    try:
+                        size = os.path.getsize(log_file)
+                        print(f"[SECURITY]   {log_file}: {size} bytes")
+                    except:
+                        print(f"[SECURITY]   {log_file}: cannot get size")
+                else:
+                    print(f"[SECURITY]   {log_file}: does not exist")
+            return
+        
+        print(f"[SECURITY] Processing {len(log_content)} log lines from {used_log_file}")
+        
+        # 解析日志，查找可疑登录
+        current_time = datetime.now()
+        recent_logins = defaultdict(list)  # {client_name: [(timestamp, ip, action), ...]}
+        
+        connection_patterns_found = 0
+        duplicate_patterns_found = 0
+        
+        for line in log_content:
+            if not line.strip():
+                continue
+                
+            # 匹配新连接日志 - 支持多种格式
+            # 格式1: 2025-08-12 14:04:17 192.168.50.1:39931 [mxb] Peer Connection Initiated
+            peer_match = re.search(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+([0-9.]+):\d+\s+\[([^\]]+)\]\s+Peer Connection Initiated', line)
+            if not peer_match:
+                # 格式2: Dec 12 14:04:17 hostname openvpn[1234]: 192.168.50.1:39931 [mxb] Peer Connection Initiated
+                peer_match = re.search(r'(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}).*openvpn.*([0-9.]+):\d+\s+\[([^\]]+)\]\s+Peer Connection Initiated', line)
+                if peer_match:
+                    # 转换月份格式到完整日期
+                    timestamp_str, ip_addr, client_name = peer_match.groups()
+                    try:
+                        # 假设是当前年份
+                        current_year = datetime.now().year
+                        timestamp = datetime.strptime(f"{current_year} {timestamp_str}", '%Y %b %d %H:%M:%S')
+                    except ValueError:
+                        continue
+                else:
+                    # 格式3: 简单的时间戳格式
+                    peer_match = re.search(r'([0-9.]+):\d+\s+\[([^\]]+)\]\s+Peer Connection Initiated', line)
+                    if peer_match:
+                        ip_addr, client_name = peer_match.groups()
+                        timestamp = current_time  # 使用当前时间作为近似值
+                    else:
+                        peer_match = None
+            else:
+                timestamp_str, ip_addr, client_name = peer_match.groups()
+                try:
+                    timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    continue
+            
+            if peer_match:
+                # 只处理最近1小时内的日志
+                if (current_time - timestamp).total_seconds() <= 3600:
+                    recent_logins[client_name].append((timestamp, ip_addr, 'connect'))
+                    connection_patterns_found += 1
+                    print(f"[SECURITY] Found connection: {client_name} from {ip_addr} at {timestamp}")
+            
+            # 匹配多重连接警告日志 - 支持多种格式
+            multi_patterns = [
+                r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*MULTI: new connection by client \'([^\']+)\' will cause previous active sessions',
+                r'(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}).*MULTI: new connection by client \'([^\']+)\' will cause previous active sessions',
+                r'MULTI: new connection by client \'([^\']+)\' will cause previous active sessions'
+            ]
+            
+            for pattern in multi_patterns:
+                multi_match = re.search(pattern, line)
+                if multi_match:
+                    groups = multi_match.groups()
+                    if len(groups) == 2:
+                        timestamp_str, client_name = groups
+                        try:
+                            if re.match(r'\d{4}-\d{2}-\d{2}', timestamp_str):
+                                timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
+                            else:
+                                # 月份格式
+                                current_year = datetime.now().year
+                                timestamp = datetime.strptime(f"{current_year} {timestamp_str}", '%Y %b %d %H:%M:%S')
+                        except ValueError:
+                            timestamp = current_time
+                    else:
+                        # 只有客户端名称，使用当前时间
+                        client_name = groups[0]
+                        timestamp = current_time
+                    
+                    if (current_time - timestamp).total_seconds() <= 3600:
+                        recent_logins[client_name].append((timestamp, 'MULTI_DROP', 'duplicate'))
+                        duplicate_patterns_found += 1
+                        print(f"[SECURITY] Found duplicate login warning for {client_name} at {timestamp}")
+                    break
+        
+        print(f"[SECURITY] Found {connection_patterns_found} connection patterns and {duplicate_patterns_found} duplicate patterns")
+        
+        # 分析可疑登录模式
+        for client_name, login_events in recent_logins.items():
+            if len(login_events) < 2:
+                continue
+                
+            # 按时间排序
+            login_events.sort(key=lambda x: x[0])
+            
+            # 检查是否有来自不同IP的连续登录
+            for i in range(1, len(login_events)):
+                prev_time, prev_ip, prev_action = login_events[i-1]
+                curr_time, curr_ip, curr_action = login_events[i]
+                
+                # 如果在短时间内有来自不同IP的登录
+                if (curr_action == 'connect' and prev_action == 'connect' and 
+                    prev_ip != curr_ip and prev_ip != 'MULTI_DROP' and
+                    (curr_time - prev_time).total_seconds() <= 600):  # 10分钟内
+                    
+                    # 发送异地登录通知
+                    send_suspicious_login_notification(client_name, prev_ip, curr_ip, prev_time, curr_time)
+                
+                # 检查duplicate login模式
+                elif curr_action == 'duplicate' and i > 0:
+                    prev_connect = None
+                    # 查找之前最近的连接
+                    for j in range(i-1, -1, -1):
+                        if login_events[j][2] == 'connect':
+                            prev_connect = login_events[j]
+                            break
+                    
+                    if prev_connect and (curr_time - prev_connect[0]).total_seconds() <= 300:  # 5分钟内
+                        # 查找当前连接的IP
+                        curr_connect = None
+                        for j in range(i+1, len(login_events)):
+                            if login_events[j][2] == 'connect':
+                                curr_connect = login_events[j]
+                                break
+                        
+                        if curr_connect and prev_connect[1] != curr_connect[1]:
+                            send_suspicious_login_notification(
+                                client_name, prev_connect[1], curr_connect[1], 
+                                prev_connect[0], curr_connect[0]
+                            )
+    
+    except Exception as e:
+        print(f"[SECURITY] Error in suspicious login check: {e}")
+
+def send_suspicious_login_notification(client_name, old_ip, new_ip, old_time, new_time):
+    """发送异地登录通知"""
+    try:
+        # 创建通知目录
+        notification_dir = '/tmp/openvpn_notifications'
+        subprocess.run(['mkdir', '-p', notification_dir], check=False)
+        
+        # 获取地理位置信息 (简化版，实际可以使用IP地理位置API)
+        old_location = get_ip_location(old_ip)
+        new_location = get_ip_location(new_ip)
+        
+        notification = {
+            'client_name': client_name,
+            'alert_type': 'suspicious_login',
+            'timestamp': datetime.now().isoformat(),
+            'old_connection': {
+                'ip': old_ip,
+                'time': old_time.isoformat(),
+                'location': old_location
+            },
+            'new_connection': {
+                'ip': new_ip, 
+                'time': new_time.isoformat(),
+                'location': new_location
+            },
+            'message': f'检测到客户端 {client_name} 异地登录！\n原连接: {old_ip} ({old_location}) 于 {old_time.strftime("%Y-%m-%d %H:%M:%S")}\n新连接: {new_ip} ({new_location}) 于 {new_time.strftime("%Y-%m-%d %H:%M:%S")}'
+        }
+        
+        # 保存通知到文件
+        notification_file = f'{notification_dir}/alert_{client_name}_{int(time.time())}.json'
+        with open(notification_file, 'w', encoding='utf-8') as f:
+            json.dump(notification, f, ensure_ascii=False, indent=2)
+        
+        print(f"[SECURITY] 🚨 异地登录警报: {client_name}")
+        print(f"[SECURITY] 原IP: {old_ip} ({old_location}) -> 新IP: {new_ip} ({new_location})")
+        print(f"[SECURITY] 时间差: {(new_time - old_time).total_seconds():.0f}秒")
+        print(f"[SECURITY] 通知已保存到: {notification_file}")
+        
+        # 可以在这里实现更多通知方式：
+        # - 发送邮件
+        # - 发送到Webhook
+        # - 写入系统日志
+        # - 通过管理接口断开可疑连接
+        
+        # 写入系统日志
+        log_message(f"SECURITY ALERT: Suspicious login detected for client '{client_name}' - Old IP: {old_ip}, New IP: {new_ip}")
+        
+    except Exception as e:
+        print(f"[SECURITY] Error sending notification: {e}")
+
+def get_ip_location(ip):
+    """获取IP地址的地理位置 (简化版)"""
+    try:
+        # 检查是否为内网IP
+        if ip.startswith('192.168.') or ip.startswith('10.') or ip.startswith('172.'):
+            return '内网地址'
+        elif ip.startswith('127.'):
+            return '本地地址'
+        else:
+            # 这里可以调用IP地理位置API，比如 ipapi.co, ipinfo.io 等
+            # 为了简化，这里返回一个占位符
+            return f'外网地址({ip})'
+    except:
+        return '未知位置'
+
+@app.route('/notifications')
+def get_notifications():
+    """获取安全通知列表"""
+    try:
+        notification_dir = '/tmp/openvpn_notifications'
+        if not os.path.exists(notification_dir):
+            return jsonify({'notifications': []})
+        
+        notifications = []
+        for filename in os.listdir(notification_dir):
+            if filename.endswith('.json'):
+                filepath = os.path.join(notification_dir, filename)
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        notification = json.load(f)
+                        notifications.append(notification)
+                except Exception as e:
+                    print(f"Error reading notification file {filename}: {e}")
+        
+        # 按时间倒序排列
+        notifications.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
+        # 只返回最近100条
+        return jsonify({'notifications': notifications[:100]})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+@app.route('/clear_notifications', methods=['POST'])
+def clear_notifications():
+    """清空所有通知"""
+    try:
+        notification_dir = '/tmp/openvpn_notifications'
+        if os.path.exists(notification_dir):
+            subprocess.run(['rm', '-rf', notification_dir], check=False)
+            subprocess.run(['mkdir', '-p', notification_dir], check=False)
+        
+        return jsonify({'status': 'success', 'message': '所有通知已清空'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/')
 def index():
