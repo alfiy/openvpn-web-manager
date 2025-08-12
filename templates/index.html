@@ -137,6 +137,7 @@
                                     <tr>
                                         <th>#</th>
                                         <th>客户端名称</th>
+                                        <th>在线状态</th>
                                         <th>到期时间</th>
                                         <th>操作</th>
                                     </tr>
@@ -146,6 +147,20 @@
                                     <tr>
                                         <td>{{ loop.index }}</td>
                                         <td>{{ client.name if client is mapping else client }}</td>
+                                        <td>
+                                            {% if client is mapping and client.online %}
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-circle"></i> 在线
+                                                </span>
+                                                {% if client.ip %}
+                                                    <br><small class="text-muted">{{ client.ip }}</small>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="badge bg-secondary">
+                                                    <i class="fas fa-circle"></i> 离线
+                                                </span>
+                                            {% endif %}
+                                        </td>
                                         <td>
                                             {% if client is mapping and client.expiry %}
                                                 <small class="text-muted">{{ client.expiry }}</small>

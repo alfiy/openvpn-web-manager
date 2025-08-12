@@ -7,7 +7,7 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify, s
 
 app = Flask(__name__)
 # Update script path to workspace directory
-SCRIPT_PATH = './ubuntu-openvpn-install.sh'
+SCRIPT_PATH = '/workspace/ubuntu-openvpn-install.sh'
 
 def check_openvpn_status():
     """Check if OpenVPN is installed and running"""
@@ -28,8 +28,12 @@ def check_openvpn_status():
         return f'error: {str(e)}'
 
 def get_openvpn_clients():
-    """Get list of OpenVPN clients with expiration dates"""
+    """Get list of OpenVPN clients with expiration dates and online status"""
     clients = []
+    
+    # Get online clients first
+    online_clients = get_online_clients()
+    
     try:
         if os.path.exists('/etc/openvpn/easy-rsa/pki/index.txt'):
             with open('/etc/openvpn/easy-rsa/pki/index.txt', 'r') as f:
@@ -43,6 +47,10 @@ def get_openvpn_clients():
                             match = re.search(r'CN=([^/]+)', cn_field)
                             if match:
                                 client_name = match.group(1)
+                                # Skip server certificate
+                                if client_name == 'server':
+                                    continue
+                                    
                                 # Convert expiry date to readable format
                                 try:
                                     from datetime import datetime
@@ -57,13 +65,82 @@ def get_openvpn_clients():
                                 except:
                                     expiry_readable = "Unknown"
                                 
+                                # Check if client is online
+                                is_online = client_name in online_clients
+                                client_info = online_clients.get(client_name, {})
+                                
                                 clients.append({
                                     'name': client_name,
-                                    'expiry': expiry_readable
+                                    'expiry': expiry_readable,
+                                    'online': is_online,
+                                    'vpn_ip': client_info.get('vpn_ip', ''),
+                                    'real_ip': client_info.get('real_ip', ''),
+                                    'duration': client_info.get('duration', ''),
+                                    'connected_since': client_info.get('connected_since', '')
                                 })
     except Exception as e:
         print(f"Error getting clients: {e}")
     return clients
+
+def get_online_clients():
+    """Get currently connected OpenVPN clients with VPN IP and connection info"""
+    online_clients = {}
+    
+    # Check OpenVPN status file - try the correct location first
+    status_file = "/var/log/openvpn/status.log"
+    if not os.path.exists(status_file):
+        # Try alternative locations
+        status_file = "/var/log/openvpn/openvpn-status.log"
+        if not os.path.exists(status_file):
+            status_file = "/etc/openvpn/server/openvpn-status.log"
+    
+    if not os.path.exists(status_file):
+        return online_clients
+    
+    try:
+        with open(status_file, 'r') as f:
+            lines = f.readlines()
+        
+        # Parse the status file - format: VPN_IP,client_name,real_IP:port,connected_since
+        for line in lines:
+            line = line.strip()
+            if line and not line.startswith('#') and ',' in line:
+                parts = line.split(',')
+                if len(parts) >= 4:
+                    vpn_ip = parts[0].strip()  # This is the VPN IP (10.8.0.x)
+                    client_name = parts[1].strip()
+                    real_address = parts[2].strip()  # This is the external IP:port
+                    connected_since = parts[3].strip()
+                    
+                    if client_name and client_name != 'UNDEF' and vpn_ip:
+                        # Calculate connection duration
+                        try:
+                            from datetime import datetime
+                            connect_time = datetime.strptime(connected_since, '%Y-%m-%d %H:%M:%S')
+                            current_time = datetime.now()
+                            duration = current_time - connect_time
+                            
+                            # Format duration as hours:minutes
+                            total_seconds = int(duration.total_seconds())
+                            hours = total_seconds // 3600
+                            minutes = (total_seconds % 3600) // 60
+                            duration_str = f"{hours:02d}:{minutes:02d}"
+                        except:
+                            duration_str = "未知"
+                        
+                        # Extract real IP (remove port)
+                        real_ip = real_address.split(':')[0] if ':' in real_address else real_address
+                        
+                        online_clients[client_name] = {
+                            'vpn_ip': vpn_ip,
+                            'real_ip': real_ip,
+                            'duration': duration_str,
+                            'connected_since': connected_since
+                        }
+    except Exception as e:
+        print(f"Error reading OpenVPN status: {e}")
+    
+    return online_clients
 
 @app.route('/')
 def index():
@@ -286,7 +363,7 @@ def revoke_client():
         # Step 5: Clean up all client files
         cleanup_commands = [
             # Remove client configuration file
-            ['sudo', 'rm', '-f', f'/tmp/{client_name}.ovpn'],
+            ['sudo', 'rm', '-f', f'/root/{client_name}.ovpn'],
             # Remove from IP persistence file
             ['sudo', 'sed', '-i', f'/^{client_name},/d', '/etc/openvpn/ipp.txt'],
             # Remove client-specific configuration
@@ -387,7 +464,7 @@ def uninstall():
             ['sudo', 'rm', '-rf', '/var/log/openvpn'],
             
             # Remove client config files from root
-            ['sudo', 'find', '/tmp/', '-maxdepth', '1', '-name', '*.ovpn', '-delete'],
+            ['sudo', 'find', '/root/', '-maxdepth', '1', '-name', '*.ovpn', '-delete'],
             
             # Restore IP forwarding
             ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=0'],
@@ -415,12 +492,116 @@ def uninstall():
 @app.route('/download_client/<client_name>', methods=['GET'])
 def download_client(client_name):
     # Path to the client config file
-    client_path = f"/tmp/{client_name}.ovpn"
+    client_path = f"/root/{client_name}.ovpn"
     
     if os.path.exists(client_path):
         return send_file(client_path, as_attachment=True)
     else:
         return jsonify({'status': 'error', 'message': 'Client configuration file not found'})
+
+@app.route('/disconnect_client', methods=['POST'])
+def disconnect_client():
+    """Forcefully disconnect a client"""
+    client_name = request.form.get('client_name')
+    if not client_name:
+        return jsonify({'status': 'error', 'message': 'Client name is required'})
+    
+    client_name = client_name.strip()
+    if not client_name:
+        return jsonify({'status': 'error', 'message': 'Client name is required'})
+    
+    try:
+        # Method 1: Try to kill the client connection using OpenVPN management interface
+        # First, try to find the client's connection and kill it
+        kill_result = subprocess.run([
+            'sudo', 'bash', '-c', 
+            f'echo "kill {client_name}" | nc localhost 7505 2>/dev/null || echo "Management interface not available"'
+        ], capture_output=True, text=True, timeout=10)
+        
+        # Method 2: Alternative approach - temporarily revoke and restore certificate
+        if kill_result.returncode != 0 or "Management interface not available" in kill_result.stdout:
+            # Get current certificate info before revoking
+            if not os.path.exists('/etc/openvpn/easy-rsa/pki/index.txt'):
+                return jsonify({'status': 'error', 'message': 'OpenVPN PKI not found'})
+            
+            # Check if client exists
+            with open('/etc/openvpn/easy-rsa/pki/index.txt', 'r') as f:
+                content = f.read()
+                if f'CN={client_name}/' not in content and f'CN={client_name}' not in content:
+                    return jsonify({'status': 'error', 'message': f'Client {client_name} not found'})
+            
+            # Temporarily revoke the certificate to force disconnect
+            temp_revoke = subprocess.run([
+                'sudo', 'bash', '-c', f'cd /etc/openvpn/easy-rsa && ./easyrsa --batch revoke "{client_name}"'
+            ], capture_output=True, text=True, timeout=30)
+            
+            # Generate new CRL to force immediate disconnection
+            crl_result = subprocess.run([
+                'sudo', 'bash', '-c', 'cd /etc/openvpn/easy-rsa && ./easyrsa gen-crl'
+            ], capture_output=True, text=True, timeout=30)
+            
+            # Update CRL in OpenVPN directory
+            subprocess.run(['sudo', 'cp', '/etc/openvpn/easy-rsa/pki/crl.pem', '/etc/openvpn/crl.pem'], check=False)
+            subprocess.run(['sudo', 'chmod', '644', '/etc/openvpn/crl.pem'], check=False)
+            
+            # Reload OpenVPN to apply CRL immediately
+            reload_result = subprocess.run([
+                'sudo', 'killall', '-SIGUSR1', 'openvpn'
+            ], capture_output=True, text=True, timeout=10)
+            
+            # Wait a moment for the disconnection to take effect
+            import time
+            time.sleep(2)
+            
+            # Now restore the certificate by removing it from revoked list
+            try:
+                # Read current index.txt
+                with open('/etc/openvpn/easy-rsa/pki/index.txt', 'r') as f:
+                    lines = f.readlines()
+                
+                # Change R (revoked) back to V (valid) for this client
+                updated_lines = []
+                for line in lines:
+                    if f'CN={client_name}/' in line or f'CN={client_name}' in line:
+                        if line.startswith('R'):
+                            # Change from R (revoked) to V (valid)
+                            updated_line = 'V' + line[1:]
+                            updated_lines.append(updated_line)
+                        else:
+                            updated_lines.append(line)
+                    else:
+                        updated_lines.append(line)
+                
+                # Write back the updated content
+                subprocess.run([
+                    'sudo', 'bash', '-c', 
+                    f'cat > /etc/openvpn/easy-rsa/pki/index.txt << \'EOF\'\n{"".join(updated_lines)}EOF'
+                ], check=True, timeout=30)
+                
+                # Generate new CRL without the revoked client
+                subprocess.run([
+                    'sudo', 'bash', '-c', 'cd /etc/openvpn/easy-rsa && ./easyrsa gen-crl'
+                ], capture_output=True, text=True, timeout=30)
+                
+                # Update CRL again
+                subprocess.run(['sudo', 'cp', '/etc/openvpn/easy-rsa/pki/crl.pem', '/etc/openvpn/crl.pem'], check=False)
+                subprocess.run(['sudo', 'killall', '-SIGUSR1', 'openvpn'], check=False)
+                
+            except Exception as restore_error:
+                return jsonify({
+                    'status': 'warning', 
+                    'message': f'Client {client_name} disconnected but certificate restoration failed: {str(restore_error)}'
+                })
+        
+        return jsonify({
+            'status': 'success', 
+            'message': f'Client {client_name} has been forcefully disconnected'
+        })
+        
+    except subprocess.TimeoutExpired:
+        return jsonify({'status': 'error', 'message': 'Disconnect operation timed out'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Disconnect error: {str(e)}'})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)
