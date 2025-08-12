@@ -152,8 +152,14 @@
                                                 <span class="badge bg-success">
                                                     <i class="fas fa-circle"></i> 在线
                                                 </span>
-                                                {% if client.ip %}
-                                                    <br><small class="text-muted">{{ client.ip }}</small>
+                                                {% if client.vpn_ip %}
+                                                    <br><small class="text-success"><strong>VPN: {{ client.vpn_ip }}</strong></small>
+                                                {% endif %}
+                                                {% if client.real_ip %}
+                                                    <br><small class="text-muted">来源: {{ client.real_ip }}</small>
+                                                {% endif %}
+                                                {% if client.duration %}
+                                                    <br><small class="text-info">时长: {{ client.duration }}</small>
                                                 {% endif %}
                                             {% else %}
                                                 <span class="badge bg-secondary">
@@ -169,8 +175,16 @@
                                             {% endif %}
                                         </td>
                                         <td>
-                                            <button class="btn btn-sm btn-primary download-btn" data-client="{{ client.name if client is mapping else client }}">下载配置</button>
-                                            <button class="btn btn-sm btn-danger revoke-btn" data-client="{{ client.name if client is mapping else client }}" data-number="{{ loop.index }}">撤销</button>
+                                            {% if client is mapping and client.disabled %}
+                                                <span class="badge bg-secondary">已禁用</span>
+                                                <button class="btn btn-sm btn-success enable-btn" data-client="{{ client.name }}">重新启用</button>
+                                            {% else %}
+                                                <button class="btn btn-sm btn-primary download-btn" data-client="{{ client.name if client is mapping else client }}">下载配置</button>
+                                                {% if client is mapping and client.online %}
+                                                    <button class="btn btn-sm btn-warning disconnect-btn" data-client="{{ client.name }}">禁用</button>
+                                                {% endif %}
+                                                <button class="btn btn-sm btn-danger revoke-btn" data-client="{{ client.name if client is mapping else client }}" data-number="{{ loop.index }}">撤销</button>
+                                            {% endif %}
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -281,6 +295,8 @@
                 bindInstallHandler();
                 bindRevokeHandlers();
                 bindDownloadHandlers();
+                bindDisconnectHandlers();
+                bindEnableHandlers();
                 bindUninstallHandler();
                 
                 console.log('Page refreshed (excluding add client form) at:', new Date().toLocaleTimeString());
@@ -300,6 +316,8 @@
             bindAddClientHandler();  
             bindRevokeHandlers();
             bindDownloadHandlers();
+            bindDisconnectHandlers();
+            bindEnableHandlers();
             bindUninstallHandler();
         }
         
@@ -485,6 +503,132 @@
                     window.location.href = `/download_client/${clientName}`;
                 });
             });
+        }
+        
+        function bindDisconnectHandlers() {
+            const disconnectBtns = document.querySelectorAll('.disconnect-btn:not([data-bound])');
+            disconnectBtns.forEach(btn => {
+                btn.setAttribute('data-bound', 'true');
+                btn.addEventListener('click', function() {
+                    const clientName = this.getAttribute('data-client');
+                    disconnectClient(clientName);
+                });
+            });
+        }
+        
+        function bindEnableHandlers() {
+            const enableBtns = document.querySelectorAll('.enable-btn:not([data-bound])');
+            enableBtns.forEach(btn => {
+                btn.setAttribute('data-bound', 'true');
+                btn.addEventListener('click', function() {
+                    const clientName = this.getAttribute('data-client');
+                    enableClient(clientName);
+                });
+            });
+        }
+        
+        function enableClient(clientName) {
+            console.log(`[FRONTEND] Enable client button clicked - 客户端: ${clientName}`);
+            
+            if (confirm(`确认要重新启用客户端 "${clientName}" 吗？这将创建新的证书并允许客户端重新连接。`)) {
+                console.log(`[FRONTEND] 用户确认重新启用 - 开始发送请求`);
+                
+                const messageDiv = document.getElementById('revoke-message');
+                if (messageDiv) {
+                    messageDiv.innerHTML = '<div class="alert alert-info">正在重新启用客户端...</div>';
+                }
+                
+                fetch('/enable_client', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `client_name=${encodeURIComponent(clientName)}`
+                })
+                .then(response => {
+                    console.log(`[FRONTEND] 收到响应 - 状态码: ${response.status}`);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log(`[FRONTEND] 响应数据:`, data);
+                    if (data.status === 'success') {
+                        console.log(`[FRONTEND] 重新启用成功: ${data.message}`);
+                        showMessage(data.message, 'success');
+                        setTimeout(() => {
+                            refreshPage();
+                        }, 2000);
+                    } else {
+                        console.log(`[FRONTEND] 重新启用失败: ${data.message}`);
+                        showMessage(data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('[FRONTEND] 请求错误:', error);
+                    showMessage('重新启用失败: ' + error.message, 'error');
+                });
+            } else {
+                console.log(`[FRONTEND] 用户取消了重新启用操作`);
+            }
+        }
+        
+        function disconnectClient(clientName) {
+            console.log(`[FRONTEND] 点击禁用按钮 - 客户端: ${clientName}`);
+            console.log(`[FRONTEND] 准备发送POST请求到 /disconnect_client`);
+            console.log(`[FRONTEND] 请求参数: client_name=${clientName}`);
+            
+            if (confirm(`确认要禁用客户端 "${clientName}" 吗？`)) {
+                console.log(`[FRONTEND] 用户确认禁用客户端 - 开始发送请求`);
+                
+                const requestBody = `client_name=${encodeURIComponent(clientName)}`;
+                console.log(`[FRONTEND] 请求体: ${requestBody}`);
+                
+                fetch('/disconnect_client', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: requestBody
+                })
+                .then(response => {
+                    console.log(`[FRONTEND] 收到响应 - 状态码: ${response.status}`);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log(`[FRONTEND] 响应数据:`, data);
+                    if (data.status === 'success') {
+                        console.log(`[FRONTEND] 客户端禁用成功: ${data.message}`);
+                        showMessage(data.message, 'success');
+                        // Refresh the page to update client status
+                        setTimeout(() => {
+                            console.log(`[FRONTEND] 2秒后刷新页面以更新客户端状态`);
+                            refreshPage();
+                        }, 2000);
+                    } else {
+                        console.log(`[FRONTEND] 客户端禁用失败: ${data.message}`);
+                        showMessage(data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('[FRONTEND] 请求错误:', error);
+                    showMessage('客户端禁用失败: ' + error.message, 'error');
+                });
+            } else {
+                console.log(`[FRONTEND] 用户取消了客户端禁用操作`);
+            }
+        }
+        
+        function showMessage(message, type) {
+            // Simple message display - you can enhance this
+            const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+            const messageDiv = document.getElementById('revoke-message');
+            if (messageDiv) {
+                messageDiv.innerHTML = `<div class="alert ${alertClass}">${message}</div>`;
+                setTimeout(() => {
+                    messageDiv.innerHTML = '';
+                }, 5000);
+            } else {
+                alert(message);
+            }
         }
         
         function bindUninstallHandler() {
