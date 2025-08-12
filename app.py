@@ -130,7 +130,10 @@ def get_online_clients():
             lines = f.readlines()
         
         print(f"Reading status file: {status_file}")
-        print(f"Status file content: {lines[:5]}")  # Debug: show first 5 lines
+        print(f"Status file has {len(lines)} lines")
+        print(f"First 10 lines of status file:")
+        for i, line in enumerate(lines[:10]):
+            print(f"  {i+1}: {line.strip()}")  # Debug: show first 10 lines with line numbers
         
         # Parse different possible formats
         in_client_list = False
@@ -165,26 +168,72 @@ def get_online_clients():
                         # Calculate connection duration
                         try:
                             from datetime import datetime
-                            # Try different date formats
+                            # Try different date formats used by OpenVPN
+                            connect_time = None
+                            
+                            # Format 1: "Mon Aug 12 03:15:42 2025" (common format)
                             try:
                                 connect_time = datetime.strptime(connected_since, '%a %b %d %H:%M:%S %Y')
-                            except:
+                                print(f"[DEBUG] Parsed time format 1: {connected_since} -> {connect_time}")
+                            except ValueError:
+                                pass
+                            
+                            # Format 2: "2025-08-12 03:15:42" 
+                            if not connect_time:
                                 try:
                                     connect_time = datetime.strptime(connected_since, '%Y-%m-%d %H:%M:%S')
-                                except:
-                                    connect_time = datetime.now()  # Fallback
-                                    
-                            current_time = datetime.now()
-                            duration = current_time - connect_time
+                                    print(f"[DEBUG] Parsed time format 2: {connected_since} -> {connect_time}")
+                                except ValueError:
+                                    pass
                             
-                            # Format duration as hours:minutes
-                            total_seconds = int(duration.total_seconds())
-                            hours = total_seconds // 3600
-                            minutes = (total_seconds % 3600) // 60
-                            duration_str = f"{hours:02d}:{minutes:02d}"
+                            # Format 3: "Aug 12 03:15:42 2025"
+                            if not connect_time:
+                                try:
+                                    connect_time = datetime.strptime(connected_since, '%b %d %H:%M:%S %Y')
+                                    print(f"[DEBUG] Parsed time format 3: {connected_since} -> {connect_time}")
+                                except ValueError:
+                                    pass
+                            
+                            # Format 4: Unix timestamp
+                            if not connect_time:
+                                try:
+                                    timestamp = float(connected_since)
+                                    connect_time = datetime.fromtimestamp(timestamp)
+                                    print(f"[DEBUG] Parsed timestamp: {connected_since} -> {connect_time}")
+                                except (ValueError, OSError):
+                                    pass
+                            
+                            if connect_time:
+                                current_time = datetime.now()
+                                duration = current_time - connect_time
+                                
+                                # Handle negative duration (clock skew)
+                                if duration.total_seconds() < 0:
+                                    duration_str = "00:00"
+                                    print(f"[DEBUG] Negative duration detected, using 00:00")
+                                else:
+                                    # Format duration as hours:minutes:seconds for better accuracy
+                                    total_seconds = int(duration.total_seconds())
+                                    hours = total_seconds // 3600
+                                    minutes = (total_seconds % 3600) // 60
+                                    seconds = total_seconds % 60
+                                    
+                                    # Show format based on duration
+                                    if hours > 0:
+                                        duration_str = f"{hours}h{minutes:02d}m"
+                                    elif minutes > 0:
+                                        duration_str = f"{minutes}m{seconds:02d}s"
+                                    else:
+                                        duration_str = f"{seconds}s"
+                                    
+                                print(f"[DEBUG] Duration calculation: {current_time} - {connect_time} = {duration_str}")
+                            else:
+                                duration_str = "解析失败"
+                                print(f"[DEBUG] Failed to parse time format: {connected_since}")
+                                
                         except Exception as e:
                             print(f"Duration calculation error: {e}")
-                            duration_str = "未知"
+                            duration_str = "计算错误"
                         
                         # Extract real IP (remove port)
                         real_ip = real_address.split(':')[0] if ':' in real_address else real_address
@@ -223,25 +272,72 @@ def get_online_clients():
                         # Calculate connection duration
                         try:
                             from datetime import datetime
+                            # Try different date formats used by OpenVPN
+                            connect_time = None
+                            
+                            # Format 1: "2025-08-12 03:15:42"
                             try:
                                 connect_time = datetime.strptime(connected_since, '%Y-%m-%d %H:%M:%S')
-                            except:
+                                print(f"[DEBUG] Parsed time format 1: {connected_since} -> {connect_time}")
+                            except ValueError:
+                                pass
+                            
+                            # Format 2: "Mon Aug 12 03:15:42 2025" (common format)
+                            if not connect_time:
                                 try:
                                     connect_time = datetime.strptime(connected_since, '%a %b %d %H:%M:%S %Y')
-                                except:
-                                    connect_time = datetime.now()  # Fallback
-                                    
-                            current_time = datetime.now()
-                            duration = current_time - connect_time
+                                    print(f"[DEBUG] Parsed time format 2: {connected_since} -> {connect_time}")
+                                except ValueError:
+                                    pass
                             
-                            # Format duration as hours:minutes
-                            total_seconds = int(duration.total_seconds())
-                            hours = total_seconds // 3600
-                            minutes = (total_seconds % 3600) // 60
-                            duration_str = f"{hours:02d}:{minutes:02d}"
+                            # Format 3: "Aug 12 03:15:42 2025"
+                            if not connect_time:
+                                try:
+                                    connect_time = datetime.strptime(connected_since, '%b %d %H:%M:%S %Y')
+                                    print(f"[DEBUG] Parsed time format 3: {connected_since} -> {connect_time}")
+                                except ValueError:
+                                    pass
+                            
+                            # Format 4: Unix timestamp
+                            if not connect_time:
+                                try:
+                                    timestamp = float(connected_since)
+                                    connect_time = datetime.fromtimestamp(timestamp)
+                                    print(f"[DEBUG] Parsed timestamp: {connected_since} -> {connect_time}")
+                                except (ValueError, OSError):
+                                    pass
+                            
+                            if connect_time:
+                                current_time = datetime.now()
+                                duration = current_time - connect_time
+                                
+                                # Handle negative duration (clock skew)
+                                if duration.total_seconds() < 0:
+                                    duration_str = "00:00"
+                                    print(f"[DEBUG] Negative duration detected, using 00:00")
+                                else:
+                                    # Format duration as hours:minutes:seconds for better accuracy
+                                    total_seconds = int(duration.total_seconds())
+                                    hours = total_seconds // 3600
+                                    minutes = (total_seconds % 3600) // 60
+                                    seconds = total_seconds % 60
+                                    
+                                    # Show format based on duration
+                                    if hours > 0:
+                                        duration_str = f"{hours}h{minutes:02d}m"
+                                    elif minutes > 0:
+                                        duration_str = f"{minutes}m{seconds:02d}s"
+                                    else:
+                                        duration_str = f"{seconds}s"
+                                    
+                                print(f"[DEBUG] Duration calculation: {current_time} - {connect_time} = {duration_str}")
+                            else:
+                                duration_str = "解析失败"
+                                print(f"[DEBUG] Failed to parse time format: {connected_since}")
+                                
                         except Exception as e:
                             print(f"Duration calculation error: {e}")
-                            duration_str = "未知"
+                            duration_str = "计算错误"
                         
                         # Extract real IP (remove port)
                         real_ip = real_address.split(':')[0] if ':' in real_address else real_address
@@ -800,32 +896,47 @@ def enable_client():
         return jsonify({'status': 'error', 'message': 'Client name is required'})
     
     log_message(f"Re-enabling client: {client_name}")
+    print(f"[ENABLE] Starting re-enable process for client: {client_name}", flush=True)
     
     try:
-        # Step 1: Remove disabled flag
-        disabled_flag = f'/etc/openvpn/disabled_clients/{client_name}'
+        # Step 1: Remove disabled flag if it exists
+        disabled_clients_dir = '/etc/openvpn/disabled_clients'
+        disabled_flag = f'{disabled_clients_dir}/{client_name}'
+        
         if os.path.exists(disabled_flag):
-            subprocess.run(['sudo', 'rm', '-f', disabled_flag], check=True)
+            subprocess.run(['sudo', 'rm', '-f', disabled_flag], check=False)
             log_message(f"Removed disabled flag for client: {client_name}")
         
-        # Step 2: Check if certificate needs to be restored
+        # Step 2: Check if PKI directory exists
         if not os.path.exists('/etc/openvpn/easy-rsa/pki/index.txt'):
-            return jsonify({'status': 'error', 'message': 'OpenVPN PKI not found'})
+            log_message("OpenVPN PKI not found")
+            return jsonify({'status': 'error', 'message': 'OpenVPN PKI not found. Please ensure OpenVPN is installed and configured.'})
         
-        # Check current certificate status
+        # Step 3: Check current certificate status
+        log_message("Checking certificate status")
         with open('/etc/openvpn/easy-rsa/pki/index.txt', 'r') as f:
             lines = f.readlines()
         
+        client_found = False
         client_revoked = False
+        
         for line in lines:
             if f'CN={client_name}/' in line or f'CN={client_name}' in line:
+                client_found = True
                 if line.startswith('R'):  # Revoked
                     client_revoked = True
-                    break
+                    log_message(f"Client {client_name} certificate is revoked")
+                elif line.startswith('V'):  # Valid
+                    log_message(f"Client {client_name} certificate is already valid")
+                break
         
+        if not client_found:
+            log_message(f"Client {client_name} not found in PKI")
+            return jsonify({'status': 'error', 'message': f'Client {client_name} not found in certificate database'})
+        
+        # Step 4: If certificate is revoked, create a new one
         if client_revoked:
-            # Step 3: Create new certificate for the client
-            log_message(f"Creating new certificate for client: {client_name}")
+            log_message(f"Creating new certificate for revoked client: {client_name}")
             
             # Remove old revoked entries from index
             filtered_lines = []
@@ -834,10 +945,15 @@ def enable_client():
                     filtered_lines.append(line)
             
             # Write back filtered content
-            subprocess.run([
-                'sudo', 'bash', '-c', 
-                f'cat > /etc/openvpn/easy-rsa/pki/index.txt << \'EOF\'\n{"".join(filtered_lines)}EOF'
-            ], check=True, timeout=30)
+            try:
+                subprocess.run([
+                    'sudo', 'bash', '-c', 
+                    f'cat > /etc/openvpn/easy-rsa/pki/index.txt << \'EOF\'\n{"".join(filtered_lines)}EOF'
+                ], check=True, timeout=30)
+                log_message("Removed old certificate entries from index")
+            except Exception as e:
+                log_message(f"Failed to update index: {e}")
+                return jsonify({'status': 'error', 'message': f'Failed to update certificate index: {str(e)}'})
             
             # Remove old certificate files
             cleanup_commands = [
@@ -853,108 +969,124 @@ def enable_client():
                     pass
             
             # Create new certificate with default 10 years validity
+            log_message("Creating new certificate")
             cert_result = subprocess.run([
                 'sudo', 'bash', '-c', f'cd /etc/openvpn/easy-rsa && EASYRSA_CERT_EXPIRE=3650 ./easyrsa --batch build-client-full "{client_name}" nopass'
             ], capture_output=True, text=True, timeout=120)
             
             if cert_result.returncode != 0:
-                log_message(f"Failed to create new certificate: {cert_result.stderr}")
-                return jsonify({
-                    'status': 'error', 
-                    'message': f'Failed to create new certificate: {cert_result.stderr}'
-                })
+                error_msg = f"Failed to create new certificate: {cert_result.stderr}"
+                log_message(error_msg)
+                return jsonify({'status': 'error', 'message': error_msg})
             
-            # Generate new client configuration
+            log_message("Certificate created successfully")
+            
+            # Generate new client configuration file
+            log_message("Generating client configuration")
+            config_commands = [
+                f'cd /etc/openvpn/easy-rsa',
+                f'echo "client" > "/tmp/{client_name}.ovpn"',
+                f'echo "dev tun" >> "/tmp/{client_name}.ovpn"',
+                f'echo "proto udp" >> "/tmp/{client_name}.ovpn"',
+                f'echo "remote $(curl -s ifconfig.me 2>/dev/null || echo localhost) 1194" >> "/tmp/{client_name}.ovpn"',
+                f'echo "resolv-retry infinite" >> "/tmp/{client_name}.ovpn"',
+                f'echo "nobind" >> "/tmp/{client_name}.ovpn"',
+                f'echo "persist-key" >> "/tmp/{client_name}.ovpn"',
+                f'echo "persist-tun" >> "/tmp/{client_name}.ovpn"',
+                f'echo "remote-cert-tls server" >> "/tmp/{client_name}.ovpn"',
+                f'echo "cipher AES-256-GCM" >> "/tmp/{client_name}.ovpn"',
+                f'echo "verb 3" >> "/tmp/{client_name}.ovpn"',
+                f'echo "" >> "/tmp/{client_name}.ovpn"',
+                f'echo "<ca>" >> "/tmp/{client_name}.ovpn"',
+                f'cat "/etc/openvpn/easy-rsa/pki/ca.crt" >> "/tmp/{client_name}.ovpn"',
+                f'echo "</ca>" >> "/tmp/{client_name}.ovpn"',
+                f'echo "" >> "/tmp/{client_name}.ovpn"',
+                f'echo "<cert>" >> "/tmp/{client_name}.ovpn"',
+                f'awk \'/BEGIN/,/END CERTIFICATE/\' "/etc/openvpn/easy-rsa/pki/issued/{client_name}.crt" >> "/tmp/{client_name}.ovpn"',
+                f'echo "</cert>" >> "/tmp/{client_name}.ovpn"',
+                f'echo "" >> "/tmp/{client_name}.ovpn"',
+                f'echo "<key>" >> "/tmp/{client_name}.ovpn"',
+                f'cat "/etc/openvpn/easy-rsa/pki/private/{client_name}.key" >> "/tmp/{client_name}.ovpn"',
+                f'echo "</key>" >> "/tmp/{client_name}.ovpn"',
+                f'echo "" >> "/tmp/{client_name}.ovpn"',
+                f'echo "<tls-crypt>" >> "/tmp/{client_name}.ovpn"',
+                f'cat /etc/openvpn/tls-crypt.key 2>/dev/null || cat /etc/openvpn/ta.key 2>/dev/null || echo "# TLS key not found" >> "/tmp/{client_name}.ovpn"',
+                f'echo "</tls-crypt>" >> "/tmp/{client_name}.ovpn"',
+                f'chmod 644 "/tmp/{client_name}.ovpn"'
+            ]
+            
+            config_script = ' && '.join(config_commands)
             config_result = subprocess.run([
-                'sudo', 'bash', '-c', f'''
-                cd /etc/openvpn/easy-rsa
-                
-                # Create base client configuration in /tmp
-                echo "client
-dev tun
-proto udp
-remote $(curl -s ifconfig.me || echo localhost) 1194
-resolv-retry infinite
-nobind
-persist-key
-persist-tun
-remote-cert-tls server
-cipher AES-256-GCM
-verb 3" > "/tmp/{client_name}.ovpn"
-                
-                # Append certificates and keys
-                {{
-                    echo ""
-                    echo "<ca>"
-                    cat "/etc/openvpn/easy-rsa/pki/ca.crt"
-                    echo "</ca>"
-                    echo ""
-                    echo "<cert>"
-                    awk '/BEGIN/,/END CERTIFICATE/' "/etc/openvpn/easy-rsa/pki/issued/{client_name}.crt"
-                    echo "</cert>"
-                    echo ""
-                    echo "<key>"
-                    cat "/etc/openvpn/easy-rsa/pki/private/{client_name}.key"
-                    echo "</key>"
-                    echo ""
-                    echo "<tls-crypt>"
-                    cat /etc/openvpn/tls-crypt.key 2>/dev/null || cat /etc/openvpn/ta.key 2>/dev/null || echo "# TLS key not found"
-                    echo "</tls-crypt>"
-                }} >> "/tmp/{client_name}.ovpn"
-                
-                # Set permissions
-                chmod 644 "/tmp/{client_name}.ovpn"
-                '''
+                'sudo', 'bash', '-c', config_script
             ], capture_output=True, text=True, timeout=60)
             
             if config_result.returncode != 0:
-                log_message(f"Failed to generate client configuration: {config_result.stderr}")
-                return jsonify({
-                    'status': 'error', 
-                    'message': f'Failed to generate client configuration: {config_result.stderr}'
-                })
+                error_msg = f"Failed to generate client configuration: {config_result.stderr}"
+                log_message(error_msg)
+                return jsonify({'status': 'error', 'message': error_msg})
+            
+            log_message("Client configuration generated successfully")
         
-        # Step 4: Generate new CRL to remove revocation
-        log_message("Generating new CRL to remove revocation")
+        # Step 5: Generate new CRL to remove any revocation
+        log_message("Generating new CRL")
         crl_result = subprocess.run([
             'sudo', 'bash', '-c', 'cd /etc/openvpn/easy-rsa && ./easyrsa gen-crl'
         ], capture_output=True, text=True, timeout=60)
         
         if crl_result.returncode != 0:
-            log_message(f"Failed to generate CRL: {crl_result.stderr}")
-            return jsonify({
-                'status': 'error', 
-                'message': f'Failed to generate CRL: {crl_result.stderr}'
-            })
+            error_msg = f"Failed to generate CRL: {crl_result.stderr}"
+            log_message(error_msg)
+            return jsonify({'status': 'error', 'message': error_msg})
         
-        # Step 5: Update CRL in OpenVPN directory
-        subprocess.run(['sudo', 'cp', '/etc/openvpn/easy-rsa/pki/crl.pem', '/etc/openvpn/crl.pem'], check=True)
-        subprocess.run(['sudo', 'chmod', '644', '/etc/openvpn/crl.pem'], check=True)
+        # Step 6: Update CRL in OpenVPN directory
+        try:
+            subprocess.run(['sudo', 'cp', '/etc/openvpn/easy-rsa/pki/crl.pem', '/etc/openvpn/crl.pem'], check=True)
+            subprocess.run(['sudo', 'chmod', '644', '/etc/openvpn/crl.pem'], check=True)
+            log_message("CRL updated successfully")
+        except Exception as e:
+            log_message(f"Warning: Failed to update CRL: {e}")
         
-        # Step 6: Reload OpenVPN
+        # Step 7: Reload OpenVPN service
         log_message("Reloading OpenVPN service")
         reload_methods = [
             ['sudo', 'killall', '-SIGUSR1', 'openvpn'],
-            ['sudo', 'systemctl', 'reload', 'openvpn@server']
+            ['sudo', 'systemctl', 'reload', 'openvpn@server'],
+            ['sudo', 'systemctl', 'restart', 'openvpn@server']
         ]
         
+        reload_success = False
         for method in reload_methods:
             try:
                 result = subprocess.run(method, capture_output=True, text=True, timeout=30)
+                log_message(f"Reload method {' '.join(method)}: return code {result.returncode}")
                 if result.returncode == 0:
+                    reload_success = True
                     break
-            except Exception:
+            except Exception as e:
+                log_message(f"Reload method {' '.join(method)} failed: {e}")
                 continue
         
-        log_message(f"Successfully re-enabled client: {client_name}")
-        return jsonify({
-            'status': 'success', 
-            'message': f'Client {client_name} has been re-enabled with a new certificate. They can now reconnect to the VPN.'
-        })
+        if not reload_success:
+            log_message("Warning: OpenVPN reload failed, changes may not be immediate")
         
+        success_msg = f'Client {client_name} has been successfully re-enabled'
+        if client_revoked:
+            success_msg += ' with a new certificate'
+        success_msg += '. The client can now reconnect to the VPN.'
+        
+        log_message(f"Successfully re-enabled client: {client_name}")
+        return jsonify({'status': 'success', 'message': success_msg})
+        
+    except subprocess.TimeoutExpired:
+        log_message("Enable operation timed out")
+        return jsonify({'status': 'error', 'message': 'Enable operation timed out'})
+    except subprocess.CalledProcessError as e:
+        log_message(f"Command failed: {e}")
+        return jsonify({'status': 'error', 'message': f'Command failed: {e}'})
     except Exception as e:
-        log_message(f"Error re-enabling client: {e}")
-        return jsonify({'status': 'error', 'message': f'Error re-enabling client: {str(e)}'})
+        error_msg = f"Unexpected error during enable: {str(e)}"
+        log_message(error_msg)
+        return jsonify({'status': 'error', 'message': error_msg})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)
