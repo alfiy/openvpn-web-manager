@@ -1,0 +1,126 @@
+[33mcommit 04e0688440a46ccbd85f93a83a5fb22a79096d75[m[33m ([m[1;36mHEAD -> [m[1;32mmaster[m[33m)[m
+Author: alfiy <13012648@qq.com>
+Date:   Thu Aug 14 15:42:32 2025 +0800
+
+    add locate css file
+
+[33mcommit d89a5ba83720f43a12e791d3799293a3996ea790[m[33m ([m[1;31morigin/master[m[33m)[m
+Author: alfiy <alfiy@163.com>
+Date:   Tue Aug 12 17:42:38 2025 +0800
+
+    add client off-site testing
+
+[33mcommit 30903b5558523f583d464b307546eb06819f324f[m
+Author: alfiy <alfiy@163.com>
+Date:   Tue Aug 12 13:39:06 2025 +0800
+
+    fix online time
+
+[33mcommit a0ff025ea48ba2a28d56e79c600833cf65a8fbdc[m
+Author: alfiy <alfiy@163.com>
+Date:   Tue Aug 12 11:31:43 2025 +0800
+
+    add client online time and disable client
+
+[33mcommit 62a724441d986d954315d39239a25268e432326a[m
+Author: alfiy <alfiy@163.com>
+Date:   Tue Aug 12 09:29:00 2025 +0800
+
+    show client status
+
+[33mcommit a6c6fafa6f31ec2126d717f32ed6c2521710150e[m
+Author: alfiy <alfiy@163.com>
+Date:   Fri Aug 8 17:35:24 2025 +0800
+
+    add user expiration time
+
+[33mcommit 941f351119170945cc0ab346d8493e1f16504b2e[m
+Author: alfiy <alfiy@163.com>
+Date:   Fri Aug 8 16:42:27 2025 +0800
+
+    fix Error: [Errno 32] Broken pipe
+
+[33mcommit 20824e0a862cfb94c8a0d1d43ad6c125075d24a4[m
+Author: alfiy <alfiy@163.com>
+Date:   Fri Aug 8 16:31:55 2025 +0800
+
+    update openvpnInstall() fun
+
+[33mcommit 74b10be62a84b12be66d51250a369d9265439531[m
+Author: alfiy <alfiy@163.com>
+Date:   Fri Aug 8 16:12:13 2025 +0800
+
+    optimize run.sh
+
+[33mcommit 0d5c5cba6544b39076bd13519adaeae74d20d8e3[m
+Author: alfiy <alfiy@163.com>
+Date:   Fri Aug 8 14:30:10 2025 +0800
+
+    chang openvpn.service after revoke user from restart to reload
+
+[33mcommit b75d339b1f341658d7bcff046948a040df7eb2a8[m
+Author: alfiy <alfiy@163.com>
+Date:   Fri Aug 8 14:17:57 2025 +0800
+
+    after revoke user,delete
+
+[33mcommit fcfe3518c8c210281071124bfd8d443227cec10d[m
+Author: alfiy <13012648@qq.com>
+Date:   Fri Aug 8 13:42:14 2025 +0800
+
+    fix revoke user
+
+[33mcommit 2ad508f213a56626e53ceba0e7bb938656266a9c[m
+Author: alfiy <alfiy@163.com>
+Date:   Fri Aug 8 11:44:30 2025 +0800
+
+    edit revoke user
+
+[33mcommit e099b88c8fe7579a46ee84e770a9925edbfc53cf[m
+Author: alfiy <13012648@qq.com>
+Date:   Thu Aug 7 14:01:41 2025 +0800
+
+    fix add client user
+
+[33mcommit 70c98e5525d8ed327d1f5166f2113af0468b67ef[m
+Author: alfiy <13012648@qq.com>
+Date:   Thu Aug 7 11:42:37 2025 +0800
+
+    使用内网地址创建openvpn
+
+[33mcommit 6b5762cd1cbd17223c32c951befad2eca7ccf026[m
+Merge: 184e8aa 6007129
+Author: alfiy <13012648@qq.com>
+Date:   Thu Aug 7 11:39:16 2025 +0800
+
+    Merge branch 'master' of 10.0.7.7:alfiy/openvpn-web-manager
+
+[33mcommit 184e8aaf784d264e3ac0fbe563b5d4188b96787a[m
+Author: alfiy <13012648@qq.com>
+Date:   Thu Aug 7 11:18:13 2025 +0800
+
+    安装openvpn时使用内网IP
+
+[33mcommit 60071291b407e9652351c6da4f79c602313e3612[m
+Author: alfiy <13012648@qq.com>
+Date:   Thu Aug 7 08:48:30 2025 +0800
+
+    添加 LICENSE
+
+[33mcommit d4b663e234f3be939ade8067b9269bbdc276f7ca[m
+Author: alfiy <13012648@qq.com>
+Date:   Wed Aug 6 17:27:58 2025 +0800
+
+    edit readme
+
+[33mcommit 8b858b935a1552233fc1e4bcde3f5fc6438d1b51[m
+Author: alfiy <13012648@qq.com>
+Date:   Wed Aug 6 17:26:15 2025 +0800
+
+    edit readme
+
+[33mcommit bace03568f17c7c0d694bc0a5e21a27f191e43fa[m
+Author: alfiy <13012648@qq.com>
+Date:   Wed Aug 6 17:23:11 2025 +0800
+
+    Initial commit
