@@ -376,6 +376,15 @@ def install():
             'message': f'OpenVPN安装脚本不存在: {SCRIPT_PATH}。请确保ubuntu-openvpn-install.sh文件存在于工作目录中。'
         })
     
+    # Check if sudo is available
+    try:
+        subprocess.run(['which', 'sudo'], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return jsonify({
+            'status': 'error', 
+            'message': 'sudo命令不可用。OpenVPN安装需要管理员权限。请确保在支持sudo的环境中运行此应用程序。'
+        })
+    
     try:
         # Get internal IP address for NAT environment
         def get_internal_ip():
@@ -1090,3 +1099,4 @@ def enable_client():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)
+

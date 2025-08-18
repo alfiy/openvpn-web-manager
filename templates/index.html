@@ -322,43 +322,70 @@
         }
         
         function bindInstallHandler() {
-            const installBtn = document.getElementById('install-btn');
-            if (installBtn && !installBtn.hasAttribute('data-bound')) {
-                installBtn.setAttribute('data-bound', 'true');
-                installBtn.addEventListener('click', function() {
+            // Use event delegation to handle install button clicks
+            // This works even if the button doesn't exist when this function is called
+            console.log('Setting up install button event delegation');
+            document.addEventListener('click', function(e) {
+                if (e.target && e.target.id === 'install-btn') {
+                    console.log('Install button clicked via delegation!');
+                    e.preventDefault();
+                    
                     const loader = document.getElementById('install-loader');
                     const statusMessage = document.getElementById('status-message');
                     
-                    loader.style.display = 'block';
-                    statusMessage.classList.remove('d-none');
-                    statusMessage.textContent = '正在安装OpenVPN，这可能需要几分钟时间...';
+                    if (loader) loader.style.display = 'block';
+                    if (statusMessage) {
+                        statusMessage.classList.remove('d-none');
+                        statusMessage.textContent = '正在安装OpenVPN，这可能需要几分钟时间...';
+                    }
                     
+                    console.log('Sending fetch request to /install');
                     fetch('/install', {
                         method: 'POST',
                     })
-                    .then(response => response.json())
+                    .then(response => {
+                        console.log('Response status:', response.status);
+                        return response.json();
+                    })
                     .then(data => {
-                        loader.style.display = 'none';
-                        statusMessage.textContent = data.message;
-                        if (data.status === 'started') {
-                            statusMessage.classList.remove('alert-danger');
-                            statusMessage.classList.add('alert-info');
-                            setTimeout(() => {
-                                window.location.reload();
-                            }, 60000); // Reload after 1 minute
-                        } else {
-                            statusMessage.classList.remove('alert-info');
-                            statusMessage.classList.add('alert-danger');
+                        console.log('Response data:', data);
+                        if (loader) loader.style.display = 'none';
+                        if (statusMessage) {
+                            statusMessage.textContent = data.message;
+                            if (data.status === 'success') {
+                                statusMessage.classList.remove('alert-danger');
+                                statusMessage.classList.add('alert-success');
+                                console.log('Installation successful, reloading page in 3 seconds...');
+                                // Stop auto-refresh before manual reload
+                                if (autoRefreshInterval) {
+                                    clearInterval(autoRefreshInterval);
+                                }
+                                setTimeout(() => {
+                                    console.log('Reloading page now...');
+                                    // Force stop auto-refresh and reload
+                                    if (autoRefreshInterval) {
+                                        clearInterval(autoRefreshInterval);
+                                    }
+                                    // Force full page reload to get updated OpenVPN status
+                                    window.location.href = window.location.href;
+                                }, 5000);
+                            } else {
+                                statusMessage.classList.remove('alert-success');
+                                statusMessage.classList.add('alert-danger');
+                            }
                         }
                     })
                     .catch(error => {
-                        loader.style.display = 'none';
-                        statusMessage.textContent = '安装失败: ' + error;
-                        statusMessage.classList.remove('alert-info');
-                        statusMessage.classList.add('alert-danger');
+                        console.error('Fetch error:', error);
+                        if (loader) loader.style.display = 'none';
+                        if (statusMessage) {
+                            statusMessage.textContent = '安装失败: ' + error.message;
+                            statusMessage.classList.remove('alert-success');
+                            statusMessage.classList.add('alert-danger');
+                        }
                     });
-                });
-            }
+                }
+            }, { once: false });
         }
         
         function bindAddClientHandler() {
@@ -674,17 +701,31 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('Main app DOM loaded');
+            
             // Initialize date picker minimum date
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
-            document.getElementById('expiry_date').min = tomorrow.toISOString().split('T')[0];
+            const expiryDateEl = document.getElementById('expiry_date');
+            if (expiryDateEl) {
+                expiryDateEl.min = tomorrow.toISOString().split('T')[0];
+            }
+            
+            // Set up event delegation for install button (works even if button doesn't exist yet)
+            bindInstallHandler();
+            
+            // Bind other event handlers
+            bindAddClientHandler();  
+            bindRevokeHandlers();
+            bindDownloadHandlers();
+            bindDisconnectHandlers();
+            bindEnableHandlers();
+            bindUninstallHandler();
             
             // Start auto-refresh
             startAutoRefresh();
-            
-            // Initial event binding
-            bindEventHandlers();
         });
     </script>
 </body>
 </html>
+
