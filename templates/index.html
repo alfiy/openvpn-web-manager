@@ -180,6 +180,7 @@
                                                 <button class="btn btn-sm btn-success enable-btn" data-client="{{ client.name }}">重新启用</button>
                                             {% else %}
                                                 <button class="btn btn-sm btn-primary download-btn" data-client="{{ client.name if client is mapping else client }}">下载配置</button>
+                                                <button class="btn btn-sm btn-info modify-expiry-btn" data-client="{{ client.name if client is mapping else client }}">修改到期时间</button>
                                                 {% if client is mapping and client.online %}
                                                     <button class="btn btn-sm btn-warning disconnect-btn" data-client="{{ client.name }}">禁用</button>
                                                 {% endif %}
@@ -200,6 +201,55 @@
             </div>
         </div>
         {% endif %}
+    </div>
+
+    <!-- Modify Expiry Modal -->
+    <div class="modal fade" id="modifyExpiryModal" tabindex="-1" aria-labelledby="modifyExpiryModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modifyExpiryModalLabel">修改客户端到期时间</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="modify-expiry-form">
+                        <div class="mb-3">
+                            <label for="modify-client-name" class="form-label">客户端名称</label>
+                            <input type="text" class="form-control" id="modify-client-name" name="client_name" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="modify-expiry-type" class="form-label">到期时间设置方式</label>
+                            <select class="form-select" id="modify-expiry-type" name="expiry_type" onchange="toggleModifyExpiryOptions()">
+                                <option value="preset" selected>预设天数</option>
+                                <option value="calendar">选择到期日期</option>
+                            </select>
+                        </div>
+                        <div class="mb-3" id="modify-preset-expiry-div">
+                            <label for="modify-expiry-days" class="form-label">预设有效期</label>
+                            <select class="form-select" id="modify-expiry-days" name="expiry_days">
+                                <option value="30">30天</option>
+                                <option value="90">90天</option>
+                                <option value="180">180天</option>
+                                <option value="365">1年</option>
+                                <option value="1095">3年</option>
+                                <option value="3650">10年</option>
+                            </select>
+                        </div>
+                        <div class="mb-3" id="modify-calendar-expiry-div" style="display: none;">
+                            <label for="modify-expiry-date" class="form-label">选择到期日期</label>
+                            <input type="date" class="form-control" id="modify-expiry-date" name="expiry_date">
+                            <div class="form-text">选择证书的具体到期日期</div>
+                        </div>
+                    </form>
+                    <div id="modify-expiry-message" class="mt-3"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="confirm-modify-expiry">确认修改</button>
+                    <div class="loader" id="modify-expiry-loader" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -229,6 +279,31 @@
                 const oneYearLater = new Date();
                 oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
                 document.getElementById('expiry_date').value = oneYearLater.toISOString().split('T')[0];
+            }
+        }
+
+        // Function to toggle between preset days and calendar date selection for modify modal
+        function toggleModifyExpiryOptions() {
+            const expiryType = document.getElementById('modify-expiry-type').value;
+            const presetDiv = document.getElementById('modify-preset-expiry-div');
+            const calendarDiv = document.getElementById('modify-calendar-expiry-div');
+            
+            if (expiryType === 'preset') {
+                presetDiv.style.display = 'block';
+                calendarDiv.style.display = 'none';
+                document.getElementById('modify-expiry-date').value = '';
+            } else {
+                presetDiv.style.display = 'none';
+                calendarDiv.style.display = 'block';
+                // Set minimum date to tomorrow
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                document.getElementById('modify-expiry-date').min = tomorrow.toISOString().split('T')[0];
+                
+                // Set default date to 1 year from now
+                const oneYearLater = new Date();
+                oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+                document.getElementById('modify-expiry-date').value = oneYearLater.toISOString().split('T')[0];
             }
         }
 
@@ -297,6 +372,7 @@
                 bindDownloadHandlers();
                 bindDisconnectHandlers();
                 bindEnableHandlers();
+                bindModifyExpiryHandlers();
                 bindUninstallHandler();
                 
                 console.log('Page refreshed (excluding add client form) at:', new Date().toLocaleTimeString());
@@ -318,6 +394,7 @@
             bindDownloadHandlers();
             bindDisconnectHandlers();
             bindEnableHandlers();
+            bindModifyExpiryHandlers();
             bindUninstallHandler();
         }
         
@@ -658,6 +735,106 @@
             }
         }
         
+        function bindModifyExpiryHandlers() {
+            const modifyBtns = document.querySelectorAll('.modify-expiry-btn:not([data-bound])');
+            modifyBtns.forEach(btn => {
+                btn.setAttribute('data-bound', 'true');
+                btn.addEventListener('click', function() {
+                    const clientName = this.getAttribute('data-client');
+                    console.log('Modify expiry button clicked for client:', clientName);
+                    
+                    // Set client name in modal
+                    document.getElementById('modify-client-name').value = clientName;
+                    
+                    // Reset form to default values
+                    document.getElementById('modify-expiry-type').value = 'preset';
+                    document.getElementById('modify-expiry-days').value = '365';
+                    document.getElementById('modify-expiry-date').value = '';
+                    toggleModifyExpiryOptions();
+                    
+                    // Clear any previous messages
+                    document.getElementById('modify-expiry-message').innerHTML = '';
+                    
+                    // Show modal
+                    const modal = new bootstrap.Modal(document.getElementById('modifyExpiryModal'));
+                    modal.show();
+                });
+            });
+            
+            // Bind confirm modify expiry button
+            const confirmBtn = document.getElementById('confirm-modify-expiry');
+            if (confirmBtn && !confirmBtn.hasAttribute('data-bound')) {
+                confirmBtn.setAttribute('data-bound', 'true');
+                confirmBtn.addEventListener('click', function() {
+                    const clientName = document.getElementById('modify-client-name').value;
+                    console.log('Confirm modify button clicked for client:', clientName);
+                    const expiryType = document.getElementById('modify-expiry-type').value;
+                    const messageDiv = document.getElementById('modify-expiry-message');
+                    const loader = document.getElementById('modify-expiry-loader');
+                    
+                    let expiryDays;
+                    if (expiryType === 'preset') {
+                        expiryDays = document.getElementById('modify-expiry-days').value;
+                    } else {
+                        const expiryDate = document.getElementById('modify-expiry-date').value;
+                        if (!expiryDate) {
+                            messageDiv.innerHTML = '<div class="alert alert-danger">请选择到期日期</div>';
+                            return;
+                        }
+                        
+                        // Calculate days from today to selected date
+                        const today = new Date();
+                        const selectedDate = new Date(expiryDate);
+                        const timeDiff = selectedDate.getTime() - today.getTime();
+                        const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+                        
+                        if (daysDiff <= 0) {
+                            messageDiv.innerHTML = '<div class="alert alert-danger">到期日期必须是将来的日期</div>';
+                            return;
+                        }
+                        
+                        expiryDays = daysDiff.toString();
+                    }
+                    
+                    // Show loader
+                    loader.style.display = 'inline-block';
+                    confirmBtn.disabled = true;
+                    
+                    const formData = new FormData();
+                    formData.append('client_name', clientName);
+                    formData.append('expiry_days', expiryDays);
+                    
+                    console.log('Sending request with client_name:', clientName, 'expiry_days:', expiryDays);
+                    
+                    fetch('/modify_client_expiry', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        loader.style.display = 'none';
+                        confirmBtn.disabled = false;
+                        
+                        const alertClass = data.status === 'success' ? 'alert-success' : 'alert-danger';
+                        messageDiv.innerHTML = `<div class="alert ${alertClass}">${data.message}</div>`;
+                        
+                        if (data.status === 'success') {
+                            setTimeout(() => {
+                                const modal = bootstrap.Modal.getInstance(document.getElementById('modifyExpiryModal'));
+                                modal.hide();
+                                refreshPage(); // Refresh the page to show updated expiry
+                            }, 2000);
+                        }
+                    })
+                    .catch(error => {
+                        loader.style.display = 'none';
+                        confirmBtn.disabled = false;
+                        messageDiv.innerHTML = `<div class="alert alert-danger">修改到期时间失败: ${error}</div>`;
+                    });
+                });
+            }
+        }
+        
         function bindUninstallHandler() {
             const uninstallBtn = document.getElementById('uninstall-btn');
             if (uninstallBtn && !uninstallBtn.hasAttribute('data-bound')) {
@@ -720,6 +897,7 @@
             bindDownloadHandlers();
             bindDisconnectHandlers();
             bindEnableHandlers();
+            bindModifyExpiryHandlers();
             bindUninstallHandler();
             
             // Start auto-refresh
@@ -728,4 +906,5 @@
     </script>
 </body>
 </html>
+
 
