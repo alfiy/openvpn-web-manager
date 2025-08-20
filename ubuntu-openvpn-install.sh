@@ -105,6 +105,14 @@ function installOpenVPN() {
         rm -rf /etc/openvpn/easy-rsa/
     fi
 
+    # mkdir /etc/openvpn/client
+    if [[ ! -d /etc/openvpn/client ]]; then
+        mkdir -p /etc/openvpn/client
+        echo "📂 Created /etc/openvpn/client directory"
+    else
+        echo "ℹ️ /etc/openvpn/client already exists, skipping creation"
+    fi
+
     # Install easy-rsa
     echo "📦 Installing Easy-RSA..."
     wget -O ~/easy-rsa.tgz https://github.com/OpenVPN/easy-rsa/releases/download/v3.1.2/EasyRSA-3.1.2.tgz
@@ -260,7 +268,7 @@ function newClient() {
     echo "✅ Client $CLIENT added."
 
     # Generate client config
-    cp /etc/openvpn/client-template.txt "/tmp/$CLIENT.ovpn"
+    cp /etc/openvpn/client-template.txt "/etc/openvpn/client/$CLIENT.ovpn"
     {
         echo "<ca>"
         cat "/etc/openvpn/easy-rsa/pki/ca.crt"
@@ -277,10 +285,10 @@ function newClient() {
         echo "<tls-crypt>"
         cat /etc/openvpn/tls-crypt.key
         echo "</tls-crypt>"
-    } >>"/tmp/$CLIENT.ovpn"
+    } >>"/etc/openvpn/client/$CLIENT.ovpn"
 
     echo ""
-    echo "📄 Configuration file written to /tmp/$CLIENT.ovpn"
+    echo "📄 Configuration file written to /etc/openvpn/client/$CLIENT.ovpn"
 }
 
 # Function to revoke a client
@@ -302,7 +310,7 @@ function revokeClient() {
     rm -f /etc/openvpn/crl.pem
     cp /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn/crl.pem
     chmod 644 /etc/openvpn/crl.pem
-    rm -f "/tmp/$CLIENT.ovpn"
+    rm -f "/etc/openvpn/client/$CLIENT.ovpn"
     sed -i "/^$CLIENT,.*/d" /etc/openvpn/ipp.txt
 
     echo "✅ Certificate for client $CLIENT revoked."
@@ -336,10 +344,10 @@ function removeOpenVPN() {
         
         # Clean up files
         echo "🗑️ Cleaning up configuration files..."
-        find /tmp/ -maxdepth 1 -name "*.ovpn" -delete
         rm -rf /etc/openvpn
         rm -f /etc/sysctl.d/99-openvpn.conf
         rm -rf /var/log/openvpn
+	rm -rf /etc/openvpn/client
         
         # Restore system settings
         echo "🌐 Restoring system settings..."
@@ -406,7 +414,7 @@ else
     echo "✅ Client server added."
 
     # Generate client config
-    cp /etc/openvpn/client-template.txt "/tmp/server.ovpn"
+    cp /etc/openvpn/client-template.txt "/etc/openvpn/client/server.ovpn"
     {
         echo "<ca>"
         cat "/etc/openvpn/easy-rsa/pki/ca.crt"
@@ -423,9 +431,9 @@ else
         echo "<tls-crypt>"
         cat /etc/openvpn/tls-crypt.key
         echo "</tls-crypt>"
-    } >>"/tmp/server.ovpn"
+    } >>"/etc/openvpn/client/server.ovpn"
 
     echo ""
-    echo "📄 Default client configuration written to /tmp/server.ovpn"
+    echo "📄 Default client configuration written to /etc/openvpn/client/server.ovpn"
 fi
 

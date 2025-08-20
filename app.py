@@ -6,6 +6,7 @@ from routes.revoke_client import revoke_client_bp
 from routes.uninstall import uninstall_bp
 from routes.download_client import download_client_bp
 from routes.disconnect_client import disconnect_client_bp
+from routes.modify_client_expiry import modify_client_expiry_bp
 from routes.enable_client import enable_client_bp
 
 app = Flask(__name__)
@@ -19,6 +20,7 @@ app.register_blueprint(revoke_client_bp)
 app.register_blueprint(uninstall_bp)
 app.register_blueprint(download_client_bp)
 app.register_blueprint(disconnect_client_bp)
+app.register_blueprint(modify_client_expiry_bp)
 app.register_blueprint(enable_client_bp)
 
 if __name__ == '__main__':

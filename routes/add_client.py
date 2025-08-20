@@ -41,12 +41,12 @@ def add_client():
         commands = [
             # Change to easy-rsa directory and create client certificate with custom expiration
             ['sudo', 'bash', '-c', f'cd /etc/openvpn/easy-rsa && EASYRSA_CERT_EXPIRE={expiry_days} ./easyrsa --batch build-client-full "{client_name}" nopass'],
-            # Generate client configuration file - save only in /tmp
+            # Generate client configuration file - save only in /etc/openvpn/client
             ['sudo', 'bash', '-c', f'''
             cd /etc/openvpn/easy-rsa
             
-            # Create base client configuration in /tmp
-            cp /etc/openvpn/client-template.txt "/tmp/{client_name}.ovpn" 2>/dev/null || echo "client
+            # Create base client configuration in /etc/openvpn/client
+            cp /etc/openvpn/client-template.txt "/etc/openvpn/client/{client_name}.ovpn" 2>/dev/null || echo "client
 dev tun
 proto udp
 remote $(curl -s ifconfig.me || echo localhost) 1194
@@ -56,7 +56,7 @@ persist-key
 persist-tun
 remote-cert-tls server
 cipher AES-256-GCM
-verb 3" > "/tmp/{client_name}.ovpn"
+verb 3" > "/etc/openvpn/client/{client_name}.ovpn"
             
             # Append certificates and keys to the configuration file
             {{
@@ -76,12 +76,12 @@ verb 3" > "/tmp/{client_name}.ovpn"
                 echo "<tls-crypt>"
                 cat /etc/openvpn/tls-crypt.key 2>/dev/null || cat /etc/openvpn/ta.key 2>/dev/null || echo "# TLS key not found"
                 echo "</tls-crypt>"
-            }} >> "/tmp/{client_name}.ovpn"
+            }} >> "/etc/openvpn/client/{client_name}.ovpn"
             
             # Set proper permissions for the config file
-            chmod 644 "/tmp/{client_name}.ovpn"
+            chmod 644 "/etc/openvpn/client/{client_name}.ovpn"
             
-            echo "Client configuration saved to /tmp/{client_name}.ovpn"
+            echo "Client configuration saved to /etc/openvpn/client/{client_name}.ovpn"
             ''']
         ]
         

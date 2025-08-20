@@ -55,8 +55,8 @@ def revoke_client():
 
         # Step 5: Clean up all client files
         cleanup_commands = [
-            # Remove client configuration file from /tmp
-            ['sudo', 'rm', '-f', f'/tmp/{client_name}.ovpn'],
+            # Remove client configuration file from /etc/openvpn/client
+            ['sudo', 'rm', '-f', f'/etc/openvpn/client/{client_name}.ovpn'],
             # Remove from IP persistence file
             ['sudo', 'sed', '-i', f'/^{client_name},/d', '/etc/openvpn/ipp.txt'],
             # Remove client-specific configuration

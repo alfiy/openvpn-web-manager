@@ -67,9 +67,20 @@ if [ $? -ne 0 ]; then
 fi
 echo "Virtual environment activated successfully."
 
+# Upgrade pip/setuptools/wheel (ignore Debian preinstalled versions)
+echo "Upgrading pip, setuptools, and wheel (ignoring Debian preinstalled versions)..."
+python -m pip install --upgrade --ignore-installed pip setuptools wheel --break-system-packages
+if [ $? -ne 0 ]; then
+    echo "Failed to upgrade pip/setuptools/wheel. Exiting..."
+    exit 1
+fi
+
+# Show pip version after upgrade
+pip --version
+
 # Install Python dependencies in virtual environment
 echo "Installing dependencies..."
-pip install -r "$SCRIPT_DIR/requirements.txt"
+pip install -r "$SCRIPT_DIR/requirements.txt" --break-system-packages
 if [ $? -ne 0 ]; then
     echo "Failed to install dependencies. Exiting..."
     exit 1
@@ -92,3 +103,4 @@ chmod +x "$SCRIPT_TARGET"
 # Run the Flask application
 echo "Running the Flask application..."
 python "$SCRIPT_DIR/app.py"
+

@@ -124,7 +124,7 @@ def disconnect_client():
 
         # Step 8: Clean up client files to prevent any reconnection
         cleanup_commands = [
-            ['sudo', 'rm', '-f', f'/tmp/{client_name}.ovpn'],
+            ['sudo', 'rm', '-f', f'/etc/openvpn/client/{client_name}.ovpn'],
             ['sudo', 'sed', '-i', f'/^{client_name},/d', '/etc/openvpn/ipp.txt'],
             ['sudo', 'rm', '-f', f'/etc/openvpn/ccd/{client_name}']
         ]
