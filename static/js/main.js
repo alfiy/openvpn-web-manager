@@ -1,0 +1,649 @@
+// Function to toggle between preset days and calendar date selection
+function toggleExpiryOptions() {
+    const expiryType = document.getElementById('expiry_type').value;
+    const presetDiv = document.getElementById('preset_expiry_div');
+    const calendarDiv = document.getElementById('calendar_expiry_div');
+    
+    if (expiryType === 'preset') {
+        presetDiv.style.display = 'block';
+        calendarDiv.style.display = 'none';
+        // Set minimum date to tomorrow
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        document.getElementById('expiry_date').value = '';
+    } else {
+        presetDiv.style.display = 'none';
+        calendarDiv.style.display = 'block';
+        // Set minimum date to tomorrow
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        document.getElementById('expiry_date').min = tomorrow.toISOString().split('T')[0];
+        
+        // Set default date to 1 year from now
+        const oneYearLater = new Date();
+        oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+        document.getElementById('expiry_date').value = oneYearLater.toISOString().split('T')[0];
+    }
+}
+
+// Function to toggle between preset days and calendar date selection for modify modal
+function toggleModifyExpiryOptions() {
+    const expiryType = document.getElementById('modify-expiry-type').value;
+    const presetDiv = document.getElementById('modify-preset-expiry-div');
+    const calendarDiv = document.getElementById('modify-calendar-expiry-div');
+    
+    if (expiryType === 'preset') {
+        presetDiv.style.display = 'block';
+        calendarDiv.style.display = 'none';
+        document.getElementById('modify-expiry-date').value = '';
+    } else {
+        presetDiv.style.display = 'none';
+        calendarDiv.style.display = 'block';
+        // Set minimum date to tomorrow
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        document.getElementById('modify-expiry-date').min = tomorrow.toISOString().split('T')[0];
+        
+        // Set default date to 1 year from now
+        const oneYearLater = new Date();
+        oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+        document.getElementById('modify-expiry-date').value = oneYearLater.toISOString().split('T')[0];
+    }
+}
+
+// Auto-refresh functionality
+let autoRefreshInterval;
+
+function refreshPage() {
+    fetch('/')
+    .then(response => response.text())
+    .then(html => {
+        // Parse the response and update selective content
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Save current scroll position
+        const scrollTop = window.scrollY;
+        
+        // Save current form state before refresh
+        const addClientForm = document.getElementById('add-client-form');
+        let formState = {};
+        if (addClientForm) {
+            formState.clientName = document.getElementById('client_name')?.value || '';
+            formState.expiryType = document.getElementById('expiry_type')?.value || 'preset';
+            formState.expiryDays = document.getElementById('expiry_days')?.value || '3650';
+            formState.expiryDate = document.getElementById('expiry_date')?.value || '';
+        }
+        
+        // Update OpenVPN status section only
+        const currentStatusCard = document.querySelector('.card:first-child .card-body');
+        const newStatusCard = doc.querySelector('.card:first-child .card-body');
+        if (currentStatusCard && newStatusCard) {
+            currentStatusCard.innerHTML = newStatusCard.innerHTML;
+        }
+        
+        // Update client management section only (right side)
+        const currentClientCard = document.querySelector('.col-md-6:last-child .card-body');
+        const newClientCard = doc.querySelector('.col-md-6:last-child .card-body');
+        if (currentClientCard && newClientCard) {
+            currentClientCard.innerHTML = newClientCard.innerHTML;
+        }
+        
+        // Restore form state (add client form is NOT refreshed)
+        if (addClientForm && formState.clientName) {
+            const clientNameInput = document.getElementById('client_name');
+            const expiryTypeInput = document.getElementById('expiry_type');
+            const expiryDaysInput = document.getElementById('expiry_days');
+            const expiryDateInput = document.getElementById('expiry_date');
+            
+            if (clientNameInput) clientNameInput.value = formState.clientName;
+            if (expiryTypeInput) expiryTypeInput.value = formState.expiryType;
+            if (expiryDaysInput) expiryDaysInput.value = formState.expiryDays;
+            if (expiryDateInput) expiryDateInput.value = formState.expiryDate;
+            
+            // Trigger expiry type change to show correct div
+            if (expiryTypeInput) {
+                toggleExpiryOptions();
+            }
+        }
+        
+        // Restore scroll position
+        window.scrollTo(0, scrollTop);
+        
+        // Re-bind event handlers for updated sections only
+        bindInstallHandler();
+        bindRevokeHandlers();
+        bindDownloadHandlers();
+        bindDisconnectHandlers();
+        bindEnableHandlers();
+        bindModifyExpiryHandlers();
+        bindUninstallHandler();
+        
+        console.log('Page refreshed (excluding add client form) at:', new Date().toLocaleTimeString());
+    })
+    .catch(error => {
+        console.error('Auto-refresh error:', error);
+    });
+}
+
+function startAutoRefresh() {
+    autoRefreshInterval = setInterval(refreshPage, 5000); // Refresh every 5 seconds
+}
+
+function bindEventHandlers() {
+    // Re-bind all event handlers after page update
+    bindInstallHandler();
+    bindAddClientHandler();  
+    bindRevokeHandlers();
+    bindDownloadHandlers();
+    bindDisconnectHandlers();
+    bindEnableHandlers();
+    bindModifyExpiryHandlers();
+    bindUninstallHandler();
+}
+
+function bindInstallHandler() {
+    // Use event delegation to handle install button clicks
+    // This works even if the button doesn't exist when this function is called
+    console.log('Setting up install button event delegation');
+    document.addEventListener('click', function(e) {
+        if (e.target && e.target.id === 'install-btn') {
+            console.log('Install button clicked via delegation!');
+            e.preventDefault();
+            
+            const loader = document.getElementById('install-loader');
+            const statusMessage = document.getElementById('status-message');
+            
+            if (loader) loader.style.display = 'block';
+            if (statusMessage) {
+                statusMessage.classList.remove('d-none');
+                statusMessage.textContent = '正在安装OpenVPN，这可能需要几分钟时间...';
+            }
+            
+            console.log('Sending fetch request to /install');
+            fetch('/install', {
+                method: 'POST',
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('Response data:', data);
+                if (loader) loader.style.display = 'none';
+                if (statusMessage) {
+                    statusMessage.textContent = data.message;
+                    if (data.status === 'success') {
+                        statusMessage.classList.remove('alert-danger');
+                        statusMessage.classList.add('alert-success');
+                        console.log('Installation successful, reloading page in 3 seconds...');
+                        // Stop auto-refresh before manual reload
+                        if (autoRefreshInterval) {
+                            clearInterval(autoRefreshInterval);
+                        }
+                        setTimeout(() => {
+                            console.log('Reloading page now...');
+                            // Force stop auto-refresh and reload
+                            if (autoRefreshInterval) {
+                                clearInterval(autoRefreshInterval);
+                            }
+                            // Force full page reload to get updated OpenVPN status
+                            window.location.href = window.location.href;
+                        }, 5000);
+                    } else {
+                        statusMessage.classList.remove('alert-success');
+                        statusMessage.classList.add('alert-danger');
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Fetch error:', error);
+                if (loader) loader.style.display = 'none';
+                if (statusMessage) {
+                    statusMessage.textContent = '安装失败: ' + error.message;
+                    statusMessage.classList.remove('alert-success');
+                    statusMessage.classList.add('alert-danger');
+                }
+            });
+        }
+    }, { once: false });
+}
+
+function bindAddClientHandler() {
+    const addClientForm = document.getElementById('add-client-form');
+    const clientNameInput = document.getElementById('client_name');
+    
+    if (addClientForm && !addClientForm.hasAttribute('data-bound')) {
+        addClientForm.setAttribute('data-bound', 'true');
+        
+        // Add focus event listener to clear saved input when user focuses
+        if (clientNameInput && !clientNameInput.hasAttribute('data-focus-bound')) {
+            clientNameInput.setAttribute('data-focus-bound', 'true');
+            clientNameInput.addEventListener('focus', function() {
+                // Clear the input field when user focuses on it
+                this.value = '';
+            });
+        }
+        
+        addClientForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const loader = document.getElementById('add-client-loader');
+            const messageDiv = document.getElementById('add-client-message');
+            const clientName = document.getElementById('client_name').value;
+            
+            loader.style.display = 'block';
+            
+            const formData = new FormData();
+            formData.append('client_name', clientName);
+            
+            const expiryType = document.getElementById('expiry_type').value;
+            if (expiryType === 'preset') {
+                const expiryDays = document.getElementById('expiry_days').value;
+                formData.append('expiry_days', expiryDays);
+            } else {
+                const expiryDate = document.getElementById('expiry_date').value;
+                if (!expiryDate) {
+                    messageDiv.innerHTML = '<div class="alert alert-danger">请选择到期日期</div>';
+                    loader.style.display = 'none';
+                    return;
+                }
+                // Calculate days from today to selected date
+                const today = new Date();
+                const selectedDate = new Date(expiryDate);
+                const timeDiff = selectedDate.getTime() - today.getTime();
+                const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+                
+                if (daysDiff <= 0) {
+                    messageDiv.innerHTML = '<div class="alert alert-danger">到期日期必须是将来的日期</div>';
+                    loader.style.display = 'none';
+                    return;
+                }
+                
+                formData.append('expiry_days', daysDiff.toString());
+            }
+            
+            fetch('/add_client', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                loader.style.display = 'none';
+                
+                const alertClass = data.status === 'success' ? 'alert-success' : 'alert-danger';
+                messageDiv.innerHTML = `<div class="alert ${alertClass}">${data.message}</div>`;
+                
+                if (data.status === 'success') {
+                    // Clear and reset the form
+                    document.getElementById('client_name').value = '';
+                    document.getElementById('expiry_type').value = 'preset';
+                    document.getElementById('expiry_days').value = '3650';
+                    document.getElementById('expiry_date').value = '';
+                    
+                    // Reset to preset mode display
+                    document.getElementById('preset_expiry_div').style.display = 'block';
+                    document.getElementById('calendar_expiry_div').style.display = 'none';
+                    
+                    // Clear the success message after 3 seconds
+                    setTimeout(() => {
+                        messageDiv.innerHTML = '';
+                        refreshPage(); // Refresh other sections
+                    }, 3000);
+                }
+            })
+            .catch(error => {
+                loader.style.display = 'none';
+                messageDiv.innerHTML = `<div class="alert alert-danger">操作失败: ${error}</div>`;
+            });
+        });
+    }
+}
+
+function bindRevokeHandlers() {
+    const revokeBtns = document.querySelectorAll('.revoke-btn:not([data-bound])');
+    revokeBtns.forEach(btn => {
+        btn.setAttribute('data-bound', 'true');
+        btn.addEventListener('click', function() {
+            const clientNumber = this.getAttribute('data-number');
+            const clientName = this.getAttribute('data-client');
+            const loader = document.getElementById('revoke-loader');
+            const messageDiv = document.getElementById('revoke-message');
+            
+            if (confirm(`确定要撤销客户端 "${clientName}" 的证书吗?`)) {
+                loader.style.display = 'block';
+                
+                const formData = new FormData();
+                formData.append('client_name', clientName);
+                
+                fetch('/revoke_client', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    loader.style.display = 'none';
+                    
+                    const alertClass = data.status === 'success' ? 'alert-success' : 'alert-danger';
+                    messageDiv.innerHTML = `<div class="alert ${alertClass}">${data.message}</div>`;
+                    
+                    if (data.status === 'success') {
+                        setTimeout(() => {
+                            refreshPage(); // Use refreshPage instead of full reload
+                        }, 2000);
+                    }
+                })
+                .catch(error => {
+                    loader.style.display = 'none';
+                    messageDiv.innerHTML = `<div class="alert alert-danger">操作失败: ${error}</div>`;
+                });
+            }
+        });
+    });
+}
+
+function bindDownloadHandlers() {
+    const downloadBtns = document.querySelectorAll('.download-btn:not([data-bound])');
+    downloadBtns.forEach(btn => {
+        btn.setAttribute('data-bound', 'true');
+        btn.addEventListener('click', function() {
+            const clientName = this.getAttribute('data-client');
+            window.location.href = `/download_client/${clientName}`;
+        });
+    });
+}
+
+function bindDisconnectHandlers() {
+    const disconnectBtns = document.querySelectorAll('.disconnect-btn:not([data-bound])');
+    disconnectBtns.forEach(btn => {
+        btn.setAttribute('data-bound', 'true');
+        btn.addEventListener('click', function() {
+            const clientName = this.getAttribute('data-client');
+            disconnectClient(clientName);
+        });
+    });
+}
+
+function bindEnableHandlers() {
+    const enableBtns = document.querySelectorAll('.enable-btn:not([data-bound])');
+    enableBtns.forEach(btn => {
+        btn.setAttribute('data-bound', 'true');
+        btn.addEventListener('click', function() {
+            const clientName = this.getAttribute('data-client');
+            enableClient(clientName);
+        });
+    });
+}
+
+function enableClient(clientName) {
+    console.log(`[FRONTEND] Enable client button clicked - 客户端: ${clientName}`);
+    
+    if (confirm(`确认要重新启用客户端 "${clientName}" 吗？这将创建新的证书并允许客户端重新连接。`)) {
+        console.log(`[FRONTEND] 用户确认重新启用 - 开始发送请求`);
+        
+        const messageDiv = document.getElementById('revoke-message');
+        if (messageDiv) {
+            messageDiv.innerHTML = '<div class="alert alert-info">正在重新启用客户端...</div>';
+        }
+        
+        fetch('/enable_client', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `client_name=${encodeURIComponent(clientName)}`
+        })
+        .then(response => {
+            console.log(`[FRONTEND] 收到响应 - 状态码: ${response.status}`);
+            return response.json();
+        })
+        .then(data => {
+            console.log(`[FRONTEND] 响应数据:`, data);
+            if (data.status === 'success') {
+                console.log(`[FRONTEND] 重新启用成功: ${data.message}`);
+                showMessage(data.message, 'success');
+                setTimeout(() => {
+                    refreshPage();
+                }, 2000);
+            } else {
+                console.log(`[FRONTEND] 重新启用失败: ${data.message}`);
+                showMessage(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('[FRONTEND] 请求错误:', error);
+            showMessage('重新启用失败: ' + error.message, 'error');
+        });
+    } else {
+        console.log(`[FRONTEND] 用户取消了重新启用操作`);
+    }
+}
+
+function disconnectClient(clientName) {
+    console.log(`[FRONTEND] 点击禁用按钮 - 客户端: ${clientName}`);
+    console.log(`[FRONTEND] 准备发送POST请求到 /disconnect_client`);
+    console.log(`[FRONTEND] 请求参数: client_name=${clientName}`);
+    
+    if (confirm(`确认要禁用客户端 "${clientName}" 吗？`)) {
+        console.log(`[FRONTEND] 用户确认禁用客户端 - 开始发送请求`);
+        
+        const requestBody = `client_name=${encodeURIComponent(clientName)}`;
+        console.log(`[FRONTEND] 请求体: ${requestBody}`);
+        
+        fetch('/disconnect_client', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: requestBody
+        })
+        .then(response => {
+            console.log(`[FRONTEND] 收到响应 - 状态码: ${response.status}`);
+            return response.json();
+        })
+        .then(data => {
+            console.log(`[FRONTEND] 响应数据:`, data);
+            if (data.status === 'success') {
+                console.log(`[FRONTEND] 客户端禁用成功: ${data.message}`);
+                showMessage(data.message, 'success');
+                // Refresh the page to update client status
+                setTimeout(() => {
+                    console.log(`[FRONTEND] 2秒后刷新页面以更新客户端状态`);
+                    refreshPage();
+                }, 2000);
+            } else {
+                console.log(`[FRONTEND] 客户端禁用失败: ${data.message}`);
+                showMessage(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('[FRONTEND] 请求错误:', error);
+            showMessage('客户端禁用失败: ' + error.message, 'error');
+        });
+    } else {
+        console.log(`[FRONTEND] 用户取消了客户端禁用操作`);
+    }
+}
+
+function showMessage(message, type) {
+    // Simple message display - you can enhance this
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const messageDiv = document.getElementById('revoke-message');
+    if (messageDiv) {
+        messageDiv.innerHTML = `<div class="alert ${alertClass}">${message}</div>`;
+        setTimeout(() => {
+            messageDiv.innerHTML = '';
+        }, 5000);
+    } else {
+        alert(message);
+    }
+}
+
+function bindModifyExpiryHandlers() {
+    const modifyBtns = document.querySelectorAll('.modify-expiry-btn:not([data-bound])');
+    modifyBtns.forEach(btn => {
+        btn.setAttribute('data-bound', 'true');
+        btn.addEventListener('click', function() {
+            const clientName = this.getAttribute('data-client');
+            console.log('Modify expiry button clicked for client:', clientName);
+            
+            // Set client name in modal
+            document.getElementById('modify-client-name').value = clientName;
+            
+            // Reset form to default values
+            document.getElementById('modify-expiry-type').value = 'preset';
+            document.getElementById('modify-expiry-days').value = '365';
+            document.getElementById('modify-expiry-date').value = '';
+            toggleModifyExpiryOptions();
+            
+            // Clear any previous messages
+            document.getElementById('modify-expiry-message').innerHTML = '';
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('modifyExpiryModal'));
+            modal.show();
+        });
+    });
+    
+    // Bind confirm modify expiry button
+    const confirmBtn = document.getElementById('confirm-modify-expiry');
+    if (confirmBtn && !confirmBtn.hasAttribute('data-bound')) {
+        confirmBtn.setAttribute('data-bound', 'true');
+        confirmBtn.addEventListener('click', function() {
+            const clientName = document.getElementById('modify-client-name').value;
+            console.log('Confirm modify button clicked for client:', clientName);
+            const expiryType = document.getElementById('modify-expiry-type').value;
+            const messageDiv = document.getElementById('modify-expiry-message');
+            const loader = document.getElementById('modify-expiry-loader');
+            
+            let expiryDays;
+            if (expiryType === 'preset') {
+                expiryDays = document.getElementById('modify-expiry-days').value;
+            } else {
+                const expiryDate = document.getElementById('modify-expiry-date').value;
+                if (!expiryDate) {
+                    messageDiv.innerHTML = '<div class="alert alert-danger">请选择到期日期</div>';
+                    return;
+                }
+                
+                // Calculate days from today to selected date
+                const today = new Date();
+                const selectedDate = new Date(expiryDate);
+                const timeDiff = selectedDate.getTime() - today.getTime();
+                const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+                
+                if (daysDiff <= 0) {
+                    messageDiv.innerHTML = '<div class="alert alert-danger">到期日期必须是将来的日期</div>';
+                    return;
+                }
+                
+                expiryDays = daysDiff.toString();
+            }
+            
+            // Show loader
+            loader.style.display = 'inline-block';
+            confirmBtn.disabled = true;
+            
+            const formData = new FormData();
+            formData.append('client_name', clientName);
+            formData.append('expiry_days', expiryDays);
+            
+            console.log('Sending request with client_name:', clientName, 'expiry_days:', expiryDays);
+            
+            fetch('/modify_client_expiry', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                loader.style.display = 'none';
+                confirmBtn.disabled = false;
+                
+                const alertClass = data.status === 'success' ? 'alert-success' : 'alert-danger';
+                messageDiv.innerHTML = `<div class="alert ${alertClass}">${data.message}</div>`;
+                
+                if (data.status === 'success') {
+                    setTimeout(() => {
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('modifyExpiryModal'));
+                        modal.hide();
+                        refreshPage(); // Refresh the page to show updated expiry
+                    }, 2000);
+                }
+            })
+            .catch(error => {
+                loader.style.display = 'none';
+                confirmBtn.disabled = false;
+                messageDiv.innerHTML = `<div class="alert alert-danger">修改到期时间失败: ${error}</div>`;
+            });
+        });
+    }
+}
+
+function bindUninstallHandler() {
+    const uninstallBtn = document.getElementById('uninstall-btn');
+    if (uninstallBtn && !uninstallBtn.hasAttribute('data-bound')) {
+        uninstallBtn.setAttribute('data-bound', 'true');
+        uninstallBtn.addEventListener('click', function() {
+            if (confirm('确定要卸载OpenVPN吗? 所有客户端配置将被删除!')) {
+                const loader = document.getElementById('uninstall-loader');
+                const statusMessage = document.getElementById('status-message');
+                
+                loader.style.display = 'block';
+                statusMessage.classList.remove('d-none');
+                statusMessage.textContent = '正在卸载OpenVPN...';
+                
+                fetch('/uninstall', {
+                    method: 'POST',
+                })
+                .then(response => response.json())
+                .then(data => {
+                    loader.style.display = 'none';
+                    statusMessage.textContent = data.message;
+                    if (data.status === 'success') {
+                        statusMessage.classList.remove('alert-danger');
+                        statusMessage.classList.add('alert-success');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 3000);
+                    } else {
+                        statusMessage.classList.remove('alert-success');
+                        statusMessage.classList.add('alert-danger');
+                    }
+                })
+                .catch(error => {
+                    loader.style.display = 'none';
+                    statusMessage.textContent = '卸载失败: ' + error;
+                    statusMessage.classList.remove('alert-success');
+                    statusMessage.classList.add('alert-danger');
+                });
+            }
+        });
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Main app DOM loaded');
+    
+    // Initialize date picker minimum date
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const expiryDateEl = document.getElementById('expiry_date');
+    if (expiryDateEl) {
+        expiryDateEl.min = tomorrow.toISOString().split('T')[0];
+    }
+    
+    // Set up event delegation for install button (works even if button doesn't exist yet)
+    bindInstallHandler();
+    
+    // Bind other event handlers
+    bindAddClientHandler();  
+    bindRevokeHandlers();
+    bindDownloadHandlers();
+    bindDisconnectHandlers();
+    bindEnableHandlers();
+    bindModifyExpiryHandlers();
+    bindUninstallHandler();
+    
+    // Start auto-refresh
+    startAutoRefresh();
+});
