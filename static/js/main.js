@@ -118,7 +118,10 @@ function bindAddClient () {
                 const cls = data.status === 'success' ? 'alert-success' : 'alert-danger';
                 msgDiv.innerHTML = `<div class="alert ${cls}">${data.message}</div>`;
                 if (data.status === 'success') {
-                    form.reset(); toggleCustomDate(); setTimeout(refreshPage, 2000);
+                    form.reset(); 
+					toggleCustomDate(); 
+					setTimeout(()=> msgDiv.innerHTML = '', 2000);
+					setTimeout(refreshPage, 2200);
                 }
             })
             .catch(err => {
@@ -273,4 +276,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dateInput) dateInput.min = tomorrow.toISOString().split('T')[0];
     bindAll();
     startAutoRefresh();
+
+    $('#reset-btn')?.addEventListener('click', () => {
+    $('#client_name').value = '';
+    });
 });
