@@ -83,62 +83,42 @@ else
 fi
 
 
-# ----------------------------------------------------------
-# 为运行 Web 服务的用户配置完整的免密 sudo 权限
-# ----------------------------------------------------------
-# # 允许手动指定运行用户（默认当前用户）
-# WEB_USER=${WEB_USER:-$(whoami)}
-# SUDOERS_FILE="/etc/sudoers.d/openvpn-utils"
-# # 所有接口会用到的 sudo 命令（去重、按字母排序）
-# COMMANDS=(
-#     "/bin/bash"
-#     "/bin/cat"
-#     "/bin/chmod"
-#     "/bin/cp"
-#     "/bin/find"
-#     "/bin/mkdir"
-#     "/bin/rm"
-#     "/bin/sed"
-#     "/bin/systemctl daemon-reload"
-#     "/bin/systemctl disable iptables-openvpn"
-#     "/bin/systemctl disable openvpn@server"
-#     "/bin/systemctl is-active openvpn@server"
-#     "/bin/systemctl reload openvpn@server"
-#     "/bin/systemctl restart openvpn@server"
-#     "/bin/systemctl start openvpn@server"
-#     "/bin/systemctl stop iptables-openvpn"
-#     "/bin/systemctl stop openvpn@server"
-#     "/bin/test -e /etc/openvpn/server.conf"
-#     "/etc/openvpn/easy-rsa/easyrsa --batch revoke"
-#     "/etc/openvpn/easy-rsa/easyrsa gen-crl"
-#     "/usr/bin/apt-get remove --purge -y openvpn"
-#     "/usr/bin/hostname -I"
-#     "/usr/bin/ip route get 8.8.8.8"
-#     "/usr/bin/killall -SIGUSR1 openvpn"
-#     "/usr/bin/nc"
-#     "/usr/bin/netcat"
-#     "/usr/bin/tail"
-#     "/usr/bin/head"
-# )
+# ---------- 自动生成并启用 systemd service ----------
+SERVICE_NAME="vpnwm.service"
+SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
 
-# # 生成临时文件
-# TMP=$(mktemp)
-# for cmd in "${COMMANDS[@]}"; do
-#     echo "$WEB_USER ALL=(ALL) NOPASSWD: $cmd" >> "$TMP"
-# done
+# 用当前目录（脚本所在位置）作为项目根
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# # 只有内容变化时才替换
-# if ! cmp -s "$TMP" "$SUDOERS_FILE"; then
-#     echo "授予 $WEB_USER 完整的免密 sudo 权限..."
-#     sudo install -m 440 "$TMP" "$SUDOERS_FILE"
-#     echo "权限已写入 $SUDOERS_FILE"
-# else
-#     echo "sudoers 权限已存在，跳过。"
-# fi
-# rm -f "$TMP"
-# ----------------------------------------------------------
+# 生成 service 文件
+sudo tee "$SERVICE_PATH" >/dev/null <<EOF
+[Unit]
+Description=OpenVPN Web Manager
+After=network.target
 
-# 运行 Flask 应用
-echo "Running Flask application..."
-python "$SCRIPT_DIR/app.py"
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=${PROJECT_DIR}
+ExecStart=${PROJECT_DIR}/venv/bin/python app.py
+ExecStop=/bin/kill -INT \$MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 重新加载 systemd 并启动
+sudo systemctl daemon-reload
+sudo systemctl enable --now "$SERVICE_NAME"
+echo "✅ 已生成并启用 ${SERVICE_NAME}"
+
+
+# # 运行 Flask 应用
+# echo "Running Flask application..."
+# python "$SCRIPT_DIR/app.py"
 
