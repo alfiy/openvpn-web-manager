@@ -27,6 +27,7 @@ def uninstall():
             ['sudo', 'rm', '-rf', '/etc/openvpn'],
             ['sudo', 'rm', '-f', '/etc/sysctl.d/99-openvpn.conf'],
             ['sudo', 'rm', '-rf', '/var/log/openvpn'],
+            ['sudo', 'rm', '-rf', '/etc/openvpn/client'],
             # Remove client config files from /etc/openvpn/client
             ['sudo', 'find', '/etc/openvpn/client/', '-maxdepth', '1', '-name', '*.ovpn', '-delete'],
             # Restore IP forwarding

@@ -46,29 +46,6 @@ function initialCheck() {
     checkOS
 }
 
-# Install Unbound DNS resolver
-function installUnbound() {
-    echo "📦 Installing Unbound DNS resolver..."
-    apt-get install -y unbound
-    
-    echo 'interface: 10.8.0.1
-access-control: 10.8.0.1/24 allow
-hide-identity: yes
-hide-version: yes
-use-caps-for-id: yes
-prefetch: yes' >>/etc/unbound/unbound.conf
-
-    # DNS Rebinding fix
-    echo "private-address: 10.0.0.0/8
-private-address: 172.16.0.0/12
-private-address: 192.168.0.0/16
-private-address: 169.254.0.0/16
-private-address: 127.0.0.0/8" >>/etc/unbound/unbound.conf
-
-    systemctl enable unbound
-    systemctl restart unbound
-    echo "✅ Unbound installed and configured"
-}
 
 # Function to get internal IP for NAT environment
 function resolvePublicIP() {
@@ -255,145 +232,7 @@ EOF
     echo "🎉 OpenVPN installation completed successfully!"
 }
 
-# Function to create a new client
-function newClient() {
-    echo ""
-    echo "👤 Creating client certificate..."
-    echo "The name must consist of alphanumeric characters, underscore or dash."
 
-    read -rp "Client name: " -e CLIENT
-    cd /etc/openvpn/easy-rsa/ || return
-    
-    EASYRSA_CERT_EXPIRE=3650 ./easyrsa --batch build-client-full "$CLIENT" nopass
-    echo "✅ Client $CLIENT added."
-
-    # Generate client config
-    cp /etc/openvpn/client-template.txt "/etc/openvpn/client/$CLIENT.ovpn"
-    {
-        echo "<ca>"
-        cat "/etc/openvpn/easy-rsa/pki/ca.crt"
-        echo "</ca>"
-
-        echo "<cert>"
-        awk '/BEGIN/,/END CERTIFICATE/' "/etc/openvpn/easy-rsa/pki/issued/$CLIENT.crt"
-        echo "</cert>"
-
-        echo "<key>"
-        cat "/etc/openvpn/easy-rsa/pki/private/$CLIENT.key"
-        echo "</key>"
-
-        echo "<tls-crypt>"
-        cat /etc/openvpn/tls-crypt.key
-        echo "</tls-crypt>"
-    } >>"/etc/openvpn/client/$CLIENT.ovpn"
-
-    echo ""
-    echo "📄 Configuration file written to /etc/openvpn/client/$CLIENT.ovpn"
-}
-
-# Function to revoke a client
-function revokeClient() {
-    NUMBEROFCLIENTS=$(tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep -c "^V")
-    if [[ $NUMBEROFCLIENTS == '0' ]]; then
-        echo "❌ You have no existing clients!"
-        exit 1
-    fi
-
-    echo "🔐 Select the client certificate to revoke:"
-    tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep "^V" | cut -d '=' -f 2 | nl -s ') '
-    read -rp "Select one client: " CLIENTNUMBER
-    
-    CLIENT=$(tail -n +2 /etc/openvpn/easy-rsa/pki/index.txt | grep "^V" | cut -d '=' -f 2 | sed -n "$CLIENTNUMBER"p)
-    cd /etc/openvpn/easy-rsa/ || return
-    ./easyrsa --batch revoke "$CLIENT"
-    ./easyrsa gen-crl
-    rm -f /etc/openvpn/crl.pem
-    cp /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn/crl.pem
-    chmod 644 /etc/openvpn/crl.pem
-    rm -f "/etc/openvpn/client/$CLIENT.ovpn"
-    sed -i "/^$CLIENT,.*/d" /etc/openvpn/ipp.txt
-
-    echo "✅ Certificate for client $CLIENT revoked."
-}
-
-# Function to remove OpenVPN
-function removeOpenVPN() {
-    echo ""
-    echo "🗑️ COMPLETE OPENVPN UNINSTALLATION"
-    echo "⚠️ This will completely remove OpenVPN and all related configurations!"
-    echo ""
-    read -rp "Do you really want to remove OpenVPN? [y/n]: " -e -i n REMOVE
-    if [[ $REMOVE == 'y' ]]; then
-        # Stop services
-        echo "📦 Stopping OpenVPN services..."
-        systemctl disable openvpn@server
-        systemctl stop openvpn@server
-        
-        # Remove firewall rules
-        echo "🔥 Removing firewall rules..."
-        systemctl stop iptables-openvpn
-        systemctl disable iptables-openvpn
-        rm -f /etc/systemd/system/iptables-openvpn.service
-        systemctl daemon-reload
-        rm -f /etc/iptables/add-openvpn-rules.sh
-        rm -f /etc/iptables/rm-openvpn-rules.sh
-        
-        # Remove OpenVPN
-        echo "📦 Removing OpenVPN package..."
-        apt-get remove --purge -y openvpn
-        
-        # Clean up files
-        echo "🗑️ Cleaning up configuration files..."
-        rm -rf /etc/openvpn
-        rm -f /etc/sysctl.d/99-openvpn.conf
-        rm -rf /var/log/openvpn
-	rm -rf /etc/openvpn/client
-        
-        # Restore system settings
-        echo "🌐 Restoring system settings..."
-        sysctl -w net.ipv4.ip_forward=0
-        
-        # Clean remaining firewall rules
-        echo "🔧 Cleaning remaining firewall rules..."
-        iptables -t nat -D POSTROUTING -s 10.8.0.0/24 -j MASQUERADE 2>/dev/null || true
-        iptables -D INPUT -i tun0 -j ACCEPT 2>/dev/null || true
-        iptables -D FORWARD -i tun0 -j ACCEPT 2>/dev/null || true
-        
-        echo ""
-        echo "🎉 OpenVPN has been completely removed!"
-    else
-        echo "❌ Removal aborted!"
-    fi
-}
-
-# Main menu function
-function manageMenu() {
-    echo "🎉 Welcome to Ubuntu OpenVPN Manager!"
-    echo ""
-    echo "What do you want to do?"
-    echo "   1) Add a new user"
-    echo "   2) Revoke existing user"
-    echo "   3) Complete OpenVPN removal"
-    echo "   4) Exit"
-    
-    read -rp "Select an option [1-4]: " -e -i 1 MENU_OPTION
-    
-    case $MENU_OPTION in
-    1)
-        newClient
-        ;;
-    2)
-        revokeClient
-        ;;
-    3)
-        removeOpenVPN
-        ;;
-    4)
-        echo "👋 Goodbye!"
-        exit 0
-        ;;
-    esac
-}
 
 # Script execution starts here
 echo "🚀 Ubuntu OpenVPN Installer & Manager"
@@ -404,7 +243,7 @@ initialCheck
 
 # Check if OpenVPN is already installed
 if [[ -e /etc/openvpn/server.conf ]]; then
-    manageMenu
+    echo "OpenVPN has installed"
 else
     installOpenVPN
     # Generate default "server" client after installation

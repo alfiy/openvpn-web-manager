@@ -7,16 +7,32 @@ def log_message(message):
     print(f"[SERVER] {message}", flush=True)
     sys.stdout.flush()
 
+
 def check_openvpn_status():
+    """
+    返回 running / installed / not_installed
+    普通用户也能正常工作
+    """
     try:
-        result = subprocess.run(['systemctl', 'is-active', 'openvpn@server'], 
-                              capture_output=True, text=True)
+        # --- 1. 运行状态：用 systemctl ---
+        # 加 sudo 让普通用户也能正常 query systemd
+        result = subprocess.run(
+            ['sudo', 'systemctl', 'is-active', 'openvpn@server'],
+            capture_output=True,
+            text=True
+        )
         if result.stdout.strip() == 'active':
             return 'running'
-        result = subprocess.run(['test', '-e', '/etc/openvpn/server.conf'], 
-                              capture_output=True, text=True)
+
+        # --- 2. 安装状态：检查 server.conf ---
+        # 同样用 sudo 避免权限问题
+        result = subprocess.run(
+            ['sudo', 'test', '-e', '/etc/openvpn/server.conf'],
+            capture_output=True
+        )
         if result.returncode == 0:
             return 'installed'
+
         return 'not_installed'
     except Exception as e:
         return f'error: {str(e)}'
@@ -177,6 +193,7 @@ def get_online_clients():
     except Exception:
         return online_clients
 
+
 def get_openvpn_clients():
     clients = []
     online_clients = get_online_clients()
@@ -189,45 +206,56 @@ def get_openvpn_clients():
                     disabled_clients.add(filename)
         except Exception:
             pass
+
     try:
-        if os.path.exists('/etc/openvpn/easy-rsa/pki/index.txt'):
-            with open('/etc/openvpn/easy-rsa/pki/index.txt', 'r') as f:
-                for line in f:
-                    if line.startswith('V') or line.startswith('R'):
-                        parts = line.strip().split('\t')
-                        if len(parts) >= 6:
-                            expiry_date = parts[1]
-                            cn_field = parts[5]
-                            match = re.search(r'CN=([^/]+)', cn_field)
-                            if match:
-                                client_name = match.group(1)
-                                if client_name == 'server':
-                                    continue
-                                try:
-                                    from datetime import datetime
-                                    if len(expiry_date) == 13 and expiry_date.endswith('Z'):
-                                        year = 2000 + int(expiry_date[:2])
-                                        month = int(expiry_date[2:4])
-                                        day = int(expiry_date[4:6])
-                                        expiry_readable = f"{year}-{month:02d}-{day:02d}"
-                                    else:
-                                        expiry_readable = "Unknown"
-                                except:
-                                    expiry_readable = "Unknown"
-                                is_disabled = client_name in disabled_clients
-                                is_online = not is_disabled and client_name in online_clients
-                                client_info = online_clients.get(client_name, {})
-                                is_revoked = line.startswith('R')
-                                clients.append({
-                                    'name': client_name,
-                                    'expiry': expiry_readable,
-                                    'online': is_online,
-                                    'disabled': is_disabled or is_revoked,
-                                    'vpn_ip': client_info.get('vpn_ip', ''),
-                                    'real_ip': client_info.get('real_ip', ''),
-                                    'duration': client_info.get('duration', ''),
-                                    'connected_since': client_info.get('connected_since', '')
-                                })
-    except Exception:
-        pass
+        # ✅ 使用 sudo 读取 index.txt
+        result = subprocess.run(
+            ['sudo', 'cat', '/etc/openvpn/easy-rsa/pki/index.txt'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode != 0:
+            log_message(f"无法读取 index.txt：{result.stderr}")
+            return clients
+
+        for line in result.stdout.splitlines():
+            if line.startswith('V') or line.startswith('R'):
+                parts = line.strip().split('\t')
+                if len(parts) >= 6:
+                    expiry_date = parts[1]
+                    cn_field = parts[5]
+                    match = re.search(r'CN=([^/]+)', cn_field)
+                    if match:
+                        client_name = match.group(1)
+                        if client_name == 'server':
+                            continue
+                        try:
+                            from datetime import datetime
+                            if len(expiry_date) == 13 and expiry_date.endswith('Z'):
+                                year = 2000 + int(expiry_date[:2])
+                                month = int(expiry_date[2:4])
+                                day = int(expiry_date[4:6])
+                                expiry_readable = f"{year}-{month:02d}-{day:02d}"
+                            else:
+                                expiry_readable = "Unknown"
+                        except:
+                            expiry_readable = "Unknown"
+
+                        is_disabled = client_name in disabled_clients
+                        is_online = not is_disabled and client_name in online_clients
+                        client_info = online_clients.get(client_name, {})
+                        is_revoked = line.startswith('R')
+                        clients.append({
+                            'name': client_name,
+                            'expiry': expiry_readable,
+                            'online': is_online,
+                            'disabled': is_disabled or is_revoked,
+                            'vpn_ip': client_info.get('vpn_ip', ''),
+                            'real_ip': client_info.get('real_ip', ''),
+                            'duration': client_info.get('duration', ''),
+                            'connected_since': client_info.get('connected_since', '')
+                        })
+    except Exception as e:
+        log_message(f"读取 index.txt 异常：{e}")
     return clients
