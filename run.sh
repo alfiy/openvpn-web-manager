@@ -84,41 +84,41 @@ fi
 
 
 # ---------- 自动生成并启用 systemd service ----------
-SERVICE_NAME="vpnwm.service"
-SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
+# SERVICE_NAME="vpnwm.service"
+# SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
 
-# 用当前目录（脚本所在位置）作为项目根
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# # 用当前目录（脚本所在位置）作为项目根
+# PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# 生成 service 文件
-sudo tee "$SERVICE_PATH" >/dev/null <<EOF
-[Unit]
-Description=OpenVPN Web Manager
-After=network.target
+# # 生成 service 文件
+# sudo tee "$SERVICE_PATH" >/dev/null <<EOF
+# [Unit]
+# Description=OpenVPN Web Manager
+# After=network.target
 
-[Service]
-Type=simple
-User=root
-Group=root
-WorkingDirectory=${PROJECT_DIR}
-ExecStart=${PROJECT_DIR}/venv/bin/python app.py
-ExecStop=/bin/kill -INT \$MAINPID
-Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
+# [Service]
+# Type=simple
+# User=root
+# Group=root
+# WorkingDirectory=${PROJECT_DIR}
+# ExecStart=${PROJECT_DIR}/venv/bin/python app.py
+# ExecStop=/bin/kill -INT \$MAINPID
+# Restart=always
+# RestartSec=5
+# StandardOutput=journal
+# StandardError=journal
 
-[Install]
-WantedBy=multi-user.target
-EOF
+# [Install]
+# WantedBy=multi-user.target
+# EOF
 
-# 重新加载 systemd 并启动
-sudo systemctl daemon-reload
-sudo systemctl enable --now "$SERVICE_NAME"
-echo "✅ 已生成并启用 ${SERVICE_NAME}"
+# # 重新加载 systemd 并启动
+# sudo systemctl daemon-reload
+# sudo systemctl enable --now "$SERVICE_NAME"
+# echo "✅ 已生成并启用 ${SERVICE_NAME}"
 
 
 # # 运行 Flask 应用
-# echo "Running Flask application..."
-# python "$SCRIPT_DIR/app.py"
+echo "Running Flask application..."
+python "$SCRIPT_DIR/app.py"
 

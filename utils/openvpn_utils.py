@@ -259,3 +259,14 @@ def get_openvpn_clients():
     except Exception as e:
         log_message(f"读取 index.txt 异常：{e}")
     return clients
+
+
+def get_openvpn_port():
+    try:
+        with open('/etc/openvpn/server.conf') as f:
+            for line in f:
+                if line.startswith('port '):
+                    return int(line.split()[1])
+    except Exception:
+        pass
+    return 1194  # 默认兜底

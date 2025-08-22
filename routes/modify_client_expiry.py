@@ -5,6 +5,7 @@ import re
 import tempfile
 import shutil
 from datetime import datetime, timedelta
+from utils.openvpn_utils import get_openvpn_port
 
 modify_client_expiry_bp = Blueprint('modify_client_expiry', __name__)
 
@@ -73,6 +74,7 @@ def modify_client_expiry():
     """Modify client certificate expiration date by revoke + reissue"""
     client_name = request.form.get('client_name')
     expiry_days = request.form.get('expiry_days')
+    port = get_openvpn_port()
 
     if not client_name or not expiry_days:
         return jsonify({'status': 'error', 'message': 'Client name and expiry days are required'})
@@ -119,33 +121,22 @@ def modify_client_expiry():
         # Step 4: Regenerate client configuration file
         config_cmd = [
             'sudo', 'bash', '-c', f'''
-            cd {easy_rsa_dir}
-            cat > "/etc/openvpn/client/{client_name}.ovpn" << EOL
-client
-dev tun
-proto udp
-remote $(curl -s ifconfig.me || echo localhost) 1194
-resolv-retry infinite
-nobind
-persist-key
-persist-tun
-remote-cert-tls server
-cipher AES-256-GCM
-verb 3
-<ca>
-EOL
-            cat pki/ca.crt >> "/etc/openvpn/client/{client_name}.ovpn"
-            echo "</ca>" >> "/etc/openvpn/client/{client_name}.ovpn"
-            echo "<cert>" >> "/etc/openvpn/client/{client_name}.ovpn"
-            awk '/BEGIN/,/END CERTIFICATE/' pki/issued/{client_name}.crt >> "/etc/openvpn/client/{client_name}.ovpn"
-            echo "</cert>" >> "/etc/openvpn/client/{client_name}.ovpn"
-            echo "<key>" >> "/etc/openvpn/client/{client_name}.ovpn"
-            cat pki/private/{client_name}.key >> "/etc/openvpn/client/{client_name}.ovpn"
-            echo "</key>" >> "/etc/openvpn/client/{client_name}.ovpn"
-            echo "<tls-crypt>" >> "/etc/openvpn/client/{client_name}.ovpn"
-            cat /etc/openvpn/tls-crypt.key >> "/etc/openvpn/client/{client_name}.ovpn"
-            echo "</tls-crypt>" >> "/etc/openvpn/client/{client_name}.ovpn"
-            chmod 644 "/etc/openvpn/client/{client_name}.ovpn"
+            cp /etc/openvpn/client-template.txt /etc/openvpn/client/{client_name}.ovpn
+            {{
+                echo "<ca>"
+                cat {easy_rsa_dir}/pki/ca.crt
+                echo "</ca>"
+                echo "<cert>"
+                awk "/BEGIN/,/END CERTIFICATE/" {easy_rsa_dir}/pki/issued/{client_name}.crt
+                echo "</cert>"
+                echo "<key>"
+                cat {easy_rsa_dir}/pki/private/{client_name}.key
+                echo "</key>"
+                echo "<tls-crypt>"
+                cat /etc/openvpn/tls-crypt.key
+                echo "</tls-crypt>"
+            }} >> /etc/openvpn/client/{client_name}.ovpn
+            chmod 644 /etc/openvpn/client/{client_name}.ovpn
             '''
         ]
         result = subprocess.run(config_cmd, capture_output=True, text=True)

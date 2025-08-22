@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 import os
 import subprocess
+from utils.openvpn_utils import get_openvpn_port 
 
 add_client_bp = Blueprint('add_client', __name__)
 
@@ -10,6 +11,7 @@ SCRIPT_PATH = './ubuntu-openvpn-install.sh'
 
 @add_client_bp.route('/add_client', methods=['POST'])
 def add_client():
+    
     # Check if the OpenVPN script exists
     if not os.path.exists(SCRIPT_PATH):
         return jsonify({
@@ -17,6 +19,8 @@ def add_client():
             'message': f'OpenVPN安装脚本不存在: {SCRIPT_PATH}。请确保ubuntu-openvpn-install.sh文件存在于工作目录中。'
         })
     
+    port = get_openvpn_port()
+
     client_name = request.form.get('client_name')
     if not client_name:
         return jsonify({'status': 'error', 'message': 'Client name is required'})
@@ -49,7 +53,7 @@ def add_client():
             cp /etc/openvpn/client-template.txt "/etc/openvpn/client/{client_name}.ovpn" 2>/dev/null || echo "client
 dev tun
 proto udp
-remote $(curl -s ifconfig.me || echo localhost) 1194
+remote $(curl -s ifconfig.me || echo localhost) {port}
 resolv-retry infinite
 nobind
 persist-key

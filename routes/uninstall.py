@@ -14,8 +14,13 @@ def uninstall():
             # Stop and disable iptables service
             ['sudo', 'systemctl', 'stop', 'iptables-openvpn'],
             ['sudo', 'systemctl', 'disable', 'iptables-openvpn'],
+            # Stop and disable vpnwm service
+            ['sudo', 'systemctl', 'stop', 'vpnwm'],
+            ['sudo', 'systemctl', 'disable', 'vpnwm'],
             # Remove systemd service file
             ['sudo', 'rm', '-f', '/etc/systemd/system/iptables-openvpn.service'],
+            # Remove systemd service file
+            ['sudo', 'rm', '-f', '/etc/systemd/system/vpnwm.service'],
             # Reload systemd
             ['sudo', 'systemctl', 'daemon-reload'],
             # Remove iptables scripts

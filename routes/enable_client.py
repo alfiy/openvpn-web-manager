@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 import os
 import subprocess
-from utils.openvpn_utils import log_message
+from utils.openvpn_utils import log_message,get_openvpn_port
 
 enable_client_bp = Blueprint('enable_client', __name__)
 
@@ -19,6 +19,7 @@ def enable_client():
     log_message(f"Re-enabling client: {client_name}")
     print(f"[ENABLE] Starting re-enable process for client: {client_name}", flush=True)
 
+    port = get_openvpn_port()
     try:
         # Step 1: Remove disabled flag if it exists
         disabled_clients_dir = '/etc/openvpn/disabled_clients'
@@ -109,7 +110,7 @@ def enable_client():
                 f'echo "client" > "/etc/openvpn/client/{client_name}.ovpn"',
                 f'echo "dev tun" >> "/etc/openvpn/client/{client_name}.ovpn"',
                 f'echo "proto udp" >> "/etc/openvpn/client/{client_name}.ovpn"',
-                f'echo "remote $(curl -s ifconfig.me 2>/dev/null || echo localhost) 1194" >> "/etc/openvpn/client/{client_name}.ovpn"',
+                f'echo "remote $(curl -s ifconfig.me 2>/dev/null || echo localhost) {port}" >> "/etc/openvpn/client/{client_name}.ovpn"',
                 f'echo "resolv-retry infinite" >> "/etc/openvpn/client/{client_name}.ovpn"',
                 f'echo "nobind" >> "/etc/openvpn/client/{client_name}.ovpn"',
                 f'echo "persist-key" >> "/etc/openvpn/client/{client_name}.ovpn"',
