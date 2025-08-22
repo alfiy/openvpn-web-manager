@@ -47,6 +47,10 @@ function initialCheck() {
 }
 
 
+# ✅ 接收端口号参数，默认为1194
+OPENVPN_PORT=${1:-1194}
+SERVER_IP=${2:-$(resolvePublicIP)}
+
 # Function to get internal IP for NAT environment
 function resolvePublicIP() {
     # For NAT environments, use internal IP instead of external IP
@@ -91,11 +95,22 @@ function installOpenVPN() {
     fi
 
     # Install easy-rsa
-    echo "📦 Installing Easy-RSA..."
-    wget -O ~/easy-rsa.tgz https://github.com/OpenVPN/easy-rsa/releases/download/v3.1.2/EasyRSA-3.1.2.tgz
+    # echo "📦 Installing Easy-RSA..."
+    # wget -O ~/easy-rsa.tgz https://github.com/OpenVPN/easy-rsa/releases/download/v3.1.2/EasyRSA-3.1.2.tgz
+    # mkdir -p /etc/openvpn/easy-rsa
+    # tar xzf ~/easy-rsa.tgz --strip-components=1 --directory /etc/openvpn/easy-rsa
+    # rm -f ~/easy-rsa.tgz
+    # ----------------------------------------------------------------------
+    # 安装 easy-rsa：使用本地 resource/easy-rsa/EasyRSA-3.1.2.tgz
+    # ----------------------------------------------------------------------
+    LOCAL_TGZ="$(dirname "$0")/resource/easy-rsa/EasyRSA-3.1.2.tgz"
+    if [[ ! -f "$LOCAL_TGZ" ]]; then
+        echo "❌ 本地文件 $LOCAL_TGZ 不存在，请检查路径或放文件后再运行脚本。"
+        exit 1
+    fi
+    echo "📦 使用本地 Easy-RSA 包：$LOCAL_TGZ"
     mkdir -p /etc/openvpn/easy-rsa
-    tar xzf ~/easy-rsa.tgz --strip-components=1 --directory /etc/openvpn/easy-rsa
-    rm -f ~/easy-rsa.tgz
+    tar xzf "$LOCAL_TGZ" --strip-components=1 --directory /etc/openvpn/easy-rsa
 
     # Generate certificates
     cd /etc/openvpn/easy-rsa/ || return
@@ -114,7 +129,7 @@ function installOpenVPN() {
     
     # Generate server config
     cat > /etc/openvpn/server.conf << EOF
-port 1194
+port $OPENVPN_PORT
 proto udp
 dev tun
 user nobody
@@ -164,7 +179,7 @@ iptables -t nat -I POSTROUTING 1 -s 10.8.0.0/24 -o $NIC -j MASQUERADE
 iptables -I INPUT 1 -i tun0 -j ACCEPT
 iptables -I FORWARD 1 -i $NIC -o tun0 -j ACCEPT
 iptables -I FORWARD 1 -i tun0 -o $NIC -j ACCEPT
-iptables -I INPUT 1 -i $NIC -p udp --dport 1194 -j ACCEPT
+iptables -I INPUT 1 -i $NIC -p udp --dport $OPENVPN_PORT -j ACCEPT
 EOF
 
     # Create remove rules script
@@ -174,7 +189,7 @@ iptables -t nat -D POSTROUTING -s 10.8.0.0/24 -o $NIC -j MASQUERADE
 iptables -D INPUT -i tun0 -j ACCEPT
 iptables -D FORWARD -i $NIC -o tun0 -j ACCEPT
 iptables -D FORWARD -i tun0 -o $NIC -j ACCEPT
-iptables -D INPUT -i $NIC -p udp --dport 1194 -j ACCEPT
+iptables -D INPUT -i $NIC -p udp --dport $OPENVPN_PORT -j ACCEPT
 EOF
 
     chmod +x /etc/iptables/add-openvpn-rules.sh
@@ -211,7 +226,7 @@ EOF
 client
 proto udp
 explicit-exit-notify
-remote $(resolvePublicIP) 1194
+remote $(resolvePublicIP) $OPENVPN_PORT
 dev tun
 resolv-retry infinite
 nobind

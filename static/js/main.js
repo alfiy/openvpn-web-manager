@@ -50,30 +50,90 @@ function toggleCustomDate () {
     $('#customDateWrapper').style.display = customChecked ? 'block' : 'none';
 }
 
+
+
 /* ---------- 安装 ---------- */
 function bindInstall () {
-    document.addEventListener('click', e => {
-        if (e.target.id === 'install-btn') {
-            e.preventDefault();
-            const l = $('#install-loader'), m = $('#status-message');
-            l.style.display = 'block';
-            m.classList.remove('d-none'); m.textContent = '正在安装OpenVPN...';
-            fetch('/install', {method: 'POST'})
-                .then(r => r.json())
-                .then(d => {
-                    l.style.display = 'none';
-                    m.textContent = d.message;
-                    m.className = d.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
-                    if (d.status === 'success') setTimeout(() => location.reload(), 5000);
-                })
-                .catch(err => {
-                    l.style.display = 'none';
-                    m.textContent = '安装失败: ' + err.message;
-                    m.className = 'alert alert-danger';
-                });
+    const btn = document.getElementById('install-btn');
+    if (!btn || btn.hasAttribute('data-bound')) return;
+    btn.setAttribute('data-bound', 'true');
+
+    const modal = new bootstrap.Modal('#installModal');
+
+    // 按钮打开
+    btn.addEventListener('click', async () => {
+        // 拉取 IP
+        try {
+            const res = await fetch('/get_ip_list');
+            const list = await res.json();
+            const sel = document.getElementById('install-ip-select');
+            sel.innerHTML = '';
+            list.forEach(ip => {
+                const opt = document.createElement('option');
+                opt.value = opt.textContent = ip;
+                sel.appendChild(opt);
+            });
+            const manual = document.createElement('option');
+            manual.value = '';
+            manual.textContent = '手动输入…';
+            sel.appendChild(manual);
+        } catch {
+            // 失败时只允许手动输入
+            const sel = document.getElementById('install-ip-select');
+            sel.innerHTML = '<option value="">手动输入…</option>';
+            document.getElementById('manual-ip-wrapper').style.display = 'block';
+        }
+        modal.show();
+    });
+
+    // 下拉切换
+    document.getElementById('install-ip-select').addEventListener('change', function () {
+        const wrapper = document.getElementById('manual-ip-wrapper');
+        wrapper.style.display = this.value ? 'none' : 'block';
+    });
+
+    // 确认安装
+    document.getElementById('confirm-install').addEventListener('click', async () => {
+        const port = Number(document.getElementById('install-port').value);
+        const sel  = document.getElementById('install-ip-select');
+        const ip   = sel.value || document.getElementById('install-ip-input').value.trim();
+        if (!Number.isInteger(port) || port < 1025 || port > 65534) {
+            alert('端口号必须在 1025-65534 之间'); return;
+        }
+        if (!ip) {
+            alert('请选择或输入服务器 IP'); return;
+        }
+
+        modal.hide(); // 关闭弹窗
+        // 下面是你已有的「开始安装」逻辑
+        document.getElementById('install-loader').style.display = 'block';
+        const m = document.getElementById('status-message');
+        m.classList.remove('d-none'); m.textContent = '正在安装 OpenVPN...';
+
+        try {
+            const res = await fetch('/install', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ port, ip })
+            });
+            const data = await res.json();
+            document.getElementById('install-loader').style.display = 'none';
+            m.textContent = data.message;
+            m.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
+            if (data.status === 'success') setTimeout(() => location.reload(), 2000);
+        } catch (err) {
+            document.getElementById('install-loader').style.display = 'none';
+            m.textContent = '安装失败: ' + err.message;
+            m.className = 'alert alert-danger';
         }
     });
+
+    // 点击“取消”或点击灰色遮罩 → 仅关闭弹窗，不刷新页面
+    document.getElementById('installModal').addEventListener('hide.bs.modal', () => {
+        document.getElementById('manual-ip-wrapper').style.display = 'none'; // 隐藏手动框
+    });
 }
+
 
 /* ---------- 添加客户端 ---------- */
 function bindAddClient () {
@@ -258,7 +318,7 @@ function bindUninstall () {
                     l.style.display = 'none';
                     m.textContent = d.message;
                     m.className = d.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
-                    if (d.status === 'success') setTimeout(() => location.reload(), 3000);
+                    if (d.status === 'success') setTimeout(() => location.reload(), 2000);
                 })
                 .catch(err => {
                     l.style.display = 'none';

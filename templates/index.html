@@ -18,12 +18,13 @@
 <body>
     <div class="container">
         <h1 class="text-center mb-4">OpenVPN管理界面</h1>
-
+       
         <!-- OpenVPN 状态 -->
         <div class="row">
             <div class="col-md-12">
                 <div class="card">
                     <div class="card-header"><h5>OpenVPN状态</h5></div>
+                    
                     <div class="card-body">
                         {% if status == 'running' %}
                             <p><span class="status-indicator status-running"></span> OpenVPN正在运行</p>
@@ -175,7 +176,42 @@
         </div>
     </div>
 
+    <div class="modal fade" id="installModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">安装 OpenVPN</h5></div>
+
+        <div class="modal-body">
+            <div class="mb-3">
+                <label class="form-label">端口号</label>
+                <input type="number" class="form-control" id="install-port" value="1194" min="1025" max="65534">
+            </div>
+
+            <!-- IP 选择 -->
+            <div class="mb-3">
+                <label class="form-label">服务器 IP</label>
+                <select class="form-select" id="install-ip-select">
+                <option disabled>正在获取…</option>
+                </select>
+            </div>
+
+            <!-- 手动输入框（默认隐藏） -->
+            <div class="mb-3" id="manual-ip-wrapper" style="display:none;">
+                <input type="text" class="form-control" id="install-ip-input" placeholder="例如 192.168.1.100">
+            </div>
+        </div>
+        
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+            <button type="button" class="btn btn-primary" id="confirm-install">确认</button>
+        </div>
+        </div>
+    </div>
+    </div>
+
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
 </body>
 </html>
