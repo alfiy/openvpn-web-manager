@@ -7,7 +7,9 @@
 目前项目仅支持ubuntu操作系统，开发及测试环境为ubuntu 2204 server
 
 0. 安装依赖
+```bash
 sudo apt install python3.12-venv
+```
 
 1. 进入项目目录执行下面的命令
 第一次运行时执行下面的命令进行openvpn-web-manager项目的安装。
@@ -26,8 +28,8 @@ sudo systemctl status vpnwm
 ```
 
 2. 通过web界面管理vpn客户端
-
+```bash
 http://your-ip-address:8080
-
+```
 
 
