@@ -23,7 +23,7 @@ sudo systemctl stop vpnwm
 sudo systemctl restart vpnwm
 # 查看
 sudo systemctl status vpnwm
-
+```
 
 2. 通过web界面管理vpn客户端
 
