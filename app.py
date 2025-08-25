@@ -5,6 +5,7 @@ from functools import wraps
 import json
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
+from models import db, User
 
 
 USERS_FILE = os.path.join(os.path.dirname(__file__), 'users.json')
@@ -39,6 +40,20 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
 Session(app)
 
+# SQLite 单文件数据库
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'vpn_users.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db.init_app(app)
+
+with app.app_context():
+    db.create_all()
+    if not User.query.filter_by(username='admin').first():
+        admin = User(username='admin')
+        admin.set_password('admin123')
+        db.session.add(admin)
+        db.session.commit()
+
 # ---------------- 认证工具 ----------------
 def login_required(f):
     """装饰器：给视图函数用"""
@@ -68,15 +83,14 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        users = load_users()
-        if username in users and check_password_hash(users[username], password):
+        user = User.query.filter_by(username=username).first()
+        if user and user.check_password(password):
             session['logged_in'] = True
             session['username'] = username
             return redirect(url_for('index.index'))
         return render_template('login.html', error='用户名或密码错误')
     return render_template('login.html')
 
-# ---------------- 修改密码接口 ----------------
 @auth_bp.route('/change_password', methods=['POST'])
 @login_required
 def change_password():
@@ -85,10 +99,9 @@ def change_password():
     if len(new_pwd) < 6:
         return jsonify(status='error', message='密码至少 6 位'), 400
 
-    username = session['username']
-    users = load_users()
-    users[username] = generate_password_hash(new_pwd)
-    save_users(users)
+    user = User.query.filter_by(username=session['username']).first()
+    user.set_password(new_pwd)
+    db.session.commit()
     return jsonify(status='success', message='密码修改成功')
 
 @auth_bp.route('/logout')
