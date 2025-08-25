@@ -54,6 +54,7 @@ function bindAll () {
     bindEnable();
     bindModifyExpiry();
     bindUninstall();
+    bindChangePwd();
 }
 
 /* ---------- 有效期单选按钮联动 ---------- */
@@ -354,3 +355,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+
+/* ---------- 修改用户密码 ---------- */
+function bindChangePwd() {
+  const form = $('#change-pwd-form');
+  if (!form || form.hasAttribute('data-bound')) return;
+  form.setAttribute('data-bound', 'true');
+
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const pwd = $('#new_pwd').value.trim();
+    if (pwd.length < 6) {
+      alert('密码至少 6 位'); return;
+    }
+
+    authFetch('/change_password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_pwd: pwd })
+    })
+    .then(r => r.json())
+    .then(d => {
+      alert(d.message);
+      if (d.status === 'success') {
+        bootstrap.Modal.getInstance('#changePwdModal').hide();
+        form.reset();
+      }
+    })
+    .catch(err => alert(err));
+  });
+}
