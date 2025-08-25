@@ -2,6 +2,22 @@ from flask import Flask, render_template, session, request, jsonify, redirect, u
 from flask_session import Session
 from datetime import timedelta
 from functools import wraps
+import json
+import os
+from werkzeug.security import generate_password_hash, check_password_hash
+
+
+USERS_FILE = os.path.join(os.path.dirname(__file__), 'users.json')
+
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        return {'admin': generate_password_hash('admin123')}
+    with open(USERS_FILE) as f:
+        return json.load(f)
+
+def save_users(users):
+    with open(USERS_FILE, 'w') as f:
+        json.dump(users, f, indent=2)
 
 # ---------------- 业务蓝图 ----------------
 from routes.index            import index_bp
@@ -46,18 +62,34 @@ def require_login():
 from flask import Blueprint
 auth_bp = Blueprint('auth', __name__)
 
+# ---------------- 修改登录校验 ----------------
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        # TODO: 替换为数据库校验
-        if username == 'admin' and password == 'admin123':
+        users = load_users()
+        if username in users and check_password_hash(users[username], password):
             session['logged_in'] = True
             session['username'] = username
             return redirect(url_for('index.index'))
         return render_template('login.html', error='用户名或密码错误')
     return render_template('login.html')
+
+# ---------------- 修改密码接口 ----------------
+@auth_bp.route('/change_password', methods=['POST'])
+@login_required
+def change_password():
+    data = request.get_json() or {}
+    new_pwd = data.get('new_pwd', '').strip()
+    if len(new_pwd) < 6:
+        return jsonify(status='error', message='密码至少 6 位'), 400
+
+    username = session['username']
+    users = load_users()
+    users[username] = generate_password_hash(new_pwd)
+    save_users(users)
+    return jsonify(status='success', message='密码修改成功')
 
 @auth_bp.route('/logout')
 def logout():
@@ -90,6 +122,19 @@ app.register_blueprint(disconnect_client_bp)
 app.register_blueprint(modify_client_expiry_bp)
 app.register_blueprint(enable_client_bp)
 app.register_blueprint(ip_bp, url_prefix='/')
+
+USERS_FILE = os.path.join(os.path.dirname(__file__), 'users.json')
+
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        return {'admin': generate_password_hash('admin123')}
+    with open(USERS_FILE) as f:
+        return json.load(f)
+
+def save_users(users):
+    with open(USERS_FILE, 'w') as f:
+        json.dump(users, f, indent=2)
+
 
 # ---------------- 启动 ----------------
 if __name__ == '__main__':
