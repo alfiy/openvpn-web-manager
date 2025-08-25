@@ -17,8 +17,18 @@
 </head>
 <body>
     <div class="container">
-        <h1 class="text-center mb-4">OpenVPN管理界面</h1>
-       
+        <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">OpenVPN管理界面</h1>
+        <div class="dropdown">
+            <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                {{ session.get('username', '用户') }}
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">退出登录</a></li>
+            </ul>
+        </div>
+        </div>
+
         <!-- OpenVPN 状态 -->
         <div class="row">
             <div class="col-md-12">

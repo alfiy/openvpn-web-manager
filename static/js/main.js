@@ -2,11 +2,23 @@
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
 
+/* ---------- 认证工具 ---------- */
+function authFetch(url, opts = {}) {
+    return fetch(url, { ...opts, credentials: 'same-origin' })
+        .then(res => {
+            if (res.status === 401) {
+                location.href = '/login';          // 未登录直接跳转
+                throw new Error('未登录');
+            }
+            return res;
+        });
+}
+
 let autoRefreshInterval;
 
 /* ---------- 页面局部刷新 ---------- */
 function refreshPage () {
-    fetch('/')
+    authFetch('/')
         .then(r => r.text())
         .then(html => {
             const p = new DOMParser(), doc = p.parseFromString(html, 'text/html');
@@ -64,7 +76,7 @@ function bindInstall () {
     btn.addEventListener('click', async () => {
         // 拉取 IP
         try {
-            const res = await fetch('/get_ip_list');
+            const res = await authFetch('/get_ip_list');
             const list = await res.json();
             const sel = document.getElementById('install-ip-select');
             sel.innerHTML = '';
@@ -111,7 +123,7 @@ function bindInstall () {
         m.classList.remove('d-none'); m.textContent = '正在安装 OpenVPN...';
 
         try {
-            const res = await fetch('/install', {
+            const res = await authFetch('/install', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ port, ip })
@@ -120,7 +132,7 @@ function bindInstall () {
             document.getElementById('install-loader').style.display = 'none';
             m.textContent = data.message;
             m.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
-            if (data.status === 'success') setTimeout(() => location.reload(), 2000);
+            if (data.status === 'success') setTimeout(refreshPage,1200);
         } catch (err) {
             document.getElementById('install-loader').style.display = 'none';
             m.textContent = '安装失败: ' + err.message;
@@ -171,7 +183,7 @@ function bindAddClient () {
         fd.append('client_name', nameVal);
         fd.append('expiry_days', expiryDays);
 
-        fetch('/add_client', {method: 'POST', body: fd})
+        authFetch('/add_client', {method: 'POST', body: fd})
             .then(r => r.json())
             .then(data => {
                 loader.style.display = 'none';
@@ -201,7 +213,7 @@ function bindRevoke () {
             const l = $('#revoke-loader'), m = $('#revoke-message');
             l.style.display = 'block';
             const fd = new FormData(); fd.append('client_name', name);
-            fetch('/revoke_client', {method: 'POST', body: fd})
+            authFetch('/revoke_client', {method: 'POST', body: fd})
                 .then(r => r.json())
                 .then(d => {
                     l.style.display = 'none';
@@ -231,7 +243,7 @@ function bindDisconnect () {
         btn.setAttribute('data-bound', 'true');
         btn.addEventListener('click', () => {
             if (!confirm(`确认要禁用客户端 “${btn.dataset.client}” 吗？`)) return;
-            fetch('/disconnect_client', {
+            authFetch('/disconnect_client', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                 body: `client_name=${encodeURIComponent(btn.dataset.client)}`
@@ -247,7 +259,7 @@ function bindEnable () {
         btn.setAttribute('data-bound', 'true');
         btn.addEventListener('click', () => {
             if (!confirm(`确认要重新启用客户端 “${btn.dataset.client}” 吗？`)) return;
-            fetch('/enable_client', {
+            authFetch('/enable_client', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                 body: `client_name=${encodeURIComponent(btn.dataset.client)}`
@@ -286,7 +298,7 @@ function bindModifyExpiry () {
             const l = $('#modify-expiry-loader'), m = $('#modify-expiry-message');
             l.style.display = 'inline-block'; btn.disabled = true;
             const fd = new FormData(); fd.append('client_name', name); fd.append('expiry_days', days);
-            fetch('/modify_client_expiry', {method: 'POST', body: fd})
+            authFetch('/modify_client_expiry', {method: 'POST', body: fd})
                 .then(r => r.json())
                 .then(d => {
                     l.style.display = 'none'; btn.disabled = false;
@@ -312,13 +324,13 @@ function bindUninstall () {
             const l = $('#uninstall-loader'), m = $('#status-message');
             l.style.display = 'block';
             m.classList.remove('d-none'); m.textContent = '正在卸载OpenVPN...';
-            fetch('/uninstall', {method: 'POST'})
+            authFetch('/uninstall', {method: 'POST'})
                 .then(r => r.json())
                 .then(d => {
                     l.style.display = 'none';
                     m.textContent = d.message;
                     m.className = d.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
-                    if (d.status === 'success') setTimeout(() => location.reload(), 2000);
+                    if (d.status === 'success') setTimeout(refreshPage,1200);
                 })
                 .catch(err => {
                     l.style.display = 'none';
@@ -341,3 +353,4 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#client_name').value = '';
     });
 });
+
