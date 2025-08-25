@@ -226,7 +226,7 @@ EOF
 client
 proto udp
 explicit-exit-notify
-remote $(resolvePublicIP) $OPENVPN_PORT
+remote $SERVER_IP $OPENVPN_PORT
 dev tun
 resolv-retry infinite
 nobind
