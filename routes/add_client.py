@@ -39,6 +39,7 @@ def add_client():
     except:
         expiry_days = 3650
     
+
     try:
         # Use a more direct approach to add the client
         # Create the client certificate directly using easy-rsa commands
