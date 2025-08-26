@@ -272,8 +272,10 @@ function bindEnable () {
     });
 }
 
+
 /* ---------- 修改到期 ---------- */
 function bindModifyExpiry () {
+    // 绑定“修改到期时间”按钮
     $$('.modify-expiry-btn:not([data-bound])').forEach(btn => {
         btn.setAttribute('data-bound', 'true');
         btn.addEventListener('click', () => {
@@ -282,30 +284,48 @@ function bindModifyExpiry () {
             modal.show();
         });
     });
+
+    // 绑定确认按钮
     const btn = $('#confirm-modify-expiry');
     if (btn && !btn.hasAttribute('data-bound')) {
         btn.setAttribute('data-bound', 'true');
         btn.addEventListener('click', () => {
             const name = $('#modify-client-name').value;
-            const type = $('#modify-expiry-type').value;
+
+            // 判断是选定天数还是自定义日期
             let days;
-            if (type === 'preset') {
-                days = $('#modify-expiry-days').value;
-            } else {
+            if ($('#modify-expiryCustom').checked) {
                 const d = $('#modify-expiry-date').value;
-                if (!d) { $('#modify-expiry-message').innerHTML='<div class="alert alert-danger">请选择到期日期</div>'; return; }
+                if (!d) {
+                    $('#modify-expiry-message').innerHTML='<div class="alert alert-danger">请选择到期日期</div>';
+                    return;
+                }
                 days = Math.ceil((new Date(d) - new Date()) / 86400000).toString();
+            } else {
+                // 获取选中的 radio（30 / 60 / 90）
+                const selected = document.querySelector('input[name="modify_expiry_choice"]:checked');
+                days = selected ? selected.value : '30';
             }
+
             const l = $('#modify-expiry-loader'), m = $('#modify-expiry-message');
             l.style.display = 'inline-block'; btn.disabled = true;
-            const fd = new FormData(); fd.append('client_name', name); fd.append('expiry_days', days);
+
+            const fd = new FormData();
+            fd.append('client_name', name);
+            fd.append('expiry_days', days);
+
             authFetch('/modify_client_expiry', {method: 'POST', body: fd})
                 .then(r => r.json())
                 .then(d => {
                     l.style.display = 'none'; btn.disabled = false;
                     const cls = d.status === 'success' ? 'alert-success' : 'alert-danger';
                     m.innerHTML = `<div class="alert ${cls}">${d.message}</div>`;
-                    if (d.status === 'success') setTimeout(() => { bootstrap.Modal.getInstance($('#modifyExpiryModal')).hide(); refreshPage(); }, 2000);
+                    if (d.status === 'success') {
+                        setTimeout(() => {
+                            bootstrap.Modal.getInstance($('#modifyExpiryModal')).hide();
+                            refreshPage();
+                        }, 2000);
+                    }
                 })
                 .catch(err => {
                     l.style.display = 'none'; btn.disabled = false;
@@ -313,7 +333,19 @@ function bindModifyExpiry () {
                 });
         });
     }
+
+    // 切换日期选择框的显示/隐藏
+    $$('input[name="modify_expiry_choice"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            if ($('#modify-expiryCustom').checked) {
+                $('#modifyCustomDateWrapper').style.display = 'block';
+            } else {
+                $('#modifyCustomDateWrapper').style.display = 'none';
+            }
+        });
+    });
 }
+
 
 /* ---------- 卸载 ---------- */
 function bindUninstall () {
