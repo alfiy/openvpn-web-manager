@@ -2,34 +2,23 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>登录 - OpenVPN管理界面</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
     <style>
-        body {
-            background-color: #f8f9fa;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-        }
-        .login-container {
-            width: 100%;
-            max-width: 400px;
-            padding: 15px;
-        }
+        body{background:#f8f9fa;display:flex;align-items:center;justify-content:center;height:100vh}
+        .login-container{width:100%;max-width:400px;padding:15px}
     </style>
 </head>
 <body>
     <div class="login-container">
-        <div class="card">
-            <div class="card-header text-center">
-                <h4>OpenVPN管理登录</h4>
-            </div>
+        <div class="card shadow">
+            <div class="card-header text-center"><h4>OpenVPN管理登录</h4></div>
             <div class="card-body">
+                <!-- 登录失败提示 -->
                 {% if error %}
-                <div class="alert alert-danger">{{ error }}</div>
+                <div class="alert alert-danger" id="errorAlert">{{ error }}</div>
                 {% endif %}
+
                 <form method="POST">
                     <div class="mb-3">
                         <label for="username" class="form-label">用户名</label>
@@ -39,8 +28,19 @@
                         <label for="password" class="form-label">密码</label>
                         <input type="password" class="form-control" id="password" name="password" required>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">登录</button>
+                    <button type="submit" class="btn btn-primary w-100 mb-2">登录</button>
                 </form>
+
+                <!-- 动态按钮区域 -->
+                <div id="actionBtnWrapper" class="w-100">
+                    {% if error %}
+                    <!-- 登录失败：显示“忘记密码” -->
+                    <a href="{{ url_for('auth.forgot_password') }}" class="btn btn-warning w-100">忘记密码</a>
+                    {% else %}
+                    <!-- 默认：显示“注册新用户” -->
+                    <a href="{{ url_for('auth.register') }}" class="btn btn-outline-success w-100">注册新用户</a>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
