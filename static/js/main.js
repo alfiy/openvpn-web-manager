@@ -404,7 +404,10 @@ function bindChangePwd() {
     authFetch('/change_password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ new_pwd: pwd })
+      body: JSON.stringify({ 
+        old_pwd: $('#old_pwd').value,
+        new_pwd: $('#new_pwd').value
+       })
     })
     .then(r => r.json())
     .then(d => {

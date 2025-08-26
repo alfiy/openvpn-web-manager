@@ -95,11 +95,17 @@ def login():
 @login_required
 def change_password():
     data = request.get_json() or {}
+    old_pwd   = data.get('old_pwd', '').strip()
     new_pwd = data.get('new_pwd', '').strip()
+
     if len(new_pwd) < 6:
         return jsonify(status='error', message='密码至少 6 位'), 400
 
     user = User.query.filter_by(username=session['username']).first()
+    if not user or not user.check_password(old_pwd):
+        return jsonify({'status': 'error', 'message': '旧密码错误'}), 400
+    
+    # 更新密码
     user.set_password(new_pwd)
     db.session.commit()
     return jsonify(status='success', message='密码修改成功')
