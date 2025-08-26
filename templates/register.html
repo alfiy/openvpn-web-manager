@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>注册 - OpenVPN管理界面</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    <style>
+        body{background:#f8f9fa;display:flex;align-items:center;justify-content:center;height:100vh}
+        .register-container{width:100%;max-width:400px;padding:15px}
+    </style>
+</head>
+<body>
+    <div class="register-container">
+        <div class="card shadow">
+            <div class="card-header text-center"><h4>创建账户</h4></div>
+            <div class="card-body">
+                <form id="registerForm" method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">用户名</label>
+                        <input type="text" class="form-control" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">邮箱</label>
+                        <input type="email" class="form-control" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">密码</label>
+                        <input type="password" class="form-control" name="password" minlength="6" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 mb-2">立即注册</button>
+                    <a href="{{ url_for('auth.login') }}" class="btn btn-outline-secondary w-100">返回登录</a>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 失败弹窗 -->
+    <div class="modal fade" id="failModal" tabindex="-1">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title">注册失败</h5></div>
+                <div class="modal-body">
+                    <p id="failReason"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">确定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 监听表单提交
+        document.getElementById('registerForm').addEventListener('submit', async e => {
+            e.preventDefault();
+            const form = new FormData(e.target);
+            const res  = await fetch('{{ url_for("auth.register") }}', {
+                method: 'POST',
+                body: new URLSearchParams(form)
+            });
+            const data = await res.json();
+
+            if (data.status === 'success') {
+                // 注册成功 → 跳转登录页
+                window.location = '{{ url_for("auth.login") }}';
+            } else {
+                // 注册失败 → 弹出提示
+                document.getElementById('failReason').textContent = data.message;
+                new bootstrap.Modal(document.getElementById('failModal')).show();
+            }
+        });
+    </script>
+</body>
+</html>
