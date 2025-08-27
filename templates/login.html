@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>登录 - OpenVPN管理界面</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
     <style>
@@ -20,6 +21,9 @@
                 {% endif %}
 
                 <form method="POST">
+                    <!-- 添加CSRF令牌 -->
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    
                     <div class="mb-3">
                         <label for="username" class="form-label">用户名</label>
                         <input type="text" class="form-control" id="username" name="username" required>

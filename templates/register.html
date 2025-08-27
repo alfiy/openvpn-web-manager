@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>注册 - OpenVPN管理界面</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
     <!-- 1. 引入通用密码二次验证组件 -->
@@ -20,6 +21,9 @@
             <div class="card-body">
                 <!-- 2. 给表单加 data-pwd-confirm 即可启用二次密码验证 -->
                 <form id="registerForm" method="POST" data-pwd-confirm>
+                    <!-- 添加CSRF令牌 -->
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    
                     <div class="mb-3">
                         <label class="form-label">用户名</label>
                         <input type="text" class="form-control" name="username" required>
