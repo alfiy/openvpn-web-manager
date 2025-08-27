@@ -394,29 +394,33 @@ function bindChangePwd() {
   if (!form || form.hasAttribute('data-bound')) return;
   form.setAttribute('data-bound', 'true');
 
-  form.addEventListener('submit', e => {
-    e.preventDefault();
-    const pwd = $('#new_pwd').value.trim();
-    if (pwd.length < 6) {
-      alert('密码至少 6 位'); return;
+  // 让组件做实时提示（字段名已改成组件默认）
+  PasswordConfirm(form, {
+    passwordSel   : '[name="password"]',
+    confirmSel    : '[name="confirmPassword"]',
+    liveCheck     : true,
+    beforeSubmit  : true,
+    onError       : () => {},
+    onSuccess     : () => {
+      // 阻止原生表单提交，手动发 JSON
+      const fd = new FormData(form);
+      authFetch('/change_password', {
+        method : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body   : JSON.stringify({
+          old_pwd: fd.get('old_pwd'),
+          new_pwd: fd.get('password')   // 组件里叫 password
+        })
+      })
+      .then(r => r.json())
+      .then(d => {
+        alert(d.message || '密码修改成功！');
+        if (d.status === 'success') {
+          bootstrap.Modal.getInstance('#changePwdModal').hide();
+          form.reset();
+        }
+      })
+      .catch(err => alert(err));
     }
-
-    authFetch('/change_password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        old_pwd: $('#old_pwd').value,
-        new_pwd: $('#new_pwd').value
-       })
-    })
-    .then(r => r.json())
-    .then(d => {
-      alert(d.message);
-      if (d.status === 'success') {
-        bootstrap.Modal.getInstance('#changePwdModal').hide();
-        form.reset();
-      }
-    })
-    .catch(err => alert(err));
   });
 }

@@ -11,6 +11,20 @@
 sudo apt install python3.12-venv
 ```
 
+配置邮件服务
+修改`.env`配置文件，根据实际情况填写
+
+```bash
+MAIL_SERVER=smtp.qq.com
+MAIL_PORT=465
+MAIL_USE_SSL=true
+MAIL_USE_TLS=false
+MAIL_USERNAME=888888@qq.com
+MAIL_PASSWORD=16位授权码
+MAIL_DEFAULT_SENDER=888888@qq.com
+```
+
+
 1. 进入项目目录执行下面的命令
 第一次运行时执行下面的命令进行openvpn-web-manager项目的安装。
 sudo ./run.sh
