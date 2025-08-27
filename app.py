@@ -36,6 +36,7 @@ from routes.disconnect_client import disconnect_client_bp
 from routes.modify_client_expiry import modify_client_expiry_bp
 from routes.enable_client    import enable_client_bp
 from routes.get_ip_list      import ip_bp
+from routes.main_bp          import main_bp
 
 # ---------------- Flask 配置 ----------------
 app = Flask(__name__)
@@ -290,6 +291,7 @@ app.register_blueprint(disconnect_client_bp)
 app.register_blueprint(modify_client_expiry_bp)
 app.register_blueprint(enable_client_bp)
 app.register_blueprint(ip_bp, url_prefix='/')
+app.register_blueprint(main_bp, url_prefix='/')  
 
 
 # ---------------- 启动 ----------------

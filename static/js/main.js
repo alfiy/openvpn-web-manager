@@ -430,6 +430,9 @@ function bindChangePwd() {
     });
 }
 
+
+
+
 /* ---------- 初始化 ---------- */
 document.addEventListener('DOMContentLoaded', () => {
     const tomorrow = new Date();
@@ -442,3 +445,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     $('#reset-btn')?.addEventListener('click', () => $('#client_name').value = '');
 });
+
+/* ---------- 客户端搜索 ---------- */
+// (function () {
+//     const input = document.getElementById('client-search');
+//     if (!input) return;
+
+//     // 阻止浏览器默认提交
+//     input.addEventListener('keydown', function (e) {
+//         if (e.key === 'Enter') {
+//             e.preventDefault();               // 关键：阻止表单提交
+//             const kw = encodeURIComponent(this.value.trim());
+//             // 强制跳到 /clients
+//             location.href = kw
+//                 ? `/clients?q=${kw}`
+//                 : '/clients';
+//         }
+//     });
+// })();
