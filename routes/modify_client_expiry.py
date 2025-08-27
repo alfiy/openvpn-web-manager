@@ -97,8 +97,10 @@ def _cleanup_index(index_file: str, client_name: str) -> None:
 @json_csrf_protect
 def modify_client_expiry():
     """Modify client certificate expiration date by revoke + reissue"""
-    client_name = request.form.get('client_name')
-    expiry_days = request.form.get('expiry_days')
+    data = request.get_json()
+    client_name = data.get('client_name')
+    expiry_days = data.get('expiry')
+    
     port = get_openvpn_port()
 
     if not client_name or not expiry_days:

@@ -1,760 +1,368 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
     <title>OpenVPN管理界面</title>
-    <!-- 静态资源：优先CDN+本地 fallback，确保加载稳定性 -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" 
-          integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" 
-          crossorigin="anonymous">
-    <noscript><link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}"></noscript>
-    
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" 
-          integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" 
-          crossorigin="anonymous">
-    
-    <!-- 自定义样式统一管理 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- 正确：csrf_token 是字符串，不要加 () -->
+    <meta name="csrf-token" content="{{ csrf_token }}">
+
+    <!-- Bootstrap 5.3 & FontAwesome 4.7 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" />
+
+    <!-- 自定义样式（可选） -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
 </head>
 <body>
-    <div class="container">
-        <!-- 页面头部：标题 + 用户下拉菜单 -->
-        <header class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="mb-0">OpenVPN管理界面</h1>
-            <div class="dropdown">
-                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    {{ session.get('username', '用户') }}
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#changePwdModal">修改密码</a></li>
-                    <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">退出登录</a></li>
-                </ul>
-            </div>
-        </header>
+<div class="container py-4">
+    <!-- 页面头部 -->
+    <header class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">OpenVPN管理界面</h1>
+        <div class="dropdown">
+            <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                {{ session.get('username', '用户') }}
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#changePwdModal">修改密码</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">退出登录</a></li>
+            </ul>
+        </div>
+    </header>
 
-        <!-- 全局CSRF令牌存储 -->
-        <meta name="csrf-token" content="{{ csrf_token }}">
+    <!-- OpenVPN 状态卡片 -->
+    <section class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <header class="card-header"><h5 class="mb-0">OpenVPN状态</h5></header>
+                <div class="card-body">
+                    {% if status == 'running' %}
+                        <p><span class="status-indicator status-running"></span> OpenVPN正在运行</p>
+                    {% elif status == 'installed' %}
+                        <p><span class="status-indicator status-installed"></span> OpenVPN已安装但未运行</p>
+                    {% else %}
+                        <p><span class="status-indicator status-not-installed"></span> OpenVPN未安装</p>
+                    {% endif %}
 
-        <!-- OpenVPN 状态卡片 -->
-        <section class="row mb-4">
-            <div class="col-md-12">
-                <div class="card">
-                    <header class="card-header"><h5>OpenVPN状态</h5></header>
-                    <div class="card-body">
-                        <!-- 状态显示 -->
-                        {% if status == 'running' %}
-                            <p><span class="status-indicator status-running"></span> OpenVPN正在运行</p>
-                        {% elif status == 'installed' %}
-                            <p><span class="status-indicator status-installed"></span> OpenVPN已安装但未运行</p>
-                        {% else %}
-                            <p><span class="status-indicator status-not-installed"></span> OpenVPN未安装</p>
-                        {% endif %}
-                        
-                        <!-- 状态提示框 -->
-                        <div id="status-message" class="alert alert-info d-none" role="alert"></div>
+                    <div id="status-message" class="alert alert-info d-none" role="alert"></div>
 
-                        <!-- 安装按钮：关联模态框 + CSRF令牌容器 -->
-                        {% if status == 'not_installed' %}
-                            <div>
-                                <button id="install-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#installModal">
-                                    安装OpenVPN
-                                </button>
-                                <div class="loader" id="install-loader"></div>
-                            </div>
-                        {% endif %}
+                    {% if status == 'not_installed' %}
+                        <button id="install-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#installModal">安装OpenVPN</button>
+                        <div class="loader mt-2" id="install-loader" style="display:none;">正在安装...</div>
+                    {% endif %}
 
-                        <!-- 卸载按钮：使用表单提交 -->
-                        {% if status in ['running', 'installed'] %}
-                            <div>
-                                <form id="uninstall-form" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                    <button type="submit" id="uninstall-btn" class="btn btn-danger">卸载OpenVPN</button>
-                                </form>
-                                <div class="loader" id="uninstall-loader"></div>
-                            </div>
-                        {% endif %}
-                    </div>
+                    {% if status in ['running', 'installed'] %}
+                        <button id="uninstall-btn" class="btn btn-danger">卸载OpenVPN</button>
+                        <div class="loader mt-2" id="uninstall-loader" style="display:none;">正在卸载...</div>
+                    {% endif %}
                 </div>
             </div>
-        </section>
+        </div>
+    </section>
 
-        <!-- 客户端管理区域（仅当OpenVPN已安装/运行时显示） -->
-        {% if status in ['running', 'installed'] %}
-        <section class="row g-4">
-            <!-- 添加客户端卡片 -->
-            <div class="col-md-6">
-                <div class="card h-100">
-                    <header class="card-header"><h5>添加客户端</h5></header>
-                    <div class="card-body">
-                        <!-- 添加客户端表单：包含CSRF令牌 -->
-                        <form id="add-client-form">
-                            <!-- CSRF令牌（必选） -->
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-
-                            <!-- 客户端名称 -->
-                            <h6 class="fw-bold mb-2">客户端名称</h6>
-                            <div class="mb-3">
-                                <input type="text" class="form-control" id="client_name" name="client_name" 
-                                       required pattern="^[A-Za-z0-9_\-]+$" title="仅允许字母、数字、下划线和破折号">
-                                <div id="client-name-error" class="text-danger form-text d-none">
-                                    仅允许字母、数字、下划线和破折号
-                                </div>
-                                <div class="form-text text-muted">仅允许字母、数字、下划线和破折号</div>
-                            </div>
-
-                            <!-- 证书有效期 -->
-                            <h6 class="fw-bold mb-2">证书有效期</h6>
-                            <div class="btn-group btn-group-sm mb-2" role="group" aria-label="证书有效期选择">
-                                <input type="radio" class="btn-check" name="expiry_choice" id="expiry30" value="30" checked>
-                                <label class="btn btn-outline-primary" for="expiry30">30 天</label>
-
-                                <input type="radio" class="btn-check" name="expiry_choice" id="expiry60" value="60">
-                                <label class="btn btn-outline-primary" for="expiry60">60 天</label>
-
-                                <input type="radio" class="btn-check" name="expiry_choice" id="expiry90" value="90">
-                                <label class="btn btn-outline-primary" for="expiry90">90 天</label>
-
-                                <input type="radio" class="btn-check" name="expiry_choice" id="expiryCustom" value="custom">
-                                <label class="btn btn-outline-primary" for="expiryCustom">选择日期</label>
-                            </div>
-
-                            <!-- 自定义日期选择器（默认隐藏） -->
-                            <div class="ms-3 mt-2" id="customDateWrapper" class="d-none">
-                                <label for="expiry_date" class="form-label fw-normal">选择到期日期</label>
-                                <input type="date" class="form-control w-75" id="expiry_date" name="expiry_date" 
-                                       min="{{ today }}" required>
-                                <div class="form-text text-muted">选择证书的具体到期日期（不可早于今日）</div>
-                            </div>
-                            
-                            <!-- 操作按钮组 -->
-                            <div class="d-flex gap-2 mt-3">
-                                <button type="button" class="btn btn-secondary" id="reset-btn">重置</button>
-                                <button type="submit" class="btn btn-success">添加客户端</button>
-                            </div>
-                            <div class="loader" id="add-client-loader"></div>
-                        </form>
-                        <div id="add-client-message" class="mt-3 alert d-none" role="alert"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 客户端管理卡片 -->
-            <div class="col-md-6">
-                <div class="card h-100">
-                    <header class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">客户端管理</h5>
-                        {% if total_pages > 1 %}
-                            <small class="text-muted">第 {{ page }} 页，共 {{ total_pages }} 页</small>
-                        {% endif %}
-                    </header>
-                    <div class="card-body">
-                        <!-- 客户端搜索框 -->
-                        <div class="mb-3">
-                            <input type="text" id="client-search" class="form-control form-control-sm" 
-                                   placeholder="搜索客户端名称...">
-                        </div>
-
-                        <!-- 客户端列表表格 -->
-                        {% if clients %}
-                            <div class="table-responsive">
-                                <table class="table table-hover" id="client-table">
-                                    <thead>
-                                        <tr>
-                                            <th scope="col">#</th>
-                                            <th scope="col">客户端名称</th>
-                                            <th scope="col">在线状态</th>
-                                            <th scope="col">到期时间</th>
-                                            <th scope="col">操作</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for client in clients %}
-                                        <tr>
-                                            <td scope="row">{{ ((page - 1) * 10) + loop.index }}</td>
-                                            <td>{{ client.name if client is mapping else client }}</td>
-                                            <td>
-                                                {% if client is mapping and client.online %}
-                                                    <span class="badge bg-success"><i class="fas fa-circle"></i> 在线</span>
-                                                    {% if client.vpn_ip %}<br><small class="text-success">VPN: {{ client.vpn_ip }}</small>{% endif %}
-                                                    {% if client.real_ip %}<br><small class="text-muted">来源: {{ client.real_ip }}</small>{% endif %}
-                                                    {% if client.duration %}<br><small class="text-info">时长: {{ client.duration }}</small>{% endif %}
-                                                {% else %}
-                                                    <span class="badge bg-secondary"><i class="fas fa-circle"></i> 离线</span>
-                                                {% endif %}
-                                            </td>
-                                            <td>
-                                                {% if client is mapping and client.expiry %}
-                                                    <small class="text-muted">{{ client.expiry }}</small>
-                                                {% else %}
-                                                    <small class="text-muted">未知</small>
-                                                {% endif %}
-                                            </td>
-                                            <td>
-                                                {% if client is mapping and client.disabled %}
-                                                    <span class="badge bg-secondary mb-1 d-inline-block">已禁用</span>
-                                                    <!-- 重新启用按钮：含CSRF令牌 -->
-                                                    <form class="enable-form d-inline" data-client="{{ client.name }}">
-                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                                        <button type="submit" class="btn btn-sm btn-success">重新启用</button>
-                                                    </form>
-                                                {% else %}
-                                                    <!-- 下载配置按钮：无需CSRF（GET请求） -->
-                                                    <a href="{{ url_for('download_client.download_client', client_name=client.name if client is mapping else client) }}" 
-                                                       class="btn btn-sm btn-primary mb-1 d-inline-block">
-                                                        下载配置
-                                                    </a>
-                                                    
-                                                    <!-- 修改到期时间：触发模态框 -->
-                                                    <button class="btn btn-sm btn-info mb-1 d-inline-block modify-expiry-btn" 
-                                                            data-client="{{ client.name if client is mapping else client }}"
-                                                            data-bs-toggle="modal" data-bs-target="#modifyExpiryModal">
-                                                        修改到期时间
-                                                    </button>
-                                                    
-                                                    <!-- 禁用按钮（在线时显示） -->
-                                                    {% if client is mapping and client.online %}
-                                                        <form class="disable-form d-inline" data-client="{{ client.name }}">
-                                                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                                            <button type="submit" class="btn btn-sm btn-warning mb-1">禁用</button>
-                                                        </form>
-                                                    {% endif %}
-                                                    
-                                                    <!-- 撤销按钮：含CSRF令牌 -->
-                                                    <form class="revoke-form d-inline" data-client="{{ client.name if client is mapping else client }}">
-                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                                        <button type="submit" class="btn btn-sm btn-danger">撤销</button>
-                                                    </form>
-                                                {% endif %}
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <!-- 分页导航 -->
-                            {% if total_pages > 1 %}
-                            <nav aria-label="客户端分页导航">
-                                <ul class="pagination pagination-sm justify-content-center">
-                                    <li class="page-item {% if page <= 1 %}disabled{% endif %}">
-                                        <a class="page-link" href="?page={{ page - 1 }}" aria-label="上一页">
-                                            <span aria-hidden="true">&laquo;</span>
-                                        </a>
-                                    </li>
-
-                                    {% set start_page = [1, page - 2]|max %}
-                                    {% set end_page = [total_pages, page + 2]|min %}
-
-                                    {% if start_page > 1 %}
-                                        <li class="page-item"><a class="page-link" href="?page=1">1</a></li>
-                                        {% if start_page > 2 %}
-                                            <li class="page-item disabled"><span class="page-link">...</span></li>
-                                        {% endif %}
-                                    {% endif %}
-
-                                    {% for p in range(start_page, end_page + 1) %}
-                                        <li class="page-item {% if p == page %}active{% endif %}">
-                                            <a class="page-link" href="?page={{ p }}">{{ p }}</a>
-                                        </li>
-                                    {% endfor %}
-
-                                    {% if end_page < total_pages %}
-                                        {% if end_page < total_pages - 1 %}
-                                            <li class="page-item disabled"><span class="page-link">...</span></li>
-                                        {% endif %}
-                                        <li class="page-item"><a class="page-link" href="?page={{ total_pages }}">{{ total_pages }}</a></li>
-                                    {% endif %}
-
-                                    <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
-                                        <a class="page-link" href="?page={{ page + 1 }}" aria-label="下一页">
-                                            <span aria-hidden="true">&raquo;</span>
-                                        </a>
-                                    </li>
-                                </ul>
-                            </nav>
-
-                            <div class="pagination-info text-center">
-                                显示第 {{ ((page - 1) * 10) + 1 }} - {{ ((page - 1) * 10) + clients|length }} 项，
-                                共 {{ ((total_pages - 1) * 10) + (clients|length if page == total_pages else 10) }} 项
-                            </div>
-                            {% endif %}
-
-                            <!-- 操作反馈区域 -->
-                            <div class="loader" id="revoke-loader"></div>
-                            <div id="revoke-message" class="mt-3 alert d-none" role="alert"></div>
-                        {% else %}
-                            <p class="text-muted">没有客户端证书。请添加新客户端。</p>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </section>
-        {% endif %}
-    </div>
-
-    <!-- 1. 修改到期时间模态框 -->
-    <div class="modal fade" id="modifyExpiryModal" tabindex="-1" aria-labelledby="modifyExpiryModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="modifyExpiryModalLabel">修改客户端到期时间</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- 修改到期时间表单：含CSRF令牌 -->
-                    <form id="modify-expiry-form">
+    <!-- 客户端管理区域（当已安装/运行时显示） -->
+    {% if status in ['running', 'installed'] %}
+    <section class="row g-4">
+        <!-- 添加客户端（左） -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <header class="card-header"><h5 class="mb-0">添加客户端</h5></header>
+                <div class="card-body">
+                    <form id="add-client-form">
+                        <!-- 后端如需，也留一个隐藏字段（不提交表单也没关系） -->
                         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        
-                        <!-- 客户端名称（只读） -->
+
+                        <h6 class="fw-bold mb-2">客户端名称</h6>
                         <div class="mb-3">
-                            <label for="modify-client-name" class="form-label">客户端名称</label>
-                            <input type="text" class="form-control" id="modify-client-name" name="client_name" readonly>
+                            <input type="text" class="form-control" id="client_name" name="client_name"
+                                   required pattern="^[A-Za-z0-9_\-]+$" title="仅允许字母、数字、下划线和破折号">
+                            <div class="form-text text-muted">仅允许字母、数字、下划线和破折号</div>
                         </div>
 
-                        <!-- 新有效期选择 -->
-                        <h6 class="fw-bold mb-2">新的证书有效期</h6>
-                        <div class="btn-group btn-group-sm mb-2" role="group" aria-label="新证书有效期选择">
-                            <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiry30" value="30" checked>
-                            <label class="btn btn-outline-primary" for="modify-expiry30">30 天</label>
+                        <h6 class="fw-bold mb-2">证书有效期</h6>
+                        <div class="btn-group btn-group-sm mb-2" role="group" aria-label="证书有效期选择">
+                            <input type="radio" class="btn-check" name="expiry_choice" id="expiry30" value="30" checked>
+                            <label class="btn btn-outline-primary" for="expiry30">30 天</label>
 
-                            <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiry60" value="60">
-                            <label class="btn btn-outline-primary" for="modify-expiry60">60 天</label>
+                            <input type="radio" class="btn-check" name="expiry_choice" id="expiry60" value="60">
+                            <label class="btn btn-outline-primary" for="expiry60">60 天</label>
 
-                            <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiry90" value="90">
-                            <label class="btn btn-outline-primary" for="modify-expiry90">90 天</label>
+                            <input type="radio" class="btn-check" name="expiry_choice" id="expiry90" value="90">
+                            <label class="btn btn-outline-primary" for="expiry90">90 天</label>
 
-                            <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiryCustom" value="custom">
-                            <label class="btn btn-outline-primary" for="modify-expiryCustom">选择日期</label>
+                            <input type="radio" class="btn-check" name="expiry_choice" id="expiryCustom" value="custom">
+                            <label class="btn btn-outline-primary" for="expiryCustom">选择日期</label>
                         </div>
 
-                        <!-- 自定义日期输入框 -->
-                        <div class="ms-3 mt-2" id="modifyCustomDateWrapper" class="d-none">
-                            <label for="modify-expiry-date" class="form-label fw-normal">选择到期日期</label>
-                            <input type="date" class="form-control w-75" id="modify-expiry-date" name="expiry_date" 
-                                   min="{{ today }}" required>
+                        <div class="ms-3 mt-2 d-none" id="customDateWrapper">
+                            <label for="expiry_date" class="form-label fw-normal">选择到期日期</label>
+                            <input type="date" class="form-control w-75" id="expiry_date" min="{{ today }}">
                             <div class="form-text text-muted">选择证书的具体到期日期（不可早于今日）</div>
                         </div>
+
+                        <div class="d-flex gap-2 mt-3">
+                            <button type="button" class="btn btn-secondary" id="reset-btn">重置</button>
+                            <button type="submit" class="btn btn-success">添加客户端</button>
+                        </div>
+
+                        <div id="add-client-loader" class="mt-2" style="display:none;">处理中...</div>
+                        <div id="add-client-message" class="mt-2"></div>
                     </form>
-                    <div id="modify-expiry-message" class="mt-3 alert d-none" role="alert"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" id="confirm-modify-expiry">确认修改</button>
-                    <div class="loader" id="modify-expiry-loader" style="display:none;"></div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- 2. 安装OpenVPN模态框 -->
-    <div class="modal fade" id="installModal" tabindex="-1" aria-labelledby="installModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-sm">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="installModalLabel">安装 OpenVPN</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- 安装表单 -->
-                    <form id="install-form">
-                        <div class="mb-3">
-                            <label class="form-label" for="install-port">端口号</label>
-                            <input type="number" class="form-control" id="install-port" name="port" 
-                                   value="1194" min="1025" max="65534" required>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label" for="install-ip-select">服务器 IP</label>
-                            <select class="form-select" id="install-ip-select" name="server_ip" required>
-                                <option disabled selected>正在获取…</option>
-                            </select>
-                            <div class="form-text text-muted mt-1">
-                                若未找到目标IP，可手动输入
-                            </div>
-                        </div>
-
-                        <div class="mb-3" id="manual-ip-wrapper" class="d-none">
-                            <input type="text" class="form-control" id="install-ip-input" name="manual_ip" 
-                                   placeholder="例如 192.168.1.100" pattern="^(?:\d{1,3}\.){3}\d{1,3}$" 
-                                   title="请输入合法的IP地址">
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" id="confirm-install">确认安装</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 3. 修改密码模态框 -->
-    <div class="modal fade" id="changePwdModal" tabindex="-1" aria-labelledby="changePwdModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="changePwdModalLabel">修改密码</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <!-- 修改密码表单：含CSRF令牌 + 密码强度验证 -->
-                <form id="change-pwd-form" method="post" data-pwd-confirm
-                      data-pwd-confirm-msg="两次输入的新密码不一致，请重新输入">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label" for="old-pwd">旧密码</label>
-                            <input type="password" class="form-control" id="old-pwd" name="old_pwd" 
-                                   required minlength="6">
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label" for="new-pwd">新密码</label>
-                            <input type="password" class="form-control" id="new-pwd" name="password" 
-                                   required minlength="8" pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$"
-                                   title="需包含大小写字母、数字和特殊字符（@$!%*?&），至少8位">
-                            <div class="form-text text-muted">
-                                需包含大小写字母、数字和特殊字符（@$!%*?&），至少8位
-                            </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label" for="confirm-pwd">确认新密码</label>
-                            <input type="password" class="form-control" id="confirm-pwd" name="confirmPassword" 
-                                   required minlength="8" pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$">
-                            <div id="pwd-mismatch-error" class="text-danger form-text d-none">
-                                两次输入的新密码不一致，请重新输入
-                            </div>
-                        </div>
+        <!-- 客户端管理（右） -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <header class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">客户端管理</h5>
+                    {% if total_pages > 1 %}
+                        <small class="text-muted">第 {{ page }} 页，共 {{ total_pages }} 页</small>
+                    {% endif %}
+                </header>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <input type="text" id="client-search" class="form-control form-control-sm" placeholder="搜索客户端名称...">
                     </div>
 
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                        <button type="submit" class="btn btn-primary">确认修改</button>
+                    {% if clients %}
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="client-table">
+                            <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>客户端名称</th>
+                                <th>在线状态</th>
+                                <th>到期时间</th>
+                                <th>操作</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for client in clients %}
+                                {% set cname = client.name if client is mapping else client %}
+                                <tr>
+                                    <td>{{ ((page - 1) * 10) + loop.index }}</td>
+                                    <td>{{ cname }}</td>
+                                    <td>
+                                        {% if client is mapping and client.online %}
+                                            <span class="badge bg-success"><i class="fa fa-circle"></i> 在线</span>
+                                            {% if client.vpn_ip %}<br><small class="text-success">VPN: {{ client.vpn_ip }}</small>{% endif %}
+                                            {% if client.real_ip %}<br><small class="text-muted">来源: {{ client.real_ip }}</small>{% endif %}
+                                            {% if client.duration %}<br><small class="text-info">时长: {{ client.duration }}</small>{% endif %}
+                                        {% else %}
+                                            <span class="badge bg-secondary"><i class="fa fa-circle"></i> 离线</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if client is mapping and client.expiry %}
+                                            <small class="text-muted">{{ client.expiry }}</small>
+                                        {% else %}
+                                            <small class="text-muted">未知</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="d-flex flex-wrap gap-1">
+                                        <a href="{{ url_for('download_client.download_client', client_name=cname) }}"
+                                           class="btn btn-sm btn-primary">下载配置</a>
+
+                                        <button class="btn btn-sm btn-info modify-expiry-btn" data-client="{{ cname }}"
+                                                data-bs-toggle="modal" data-bs-target="#modifyExpiryModal">修改到期时间</button>
+
+                                        {% if client is mapping and client.online %}
+                                            <button class="btn btn-sm btn-warning disconnect-btn" data-client="{{ cname }}">禁用</button>
+                                        {% endif %}
+
+                                        {% if client is mapping and client.disabled %}
+                                            <button class="btn btn-sm btn-success enable-btn" data-client="{{ cname }}">重新启用</button>
+                                        {% endif %}
+
+                                        <button class="btn btn-sm btn-danger revoke-btn" data-client="{{ cname }}">撤销</button>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if total_pages > 1 %}
+                    <nav aria-label="客户端分页导航">
+                        <ul class="pagination pagination-sm justify-content-center">
+                            <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                                <a class="page-link" href="?page={{ page - 1 }}" aria-label="上一页">&laquo;</a>
+                            </li>
+
+                            {% set start_page = [1, page - 2]|max %}
+                            {% set end_page = [total_pages, page + 2]|min %}
+
+                            {% if start_page > 1 %}
+                                <li class="page-item"><a class="page-link" href="?page=1">1</a></li>
+                                {% if start_page > 2 %}
+                                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                                {% endif %}
+                            {% endif %}
+
+                            {% for p in range(start_page, end_page + 1) %}
+                                <li class="page-item {% if p == page %}active{% endif %}">
+                                    <a class="page-link" href="?page={{ p }}">{{ p }}</a>
+                                </li>
+                            {% endfor %}
+
+                            {% if end_page < total_pages %}
+                                {% if end_page < total_pages - 1 %}
+                                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                                {% endif %}
+                                <li class="page-item"><a class="page-link" href="?page={{ total_pages }}">{{ total_pages }}</a></li>
+                            {% endif %}
+
+                            <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                                <a class="page-link" href="?page={{ page + 1 }}" aria-label="下一页">&raquo;</a>
+                            </li>
+                        </ul>
+                    </nav>
+                    {% endif %}
+
+                    <div class="loader" id="revoke-loader" style="display:none;"></div>
+                    <div id="revoke-message" class="mt-3" role="alert"></div>
+
+                    {% else %}
+                        <p class="text-muted mb-0">没有客户端证书。请添加新客户端。</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+</div>
+
+<!-- 修改到期时间模态框 -->
+<div class="modal fade" id="modifyExpiryModal" tabindex="-1" aria-labelledby="modifyExpiryModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modifyExpiryModalLabel">修改客户端到期时间</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="modify-expiry-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div class="mb-3">
+                        <label class="form-label">客户端名称</label>
+                        <input type="text" class="form-control" id="modify-client-name" name="client_name" readonly>
+                    </div>
+
+                    <h6 class="fw-bold mb-2">新的证书有效期</h6>
+                    <div class="btn-group btn-group-sm mb-2" role="group">
+                        <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiry30" value="30" checked>
+                        <label class="btn btn-outline-primary" for="modify-expiry30">30 天</label>
+
+                        <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiry60" value="60">
+                        <label class="btn btn-outline-primary" for="modify-expiry60">60 天</label>
+
+                        <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiry90" value="90">
+                        <label class="btn btn-outline-primary" for="modify-expiry90">90 天</label>
+
+                        <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiryCustom" value="custom">
+                        <label class="btn btn-outline-primary" for="modify-expiryCustom">选择日期</label>
+                    </div>
+
+                    <div class="ms-3 mt-2 d-none" id="modifyCustomDateWrapper">
+                        <label class="form-label">选择到期日期</label>
+                        <input type="date" class="form-control w-75" id="modify-expiry-date" min="{{ today }}">
+                        <div class="form-text text-muted">选择证书的具体到期日期（不可早于今日）</div>
+                    </div>
+                </form>
+                <div id="modify-expiry-message" class="mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <div class="loader me-auto" id="modify-expiry-loader" style="display:none;"></div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirm-modify-expiry">确认修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 安装 OpenVPN 模态框 -->
+<div class="modal fade" id="installModal" tabindex="-1" aria-labelledby="installModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="installModalLabel">安装 OpenVPN</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="install-form">
+                    <div class="mb-3">
+                        <label class="form-label" for="install-port">端口号</label>
+                        <input type="number" class="form-control" id="install-port" name="port" value="1194" min="1025" max="65534" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="install-ip-select">服务器 IP</label>
+                        <select class="form-select" id="install-ip-select" name="server_ip" required>
+                            <option disabled selected>正在获取…</option>
+                        </select>
+                        <div class="form-text text-muted mt-1">若未找到目标IP，可手动输入</div>
+                    </div>
+                    <div class="mb-3" id="manual-ip-wrapper" style="display:none;">
+                        <input type="text" class="form-control" id="install-ip-input" name="manual_ip"
+                               placeholder="例如 192.168.1.100"
+                               pattern="^(?:\\d{1,3}\\.){3}\\d{1,3}$"
+                               title="请输入合法的IP地址">
                     </div>
                 </form>
             </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirm-install">确认安装</button>
+            </div>
         </div>
     </div>
+</div>
 
-    <!-- 脚本加载：按依赖顺序排列 -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" 
-            integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" 
-            crossorigin="anonymous"></script>
-    <script>
-        // 全局CSRF令牌获取函数
-        function getCsrfToken() {
-            return document.querySelector('meta[name="csrf-token"]').content;
-        }
+<!-- 修改密码模态框 -->
+<div class="modal fade" id="changePwdModal" tabindex="-1" aria-labelledby="changePwdModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="changePwdModalLabel">修改密码</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="change-pwd-form" method="post" data-pwd-confirm data-pwd-confirm-msg="两次输入的新密码不一致，请重新输入">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="old-pwd">旧密码</label>
+                        <input type="password" class="form-control" id="old-pwd" name="old_pwd" required minlength="6">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="new-pwd">新密码</label>
+                        <input type="password" class="form-control" id="new-pwd" name="password"
+                               required minlength="8"
+                               pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$"
+                               title="需包含大小写字母、数字和特殊字符（@$!%*?&），至少8位">
+                        <div class="form-text text-muted">需包含大小写字母、数字和特殊字符（@$!%*?&），至少8位</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="confirm-pwd">确认新密码</label>
+                        <input type="password" class="form-control" id="confirm-pwd" name="confirmPassword"
+                               required minlength="8"
+                               pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$">
+                        <div id="pwd-mismatch-error" class="text-danger form-text d-none">两次输入的新密码不一致，请重新输入</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">确认修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
-        // 全局AJAX请求函数（自动携带CSRF令牌）
-        async function sendJsonRequest(url, data) {
-            try {
-                // 获取最新CSRF令牌
-                const response = await fetch('/api/csrf-token');
-                const csrfData = await response.json();
-                const csrfToken = csrfData.csrf_token;
-
-                // 发送请求
-                const result = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
-                    },
-                    body: JSON.stringify(data)
-                });
-
-                return await result.json();
-            } catch (error) {
-                console.error('请求失败:', error);
-                return { status: 'error', message: '网络错误，请重试' };
-            }
-        }
-
-        // 页面加载完成后初始化事件监听
-        document.addEventListener('DOMContentLoaded', function() {
-            // 1. 安装OpenVPN
-            const confirmInstallBtn = document.getElementById('confirm-install');
-            if (confirmInstallBtn) {
-                confirmInstallBtn.addEventListener('click', async function() {
-                    const port = document.getElementById('install-port').value;
-                    const ipSelect = document.getElementById('install-ip-select');
-                    const serverIp = ipSelect.value === 'manual' 
-                        ? document.getElementById('install-ip-input').value 
-                        : ipSelect.value;
-
-                    // 显示加载状态
-                    document.getElementById('install-loader').style.display = 'inline-block';
-                    
-                    // 发送安装请求
-                    const result = await sendJsonRequest('/install', {
-                        port: port,
-                        ip: serverIp
-                    });
-
-                    // 处理响应
-                    if (result.status === 'success') {
-                        showMessage('status-message', result.message, 'success');
-                        setTimeout(() => window.location.reload(), 2000);
-                    } else {
-                        showMessage('status-message', result.message, 'danger');
-                    }
-                    
-                    // 隐藏加载状态
-                    document.getElementById('install-loader').style.display = 'none';
-                    
-                    // 关闭模态框
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('installModal'));
-                    modal.hide();
-                });
-            }
-
-            // 2. 卸载OpenVPN
-            const uninstallForm = document.getElementById('uninstall-form');
-            if (uninstallForm) {
-                uninstallForm.addEventListener('submit', async function(e) {
-                    e.preventDefault();
-                    
-                    if (!confirm('确定要卸载OpenVPN吗？此操作将删除所有配置和客户端证书！')) {
-                        return;
-                    }
-
-                    // 显示加载状态
-                    document.getElementById('uninstall-loader').style.display = 'inline-block';
-                    
-                    // 发送卸载请求
-                    const result = await sendJsonRequest('/uninstall', {});
-
-                    // 处理响应
-                    if (result.status === 'success') {
-                        showMessage('status-message', result.message, 'success');
-                        setTimeout(() => window.location.reload(), 2000);
-                    } else {
-                        showMessage('status-message', result.message, 'danger');
-                    }
-                    
-                    // 隐藏加载状态
-                    document.getElementById('uninstall-loader').style.display = 'none';
-                });
-            }
-
-            // 3. 修改密码
-            const changePwdForm = document.getElementById('change-pwd-form');
-            if (changePwdForm) {
-                changePwdForm.addEventListener('submit', async function(e) {
-                    e.preventDefault();
-                    
-                    const oldPwd = document.getElementById('old-pwd').value;
-                    const newPwd = document.getElementById('new-pwd').value;
-                    const confirmPwd = document.getElementById('confirm-pwd').value;
-
-                    // 客户端验证
-                    if (newPwd !== confirmPwd) {
-                        document.getElementById('pwd-mismatch-error').classList.remove('d-none');
-                        return;
-                    }
-
-                    // 发送修改密码请求
-                    const result = await sendJsonRequest('/change_password', {
-                        old_pwd: oldPwd,
-                        new_pwd: newPwd
-                    });
-
-                    // 处理响应
-                    if (result.status === 'success') {
-                        alert('密码修改成功，请重新登录');
-                        window.location.href = '{{ url_for('auth.logout') }}';
-                    } else {
-                        alert(result.message);
-                    }
-                });
-            }
-
-            // 4. 添加客户端
-            const addClientForm = document.getElementById('add-client-form');
-            if (addClientForm) {
-                addClientForm.addEventListener('submit', async function(e) {
-                    e.preventDefault();
-                    
-                    const clientName = document.getElementById('client_name').value;
-                    let expiry;
-                    
-                    // 获取有效期选择
-                    const expiryChoice = document.querySelector('input[name="expiry_choice"]:checked').value;
-                    if (expiryChoice === 'custom') {
-                        expiry = document.getElementById('expiry_date').value;
-                    } else {
-                        expiry = expiryChoice;
-                    }
-
-                    // 显示加载状态
-                    document.getElementById('add-client-loader').style.display = 'inline-block';
-                    
-                    // 发送添加客户端请求
-                    const result = await sendJsonRequest('/add_client', {
-                        client_name: clientName,
-                        expiry: expiry
-                    });
-
-                    // 处理响应
-                    const messageEl = document.getElementById('add-client-message');
-                    if (result.status === 'success') {
-                        messageEl.className = 'mt-3 alert alert-success';
-                        messageEl.textContent = result.message;
-                        messageEl.classList.remove('d-none');
-                        addClientForm.reset();
-                        setTimeout(() => window.location.reload(), 1500);
-                    } else {
-                        messageEl.className = 'mt-3 alert alert-danger';
-                        messageEl.textContent = result.message;
-                        messageEl.classList.remove('d-none');
-                    }
-                    
-                    // 隐藏加载状态
-                    document.getElementById('add-client-loader').style.display = 'none';
-                });
-            }
-
-            // 5. 确认修改到期时间
-            const confirmModifyExpiryBtn = document.getElementById('confirm-modify-expiry');
-            if (confirmModifyExpiryBtn) {
-                confirmModifyExpiryBtn.addEventListener('click', async function() {
-                    const clientName = document.getElementById('modify-client-name').value;
-                    let expiry;
-                    
-                    // 获取有效期选择
-                    const expiryChoice = document.querySelector('input[name="modify_expiry_choice"]:checked').value;
-                    if (expiryChoice === 'custom') {
-                        expiry = document.getElementById('modify-expiry-date').value;
-                    } else {
-                        expiry = expiryChoice;
-                    }
-
-                    // 显示加载状态
-                    document.getElementById('modify-expiry-loader').style.display = 'inline-block';
-                    
-                    // 发送修改请求
-                    const result = await sendJsonRequest('/modify_client_expiry', {
-                        client_name: clientName,
-                        expiry: expiry
-                    });
-
-                    // 处理响应
-                    const messageEl = document.getElementById('modify-expiry-message');
-                    if (result.status === 'success') {
-                        messageEl.className = 'mt-3 alert alert-success';
-                        messageEl.textContent = result.message;
-                        messageEl.classList.remove('d-none');
-                        setTimeout(() => window.location.reload(), 1500);
-                    } else {
-                        messageEl.className = 'mt-3 alert alert-danger';
-                        messageEl.textContent = result.message;
-                        messageEl.classList.remove('d-none');
-                    }
-                    
-                    // 隐藏加载状态
-                    document.getElementById('modify-expiry-loader').style.display = 'none';
-                });
-            }
-
-            // 6. 撤销客户端
-            document.querySelectorAll('.revoke-form').forEach(form => {
-                form.addEventListener('submit', async function(e) {
-                    e.preventDefault();
-                    const clientName = this.getAttribute('data-client');
-                    
-                    if (!confirm(`确定要撤销客户端 "${clientName}" 吗？此操作不可恢复！`)) {
-                        return;
-                    }
-
-                    // 显示加载状态
-                    document.getElementById('revoke-loader').style.display = 'inline-block';
-                    
-                    // 发送撤销请求
-                    const result = await sendJsonRequest('/revoke_client', {
-                        client_name: clientName
-                    });
-
-                    // 处理响应
-                    const messageEl = document.getElementById('revoke-message');
-                    if (result.status === 'success') {
-                        messageEl.className = 'mt-3 alert alert-success';
-                        messageEl.textContent = result.message;
-                        messageEl.classList.remove('d-none');
-                        setTimeout(() => window.location.reload(), 1500);
-                    } else {
-                        messageEl.className = 'mt-3 alert alert-danger';
-                        messageEl.textContent = result.message;
-                        messageEl.classList.remove('d-none');
-                    }
-                    
-                    // 隐藏加载状态
-                    document.getElementById('revoke-loader').style.display = 'none';
-                });
-            });
-
-            // 7. 禁用客户端
-            document.querySelectorAll('.disable-form').forEach(form => {
-                form.addEventListener('submit', async function(e) {
-                    e.preventDefault();
-                    const clientName = this.getAttribute('data-client');
-                    
-                    if (!confirm(`确定要禁用客户端 "${clientName}" 吗？`)) {
-                        return;
-                    }
-
-                    // 发送禁用请求
-                    const result = await sendJsonRequest('/disconnect_client', {
-                        client_name: clientName
-                    });
-
-                    // 处理响应
-                    if (result.status === 'success') {
-                        alert(result.message);
-                        window.location.reload();
-                    } else {
-                        alert(result.message);
-                    }
-                });
-            });
-
-            // 8. 启用客户端
-            document.querySelectorAll('.enable-form').forEach(form => {
-                form.addEventListener('submit', async function(e) {
-                    e.preventDefault();
-                    const clientName = this.getAttribute('data-client');
-                    
-                    // 发送启用请求
-                    const result = await sendJsonRequest('/enable_client', {
-                        client_name: clientName
-                    });
-
-                    // 处理响应
-                    if (result.status === 'success') {
-                        alert(result.message);
-                        window.location.reload();
-                    } else {
-                        alert(result.message);
-                    }
-                });
-            });
-
-            // 辅助函数：显示消息
-            function showMessage(elementId, message, type) {
-                const el = document.getElementById(elementId);
-                el.textContent = message;
-                el.className = `alert alert-${type}`;
-                el.classList.remove('d-none');
-                
-                // 5秒后自动隐藏
-                setTimeout(() => {
-                    el.classList.add('d-none');
-                }, 5000);
-            }
-        });
-    </script>
-    <script src="{{ url_for('static', filename='js/password-confirm.js') }}"></script>
+<!-- JS 依赖 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- 先加载密码确认工具，再加载主逻辑 -->
+<script src="{{ url_for('static', filename='js/password-confirm.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

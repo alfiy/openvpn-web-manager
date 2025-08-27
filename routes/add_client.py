@@ -1,80 +1,82 @@
 from flask import Blueprint, request, jsonify
 import os
 import subprocess
-from utils.openvpn_utils import get_openvpn_port 
-# 导入CSRF验证所需模块
+from utils.openvpn_utils import get_openvpn_port
+from datetime import datetime, timedelta
+
+# —— CSRF 保护（仅演示，生产环境请用更安全的方案）——
 from flask_wtf.csrf import validate_csrf
 from functools import wraps
 
-# JSON请求CSRF验证装饰器
 def json_csrf_protect(f):
-    """专门用于JSON格式POST请求的CSRF验证装饰器"""
+    """对 JSON POST 请求做 CSRF 校验"""
     @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # 获取请求头中的CSRF令牌
+    def decorated(*args, **kwargs):
         csrf_token = request.headers.get('X-CSRFToken')
-        
-        # 检查令牌是否存在
         if not csrf_token:
-            return jsonify({'status': 'error', 'message': '缺少CSRF令牌'}), 403
-        
-        # 验证令牌有效性
+            return jsonify({'status': 'error', 'message': '缺少 CSRF 令牌'}), 403
         try:
             validate_csrf(csrf_token)
         except Exception:
-            return jsonify({'status': 'error', 'message': 'CSRF令牌验证失败，请刷新页面重试'}), 403
-            
+            return jsonify({'status': 'error', 'message': 'CSRF 令牌验证失败，请刷新页面重试'}), 403
         return f(*args, **kwargs)
-    return decorated_function
+    return decorated
+
 
 add_client_bp = Blueprint('add_client', __name__)
-
 SCRIPT_PATH = './ubuntu-openvpn-install.sh'
 
+
 @add_client_bp.route('/add_client', methods=['POST'])
-@json_csrf_protect  # 应用CSRF保护装饰器
+@json_csrf_protect
 def add_client():
-    
-    # Check if the OpenVPN script exists
+    """新增 OpenVPN 客户端（JSON 接口）"""
+
+    # 1. 检查安装脚本是否存在
     if not os.path.exists(SCRIPT_PATH):
         return jsonify({
-            'status': 'error', 
-            'message': f'OpenVPN安装脚本不存在: {SCRIPT_PATH}。请确保ubuntu-openvpn-install.sh文件存在于工作目录中。'
-        })
-    
-    port = get_openvpn_port()
+            'status': 'error',
+            'message': f'OpenVPN 安装脚本不存在: {SCRIPT_PATH}'
+        }), 400
 
-    client_name = request.form.get('client_name')
+    # 2. 解析 JSON 请求体
+    if not request.is_json:
+        return jsonify({'status': 'error', 'message': '请求必须是 JSON 格式'}), 400
+
+    data = request.get_json(silent=True) or {}
+    client_name = (data.get('client_name') or '').strip()
     if not client_name:
-        return jsonify({'status': 'error', 'message': 'Client name is required'})
-    
-    # Strip whitespace and newline characters
-    client_name = client_name.strip()
-    if not client_name:
-        return jsonify({'status': 'error', 'message': 'Client name is required'})
-    
-    # Get expiration days from form (default to 3650 days if not provided)
-    expiry_days = request.form.get('expiry_days', '3650')
+        return jsonify({'status': 'error', 'message': 'client_name 不能为空'}), 400
+
+    # 3. 有效期（天）
+    expiry_days = data.get('expiry_days', 3650)
     try:
         expiry_days = int(expiry_days)
         if expiry_days <= 0:
             expiry_days = 3650
-    except:
+    except (TypeError, ValueError):
         expiry_days = 3650
-    
 
+    port = get_openvpn_port()
+
+    # 4. 执行 easy-rsa 命令
     try:
-        # Use a more direct approach to add the client
-        # Create the client certificate directly using easy-rsa commands
         commands = [
-            # Change to easy-rsa directory and create client certificate with custom expiration
-            ['sudo', 'bash', '-c', f'cd /etc/openvpn/easy-rsa && EASYRSA_CERT_EXPIRE={expiry_days} ./easyrsa --batch build-client-full "{client_name}" nopass'],
-            # Generate client configuration file - save only in /etc/openvpn/client
-            ['sudo', 'bash', '-c', f'''
-            cd /etc/openvpn/easy-rsa
-            
-            # Create base client configuration in /etc/openvpn/client
-            cp /etc/openvpn/client-template.txt "/etc/openvpn/client/{client_name}.ovpn" 2>/dev/null || echo "client
+            # 生成客户端证书
+            [
+                'sudo', 'bash', '-c',
+                f'cd /etc/openvpn/easy-rsa && EASYRSA_CERT_EXPIRE={expiry_days} '
+                f'./easyrsa --batch build-client-full "{client_name}" nopass'
+            ],
+            # 生成 .ovpn 配置文件
+            [
+                'sudo', 'bash', '-c', f'''
+                set -e
+                cd /etc/openvpn/easy-rsa
+
+                # 基础配置
+                cp /etc/openvpn/client-template.txt "/etc/openvpn/client/{client_name}.ovpn" 2>/dev/null || cat > "/etc/openvpn/client/{client_name}.ovpn" <<EOF
+client
 dev tun
 proto udp
 remote $(curl -s ifconfig.me || echo localhost) {port}
@@ -84,55 +86,57 @@ persist-key
 persist-tun
 remote-cert-tls server
 cipher AES-256-GCM
-verb 3" > "/etc/openvpn/client/{client_name}.ovpn"
-            
-            # Append certificates and keys to the configuration file
-            {{
-                echo ""
-                echo "<ca>"
-                cat "/etc/openvpn/easy-rsa/pki/ca.crt"
-                echo "</ca>"
-                echo ""
-                echo "<cert>"
-                awk '/BEGIN/,/END CERTIFICATE/' "/etc/openvpn/easy-rsa/pki/issued/{client_name}.crt"
-                echo "</cert>"
-                echo ""
-                echo "<key>"
-                cat "/etc/openvpn/easy-rsa/pki/private/{client_name}.key"
-                echo "</key>"
-                echo ""
-                echo "<tls-crypt>"
-                cat /etc/openvpn/tls-crypt.key 2>/dev/null || cat /etc/openvpn/ta.key 2>/dev/null || echo "# TLS key not found"
-                echo "</tls-crypt>"
-            }} >> "/etc/openvpn/client/{client_name}.ovpn"
-            
-            # Set proper permissions for the config file
-            chmod 644 "/etc/openvpn/client/{client_name}.ovpn"
-            
-            echo "Client configuration saved to /etc/openvpn/client/{client_name}.ovpn"
-            ''']
-        ]
-        
-        for cmd in commands:
-            try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-                if result.returncode != 0:
-                    return jsonify({
-                        'status': 'error', 
-                        'message': f'Failed to execute command: {result.stderr}'
-                    })
-            except subprocess.TimeoutExpired:
-                return jsonify({
-                    'status': 'error', 
-                    'message': f'Command timed out while adding client {client_name}'
-                })
-        
-        # Calculate expiry date for display
-        from datetime import datetime, timedelta
-        expiry_date = datetime.now() + timedelta(days=expiry_days)
-        expiry_date_str = expiry_date.strftime('%Y-%m-%d')
-        
-        return jsonify({'status': 'success', 'message': f'Client {client_name} added successfully with {expiry_days} days validity (expires: {expiry_date_str})'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Error: {str(e)}'})
+verb 3
+EOF
 
+                # 追加证书与密钥
+                echo ""  >> "/etc/openvpn/client/{client_name}.ovpn"
+                echo "<ca>" >> "/etc/openvpn/client/{client_name}.ovpn"
+                cat "/etc/openvpn/easy-rsa/pki/ca.crt" >> "/etc/openvpn/client/{client_name}.ovpn"
+                echo "</ca>" >> "/etc/openvpn/client/{client_name}.ovpn"
+
+                echo ""  >> "/etc/openvpn/client/{client_name}.ovpn"
+                echo "<cert>" >> "/etc/openvpn/client/{client_name}.ovpn"
+                awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/' "/etc/openvpn/easy-rsa/pki/issued/{client_name}.crt" >> "/etc/openvpn/client/{client_name}.ovpn"
+                echo "</cert>" >> "/etc/openvpn/client/{client_name}.ovpn"
+
+                echo ""  >> "/etc/openvpn/client/{client_name}.ovpn"
+                echo "<key>" >> "/etc/openvpn/client/{client_name}.ovpn"
+                cat "/etc/openvpn/easy-rsa/pki/private/{client_name}.key" >> "/etc/openvpn/client/{client_name}.ovpn"
+                echo "</key>" >> "/etc/openvpn/client/{client_name}.ovpn"
+
+                echo ""  >> "/etc/openvpn/client/{client_name}.ovpn"
+                echo "<tls-crypt>" >> "/etc/openvpn/client/{client_name}.ovpn"
+                cat /etc/openvpn/tls-crypt.key 2>/dev/null || cat /etc/openvpn/ta.key 2>/dev/null || echo "# TLS key not found" >> "/etc/openvpn/client/{client_name}.ovpn"
+                echo "</tls-crypt>" >> "/etc/openvpn/client/{client_name}.ovpn"
+
+                chmod 644 "/etc/openvpn/client/{client_name}.ovpn"
+                '''
+            ]
+        ]
+
+        for cmd in commands:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if result.returncode != 0:
+                return jsonify({
+                    'status': 'error',
+                    'message': f'命令执行失败: {result.stderr}'
+                }), 500
+
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'status': 'error',
+            'message': f'生成客户端超时'
+        }), 500
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'内部错误: {str(e)}'
+        }), 500
+
+    # 5. 成功返回
+    expiry_date_str = (datetime.now() + timedelta(days=expiry_days)).strftime('%Y-%m-%d')
+    return jsonify({
+        'status': 'success',
+        'message': f'客户端 {client_name} 已创建，有效期 {expiry_days} 天（到期：{expiry_date_str}）'
+    }), 201

@@ -31,7 +31,11 @@ revoke_client_bp = Blueprint('revoke_client', __name__)
 @revoke_client_bp.route('/revoke_client', methods=['POST'])
 @json_csrf_protect
 def revoke_client():
-    client_name = request.form.get('client_name')
+    data = request.get_json()
+    if not data:
+        return jsonify({'status': 'error', 'message': '请求数据格式错误'}), 400
+    
+    client_name = data.get('client_name')
     if not client_name:
         return jsonify({'status': 'error', 'message': 'Client name is required'})
 
