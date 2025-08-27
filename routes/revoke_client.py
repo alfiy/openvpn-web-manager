@@ -1,10 +1,35 @@
 from flask import Blueprint, request, jsonify
 import os
 import subprocess
+# 导入CSRF验证所需模块
+from flask_wtf.csrf import validate_csrf
+from functools import wraps
+
+# JSON请求CSRF验证装饰器
+def json_csrf_protect(f):
+    """专门用于JSON格式POST请求的CSRF验证装饰器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # 获取请求头中的CSRF令牌
+        csrf_token = request.headers.get('X-CSRFToken')
+        
+        # 检查令牌是否存在
+        if not csrf_token:
+            return jsonify({'status': 'error', 'message': '缺少CSRF令牌'}), 403
+        
+        # 验证令牌有效性
+        try:
+            validate_csrf(csrf_token)
+        except Exception:
+            return jsonify({'status': 'error', 'message': 'CSRF令牌验证失败，请刷新页面重试'}), 403
+            
+        return f(*args, **kwargs)
+    return decorated_function
 
 revoke_client_bp = Blueprint('revoke_client', __name__)
 
 @revoke_client_bp.route('/revoke_client', methods=['POST'])
+@json_csrf_protect
 def revoke_client():
     client_name = request.form.get('client_name')
     if not client_name:
