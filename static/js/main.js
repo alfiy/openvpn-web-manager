@@ -281,26 +281,31 @@ function bindEnable() {
 
 /* ---------- 修改到期 ---------- */
 function bindModifyExpiry() {
-    $$('.modify-expiry-btn:not([data-bound])').forEach(btn => {
-        btn.setAttribute('data-bound', 'true');
-        btn.addEventListener('click', () => {
-            $('#modify-client-name').value = btn.dataset.client;
-            const modal = new bootstrap.Modal($('#modifyExpiryModal'));
-            modal.show();
-        });
-    });
+    /* 全局只创建一个实例，避免重复 new */
+    const modalEl  = $('#modifyExpiryModal');
+    const modalIns = bootstrap.Modal.getOrCreateInstance(modalEl);
 
-    const btn = $('#confirm-modify-expiry');
-    if (btn && !btn.hasAttribute('data-bound')) {
-        btn.setAttribute('data-bound', 'true');
-        btn.addEventListener('click', () => {
+    /* 事件委托：打开弹窗 */
+    document.body.addEventListener('click', e => {
+        if (e.target.classList.contains('modify-expiry-btn')) {
+            $('#modify-client-name').value = e.target.dataset.client;
+            modalIns.show();
+        }
+    });
+    /* 确认按钮只绑一次 */
+    const btnConfirm = $('#confirm-modify-expiry');
+    if (btnConfirm && !btnConfirm.hasAttribute('data-bound')) {
+        btnConfirm.setAttribute('data-bound', 'true');
+
+        btnConfirm.addEventListener('click', async () => {
             const name = $('#modify-client-name').value;
 
             let days;
             if ($('#modify-expiryCustom').checked) {
                 const d = $('#modify-expiry-date').value;
                 if (!d) {
-                    $('#modify-expiry-message').innerHTML = '<div class="alert alert-danger">请选择到期日期</div>';
+                    $('#modify-expiry-message').innerHTML =
+                        '<div class="alert alert-danger">请选择到期日期</div>';
                     return;
                 }
                 days = Math.ceil((new Date(d) - new Date()) / 86400000).toString();
@@ -309,38 +314,58 @@ function bindModifyExpiry() {
                 days = selected ? selected.value : '30';
             }
 
-            const l = $('#modify-expiry-loader'), m = $('#modify-expiry-message');
-            l.style.display = 'inline-block'; btn.disabled = true;
+            const loader = $('#modify-expiry-loader');
+            const msg    = $('#modify-expiry-message');
+            loader.style.display = 'inline-block';
+            btnConfirm.disabled  = true;
 
-            authFetch('/modify_client_expiry', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ client_name: name, expiry_days: days })
-            })
-            .then(r => r.json())
-            .then(d => {
-                l.style.display = 'none'; btn.disabled = false;
-                const cls = d.status === 'success' ? 'alert-success' : 'alert-danger';
-                m.innerHTML = `<div class="alert ${cls}">${d.message}</div>`;
-                if (d.status === 'success') {
+            /* 先把焦点移出按钮，防止 aria-hidden 警告 */
+            btnConfirm.blur();
+
+            try {
+                const res = await authFetch('/modify_client_expiry', {
+                    method : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body   : JSON.stringify({ client_name: name, expiry_days: days })
+                });
+                const data = await res.json();
+
+                loader.style.display = 'none';
+                btnConfirm.disabled  = false;
+
+                const cls = data.status === 'success' ? 'alert-success' : 'alert-danger';
+                msg.innerHTML = `<div class="alert ${cls}">${data.message}</div>`;
+
+                if (data.status === 'success') {
+                    /* 延迟 500ms 再关闭，让消息能被看到，也确保焦点已不在按钮上 */
                     setTimeout(() => {
-                        bootstrap.Modal.getInstance($('#modifyExpiryModal')).hide();
+                        modalIns.hide();
                         refreshPage();
-                    }, 2000);
+                    }, 500);
                 }
-            })
-            .catch(err => {
-                l.style.display = 'none'; btn.disabled = false;
-                m.innerHTML = `<div class="alert alert-danger">${err}</div>`;
+            } catch (err) {
+                loader.style.display = 'none';
+                btnConfirm.disabled  = false;
+                msg.innerHTML = `<div class="alert alert-danger">${err}</div>`;
+            }
+        });
+
+        /* 自定义日期联动 */
+        $$('input[name="modify_expiry_choice"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                $('#modifyCustomDateWrapper')
+                    .classList.toggle('d-none', !$('#modify-expiryCustom').checked);
             });
         });
-    }
 
-    $$('input[name="modify_expiry_choice"]').forEach(radio => {
-        radio.addEventListener('change', () => {
-            $('#modifyCustomDateWrapper').classList.toggle('d-none', !$('#modify-expiryCustom').checked);
+        /* 弹窗完全隐藏后清空提示文字 */
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            $('#modify-expiry-message').innerHTML = '';
+            $('#modify-expiry-date').value = '';
+            $('#modify-expiryCustom').checked = false;
+            $('#modifyCustomDateWrapper').classList.add('d-none');
         });
-    });
+    }
 }
 
 /* ---------- 卸载 ---------- */
