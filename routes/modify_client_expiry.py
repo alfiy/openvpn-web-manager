@@ -99,7 +99,7 @@ def modify_client_expiry():
     """Modify client certificate expiration date by revoke + reissue"""
     data = request.get_json()
     client_name = data.get('client_name')
-    expiry_days = data.get('expiry')
+    expiry_days = data.get('expiry_days')
     
     port = get_openvpn_port()
 
