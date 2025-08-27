@@ -120,7 +120,7 @@
                 </header>
                 <div class="card-body">
                     <div class="mb-3">
-                        <input type="text" id="client-search" class="form-control form-control-sm" placeholder="搜索客户端名称...">
+                        <input type="text" id="client-search" class="form-control form-control-sm" placeholder="搜索客户端名称..." value="{{ q or '' }}">
                     </div>
 
                     {% if clients %}
@@ -135,7 +135,7 @@
                                 <th>操作</th>
                             </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="client-tbody">
                             {% for client in clients %}
                                 {% set cname = client.name if client is mapping else client %}
                                 <tr>
@@ -230,6 +230,144 @@
     </section>
     {% endif %}
 </div>
+
+
+<!-- 
+<div class="col-md-6">
+    <div class="card h-100">
+        <header class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">客户端管理</h5>
+            {% if total_pages > 1 %}
+                <small class="text-muted">第 {{ page }} 页，共 {{ total_pages }} 页</small>
+            {% endif %}
+        </header>
+
+        <div class="card-body">
+            <!-- 搜索框 -->
+            <div class="mb-3">
+                <input type="text" id="client-search"
+                       class="form-control form-control-sm"
+                       placeholder="搜索客户端名称后回车..."
+                       value="{{ q or '' }}">
+            </div>
+
+            {% if clients %}
+                <!-- 表格 -->
+                <div class="table-responsive">
+                    <table class="table table-hover" id="client-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>客户端名称</th>
+                                <th>在线状态</th>
+                                <th>到期时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="client-tbody">
+                            {% for client in clients %}
+                                {% set cname = client.name if client is mapping else client %}
+                                <tr>
+                                    <td>{{ ((page - 1) * 10) + loop.index }}</td>
+                                    <td>{{ cname }}</td>
+                                    <td>
+                                        {% if client is mapping and client.online %}
+                                            <span class="badge bg-success"><i class="fa fa-circle"></i> 在线</span>
+                                            {% if client.vpn_ip %}<br><small class="text-success">VPN: {{ client.vpn_ip }}</small>{% endif %}
+                                            {% if client.real_ip %}<br><small class="text-muted">来源: {{ client.real_ip }}</small>{% endif %}
+                                            {% if client.duration %}<br><small class="text-info">时长: {{ client.duration }}</small>{% endif %}
+                                        {% else %}
+                                            <span class="badge bg-secondary"><i class="fa fa-circle"></i> 离线</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if client is mapping and client.expiry %}
+                                            <small class="text-muted">{{ client.expiry }}</small>
+                                        {% else %}
+                                            <small class="text-muted">未知</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="d-flex flex-wrap gap-1">
+                                        <a href="{{ url_for('download_client.download_client', client_name=cname) }}"
+                                           class="btn btn-sm btn-primary">下载配置</a>
+
+                                        <button class="btn btn-sm btn-info modify-expiry-btn"
+                                                data-client="{{ cname }}"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#modifyExpiryModal">修改到期时间</button>
+
+                                        {% if client is mapping and client.online %}
+                                            <button class="btn btn-sm btn-warning disconnect-btn" data-client="{{ cname }}">禁用</button>
+                                        {% endif %}
+
+                                        {% if client is mapping and client.disabled %}
+                                            <button class="btn btn-sm btn-success enable-btn" data-client="{{ cname }}">重新启用</button>
+                                        {% endif %}
+
+                                        <button class="btn btn-sm btn-danger revoke-btn" data-client="{{ cname }}">撤销</button>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 分页 -->
+                {% if total_pages > 1 %}
+                    <nav aria-label="客户端分页导航">
+                        <ul class="pagination pagination-sm justify-content-center">
+                            <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                                <a class="page-link" href="?page={{ page - 1 }}" aria-label="上一页">&laquo;</a>
+                            </li>
+
+                            {% set start_page = [1, page - 2]|max %}
+                            {% set end_page = [total_pages, page + 2]|min %}
+
+                            {% if start_page > 1 %}
+                                <li class="page-item"><a class="page-link" href="?page=1">1</a></li>
+                                {% if start_page > 2 %}
+                                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                                {% endif %}
+                            {% endif %}
+
+                            {% for p in range(start_page, end_page + 1) %}
+                                <li class="page-item {% if p == page %}active{% endif %}">
+                                    <a class="page-link" href="?page={{ p }}">{{ p }}</a>
+                                </li>
+                            {% endfor %}
+
+                            {% if end_page < total_pages %}
+                                {% if end_page < total_pages - 1 %}
+                                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                                {% endif %}
+                                <li class="page-item"><a class="page-link" href="?page={{ total_pages }}">{{ total_pages }}</a></li>
+                            {% endif %}
+
+                            <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                                <a class="page-link" href="?page={{ page + 1 }}" aria-label="下一页">&raquo;</a>
+                            </li>
+                        </ul>
+                    </nav>
+                {% endif %}
+
+                <div class="loader" id="revoke-loader" style="display:none;"></div>
+                <div id="revoke-message" class="mt-3" role="alert"></div>
+
+            {% else %}
+                {# 命中/未命中提示 #}
+                {% if q %}
+                    <p class="text-muted mb-0">
+                        未找到与 “<strong>{{ q }}</strong>” 相关的客户端。
+                    </p>
+                {% else %}
+                    <p class="text-muted mb-0">没有客户端证书。请添加新客户端。</p>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div> -->
+
+
 
 <!-- 修改到期时间模态框 -->
 <div class="modal fade" id="modifyExpiryModal" tabindex="-1" aria-labelledby="modifyExpiryModalLabel" aria-hidden="true">
@@ -361,5 +499,7 @@
 <!-- 先加载密码确认工具，再加载主逻辑 -->
 <script src="{{ url_for('static', filename='js/password-confirm.js') }}"></script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+
 </body>
 </html>
