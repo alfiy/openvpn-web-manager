@@ -107,10 +107,24 @@ function bindInstall() {
 
     $('#confirm-install')?.addEventListener('click', async () => {
         const port = Number($('#install-port').value);
-        const sel  = $('#install-ip-select');
-        const ip   = sel.value || $('#install-ip-input').value.trim();
-        if (!Number.isInteger(port) || port < 1025 || port > 65534) { alert('端口号必须在 1025-65534 之间'); return; }
-        if (!ip) { alert('请选择或输入服务器 IP'); return; }
+        const sel = $('#install-ip-select');
+        const ip = sel.value || $('#install-ip-input').value.trim();
+
+        if (!Number.isInteger(port) || port < 1025 || port > 65534) {
+            alert('端口号必须在 1025-65534 之间');
+            return;
+        }
+
+        if (!ip) {
+            alert('请选择或输入服务器 IP');
+            return;
+        }
+
+        // 调用新增的IP验证函数
+        if (!sel.value && !isValidIP(ip)) {
+            alert('您输入的IP地址格式不正确，请重新输入');
+            return;
+        }
 
         modal?.hide();
         $('#install-loader').style.display = 'block';
@@ -132,7 +146,7 @@ function bindInstall() {
                     location.href = data.redirect + '?ts=' + Date.now();
                 }, 1000);
             }
-                
+
         } catch (err) {
             $('#install-loader').style.display = 'none';
             m.textContent = '安装失败: ' + err.message;
@@ -144,6 +158,16 @@ function bindInstall() {
         const wrap = $('#manual-ip-wrapper');
         if (wrap) wrap.style.display = 'none';
     });
+}
+
+/**
+ * 验证IPv4地址的合法性
+ * @param {string} ip - 需要验证的IP地址字符串
+ * @returns {boolean} - 如果IP地址合法返回true，否则返回false
+ */
+function isValidIP(ip) {
+    const regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    return regex.test(ip);
 }
 
 /* ---------- 添加客户端 ---------- */

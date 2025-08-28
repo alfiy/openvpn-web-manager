@@ -225,19 +225,54 @@ def reset_password(token):
 
     return render_template('reset_password.html')
 
+
 # ---------------- 修改登录校验 ----------------
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@csrf.exempt
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        # ⚠️ 根据请求类型，从正确的位置获取数据
+        is_api_request = request.is_json or 'application/json' in request.headers.get('Content-Type', '')
+        
+        if is_api_request:
+            data = request.get_json()
+            if not data:
+                return jsonify({'status': 'error', 'message': '无效的JSON请求'}), 400
+            username = data.get('username')
+            password = data.get('password')
+        else:
+            # 兼容传统的表单提交
+            username = request.form.get('username')
+            password = request.form.get('password')
+
+        # 检查用户名和密码是否为空，这是个好习惯
+        if not username or not password:
+             return jsonify({'status': 'error', 'message': '用户名和密码不能为空'}), 400
+
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
             session['logged_in'] = True
             session['username'] = username
-            return redirect(url_for('index.index'))
-        return render_template('login.html', error='用户名或密码错误')
+            
+            # 登录成功，根据请求类型返回不同响应
+            if is_api_request:
+                csrf_token = generate_csrf()
+                return jsonify({
+                    'status': 'success',
+                    'message': '登录成功',
+                    'csrf_token': csrf_token
+                }), 200
+            else:
+                return redirect(url_for('index.index'))
+        
+        # 登录失败，根据请求类型返回不同响应
+        if is_api_request:
+            return jsonify({'status': 'error', 'message': '用户名或密码错误'}), 401
+        else:
+            return render_template('login.html', error='用户名或密码错误')
+    
     return render_template('login.html')
+
 
 @auth_bp.route('/change_password', methods=['POST'])
 @login_required
