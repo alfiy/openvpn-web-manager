@@ -76,6 +76,12 @@ function bindInstall() {
     const modalEl = $('#installModal');
     const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
 
+    // 添加IP地址验证函数
+    function isValidIP(ip) {
+        const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+        return ipRegex.test(ip);
+    }
+
     btn.addEventListener('click', async () => {
         if (!modal) return;
         try {
@@ -117,12 +123,16 @@ function bindInstall() {
 
         if (!ip) {
             alert('请选择或输入服务器 IP');
+            // 改进：当没有输入IP时，将焦点设置到IP输入框
+            $('#install-ip-input').focus();
             return;
         }
 
         // 调用新增的IP验证函数
         if (!sel.value && !isValidIP(ip)) {
             alert('您输入的IP地址格式不正确，请重新输入');
+            // 改进：当IP格式不正确时，将焦点设置到IP输入框
+            $('#install-ip-input').focus();
             return;
         }
 
