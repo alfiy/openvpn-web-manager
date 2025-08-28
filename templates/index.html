@@ -44,12 +44,12 @@
 
                     {% if status == 'not_installed' %}
                         <button id="install-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#installModal">安装OpenVPN</button>
-                        <div class="loader mt-2" id="install-loader" style="display:none;">正在安装...</div>
+                        <div class="loader mt-2" id="install-loader" style="display:none;"></div>
                     {% endif %}
 
                     {% if status in ['running', 'installed'] %}
                         <button id="uninstall-btn" class="btn btn-danger">卸载OpenVPN</button>
-                        <div class="loader mt-2" id="uninstall-loader" style="display:none;">正在卸载...</div>
+                        <div class="loader mt-2" id="uninstall-loader" style="display:none;"></div>
                     {% endif %}
                 </div>
             </div>
