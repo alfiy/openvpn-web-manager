@@ -34,9 +34,9 @@ function refreshPage() {
             const newStatus = doc.querySelector('.card:first-child .card-body');
             if (curStatus && newStatus) curStatus.innerHTML = newStatus.innerHTML;
 
-            const curClient = $('.col-md-6:last-child .card-body');
-            const newClient = doc.querySelector('.col-md-6:last-child .card-body');
-            if (curClient && newClient) curClient.innerHTML = newClient.innerHTML;
+            // const curClient = $('.col-md-6:last-child .card-body');
+            // const newClient = doc.querySelector('.col-md-6:last-child .card-body');
+            // if (curClient && newClient) curClient.innerHTML = newClient.innerHTML;
 
             window.scrollTo(0, scroll);
             bindAll();
@@ -127,7 +127,12 @@ function bindInstall() {
             $('#install-loader').style.display = 'none';
             m.textContent = data.message;
             m.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
-            if (data.status === 'success') setTimeout(refreshPage, 1200);
+            if (data.status === 'success') {
+                setTimeout(() => {
+                    location.href = data.redirect + '?ts=' + Date.now();
+                }, 1000);
+            }
+                
         } catch (err) {
             $('#install-loader').style.display = 'none';
             m.textContent = '安装失败: ' + err.message;
@@ -185,7 +190,7 @@ function bindAddClient() {
                 form.reset();
                 toggleCustomDate();
                 setTimeout(() => msgDiv.innerHTML = '', 2000);
-                setTimeout(refreshPage, 2200);
+                window.clientAjax.load();
             }
         })
         .catch(err => {
@@ -201,22 +206,8 @@ document.addEventListener('click', e => {
     const name = e.target.dataset.client;
     if (!confirm(`确定撤销客户端 “${name}” 的证书吗？此操作不可恢复！`)) return;
 
-    const l = $('#revoke-loader') || (() => {
-        const loader = document.createElement('div');
-        loader.id = 'revoke-loader';
-        loader.style.display = 'none';
-        document.body.appendChild(loader);
-        return loader;
-    })();
-    const m = $('#revoke-message') || (() => {
-        const msg = document.createElement('div');
-        msg.id = 'revoke-message';
-        document.body.appendChild(msg);
-        return msg;
-    })();
-
-    l.style.display = 'block';
-    m.innerHTML = '';
+    const msg = $('#client-revoke-msg');
+    msg.innerHTML = '<div class="spinner-border spinner-border-sm"></div> 撤销中...';
 
     authFetch('/revoke_client', {
         method: 'POST',
@@ -225,14 +216,15 @@ document.addEventListener('click', e => {
     })
     .then(r => r.json())
     .then(d => {
-        l.style.display = 'none';
         const cls = d.status === 'success' ? 'alert-success' : 'alert-danger';
-        m.innerHTML = `<div class="alert ${cls}">${d.message}</div>`;
-        if (d.status === 'success') setTimeout(refreshPage, 1500);
+        msg.innerHTML = `<div class="alert ${cls}">${d.message}</div>`;
+        if (d.status === 'success') {
+            setTimeout(() => msg.innerHTML = '', 2000);
+            window.clientAjax.load();   // 局部重拉
+        }
     })
     .catch(err => {
-        l.style.display = 'none';
-        m.innerHTML = `<div class="alert alert-danger">网络错误：${err}</div>`;
+        msg.innerHTML = `<div class="alert alert-danger">${err}</div>`;
     });
 });
 
@@ -340,7 +332,7 @@ function bindModifyExpiry() {
                     /* 延迟 500ms 再关闭，让消息能被看到，也确保焦点已不在按钮上 */
                     setTimeout(() => {
                         modalIns.hide();
-                        refreshPage();
+                        window.clientAjax.load();
                     }, 500);
                 }
             } catch (err) {
@@ -384,7 +376,11 @@ function bindUninstall() {
                     l.style.display = 'none';
                     m.textContent = d.message;
                     m.className = d.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
-                    if (d.status === 'success') setTimeout(refreshPage, 1200);
+                    if (data.status === 'success') {
+                        setTimeout(() => {
+                            location.href = data.redirect + '?ts=' + Date.now();
+                        }, 1000);
+                    }
                 })
                 .catch(err => {
                     l.style.display = 'none';
@@ -430,9 +426,6 @@ function bindChangePwd() {
     });
 }
 
-
-
-
 /* ---------- 初始化 ---------- */
 document.addEventListener('DOMContentLoaded', () => {
     const tomorrow = new Date();
@@ -447,19 +440,106 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ---------- 客户端搜索 ---------- */
-// (function () {
-//     const input = document.getElementById('client-search');
-//     if (!input) return;
+(() => {
+    const input   = document.getElementById('client-search');
+    const tbody   = document.getElementById('client-tbody');
+    const paging  = document.getElementById('pagination');
+    const pageInfo= document.getElementById('page-info');
+    const noData  = document.getElementById('no-data');
+    const PER_PAGE = 10;
 
-//     // 阻止浏览器默认提交
-//     input.addEventListener('keydown', function (e) {
-//         if (e.key === 'Enter') {
-//             e.preventDefault();               // 关键：阻止表单提交
-//             const kw = encodeURIComponent(this.value.trim());
-//             // 强制跳到 /clients
-//             location.href = kw
-//                 ? `/clients?q=${kw}`
-//                 : '/clients';
-//         }
-//     });
-// })();
+    /* 统一渲染 */
+    function render(data) {
+        pageInfo.textContent = data.total_pages > 1 ? `第 ${data.page} 页，共 ${data.total_pages} 页` : '';
+        if (!data.clients.length) {
+            tbody.innerHTML = '';
+            paging.innerHTML = '';
+            noData.style.display = 'block';
+            noData.textContent = data.q ? `未找到与 “${data.q}” 相关的客户端。` : '没有客户端证书。';
+            return;
+        }
+        noData.style.display = 'none';
+
+        tbody.innerHTML = data.clients.map((c, idx) => {
+            const rowIdx = (data.page - 1) * PER_PAGE + idx + 1;
+            return `
+              <tr>
+                <td>${rowIdx}</td>
+                <td>${c.name}</td>
+                <td>
+                  ${c.online
+                    ? `<span class="badge bg-success"><i class="fa fa-circle"></i> 在线</span>
+                       ${c.vpn_ip ? `<br><small class="text-success">VPN: ${c.vpn_ip}</small>` : ''}
+                       ${c.real_ip ? `<br><small class="text-muted">来源: ${c.real_ip}</small>` : ''}
+                       ${c.duration ? `<br><small class="text-info">时长: ${c.duration}</small>` : ''}`
+                    : `<span class="badge bg-secondary"><i class="fa fa-circle"></i> 离线</span>`
+                  }
+                </td>
+                <td><small class="text-muted">${c.expiry || '未知'}</small></td>
+                <td class="d-flex flex-wrap gap-1">
+                  <a href="/download_client/${c.name}" class="btn btn-sm btn-primary">下载配置</a>
+                  <button class="btn btn-sm btn-info modify-expiry-btn"
+                          data-client="${c.name}"
+                          data-bs-toggle="modal"
+                          data-bs-target="#modifyExpiryModal">修改到期</button>
+                  ${c.online ? `<button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">禁用</button>` : ''}
+                  ${c.disabled ? `<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">重新启用</button>` : ''}
+                  <button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">撤销</button>
+                </td>
+              </tr>`;
+        }).join('');
+
+        /* 分页按钮 */
+        paging.innerHTML = '';
+        if (data.total_pages <= 1) return;
+
+        const make = (page, text, disabled=false, active=false) =>
+            `<li class="page-item ${disabled?'disabled':''} ${active?'active':''}">
+               <a class="page-link" href="#" data-page="${page}">${text}</a>
+             </li>`;
+
+        paging.innerHTML += make(data.page - 1, '«', data.page <= 1);
+
+        const start = Math.max(1, data.page - 2);
+        const end   = Math.min(data.total_pages, data.page + 2);
+
+        if (start > 1) paging.innerHTML += make(1, 1);
+        if (start > 2) paging.innerHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+
+        for (let p = start; p <= end; p++) paging.innerHTML += make(p, p, false, p === data.page);
+
+        if (end < data.total_pages - 1) paging.innerHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        if (end < data.total_pages) paging.innerHTML += make(data.total_pages, data.total_pages);
+
+        paging.innerHTML += make(data.page + 1, '»', data.page >= data.total_pages);
+    }
+
+    /* AJAX 拉数据 */
+    function load(page=1, q='') {
+        fetch(`/clients/data?page=${page}&q=${encodeURIComponent(q)}`)
+            .then(r => r.json())
+            .then(render)
+            .catch(console.error);
+    }
+
+    /* 事件 */
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            load(1, input.value.trim());
+        }
+    });
+    paging.addEventListener('click', e => {
+        if (e.target.classList.contains('page-link')) {
+            e.preventDefault();
+            const page = parseInt(e.target.dataset.page);
+            if (page) load(page, input.value.trim());
+        }
+    });
+
+    /* 首次加载 */
+    load();
+
+    /* 把 load 暴露到全局，供撤销按钮调用 */
+    window.clientAjax = { load };
+})();
