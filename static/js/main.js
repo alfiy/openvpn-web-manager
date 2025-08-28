@@ -412,11 +412,6 @@ function bindUninstall() {
                     m.textContent = d.message;
                     m.className = d.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
                     if (d.status === 'success') setTimeout(refreshPage,1200);
-                    // if (data.status === 'success') {
-                    //     setTimeout(() => {
-                    //         location.href = data.redirect + '?ts=' + Date.now();
-                    //     }, 1000);
-                    // }
                 })
                 .catch(err => {
                     l.style.display = 'none';
@@ -518,7 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
                           data-client="${c.name}"
                           data-bs-toggle="modal"
                           data-bs-target="#modifyExpiryModal">修改到期</button>
-                  ${c.online ? `<button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">禁用</button>` : ''}
+                  <button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">禁用</button>
                   ${c.disabled ? `<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">重新启用</button>` : ''}
                   <button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">撤销</button>
                 </td>
