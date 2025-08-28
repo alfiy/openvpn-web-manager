@@ -40,12 +40,12 @@ def uninstall():
             ['sudo', 'systemctl', 'stop', 'iptables-openvpn'],
             ['sudo', 'systemctl', 'disable', 'iptables-openvpn'],
             # Stop and disable vpnwm service
-            ['sudo', 'systemctl', 'stop', 'vpnwm'],
-            ['sudo', 'systemctl', 'disable', 'vpnwm'],
+            # ['sudo', 'systemctl', 'stop', 'vpnwm'],
+            # ['sudo', 'systemctl', 'disable', 'vpnwm'],
             # Remove systemd service file
             ['sudo', 'rm', '-f', '/etc/systemd/system/iptables-openvpn.service'],
             # Remove systemd service file
-            ['sudo', 'rm', '-f', '/etc/systemd/system/vpnwm.service'],
+            # ['sudo', 'rm', '-f', '/etc/systemd/system/vpnwm.service'],
             # Reload systemd
             ['sudo', 'systemctl', 'daemon-reload'],
             # Remove iptables scripts
@@ -59,7 +59,7 @@ def uninstall():
             ['sudo', 'rm', '-rf', '/var/log/openvpn'],
             ['sudo', 'rm', '-rf', '/etc/openvpn/client'],
             # Remove client config files from /etc/openvpn/client
-            ['sudo', 'find', '/etc/openvpn/client/', '-maxdepth', '1', '-name', '*.ovpn', '-delete'],
+            # ['sudo', 'find', '/etc/openvpn/client/', '-maxdepth', '1', '-name', '*.ovpn', '-delete'],
             # Restore IP forwarding
             ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=0'],
         ]
@@ -78,7 +78,7 @@ def uninstall():
         if failed_commands:
             return jsonify({'status': 'warning', 'message': f'OpenVPN partially uninstalled. Some commands failed: {"; ".join(failed_commands)}'})
         else:
-            return jsonify({'status': 'success', 'message': 'OpenVPN completely uninstalled successfully'})
+            return jsonify({'status': 'success', 'message': 'OpenVPN completely uninstalled successfully','redirect': '/'})
 
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Uninstall error: {str(e)}'})

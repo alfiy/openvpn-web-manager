@@ -103,7 +103,8 @@ def install():
         if process.returncode == 0:
             return jsonify({
                 'status': 'success',
-                'message': f'OpenVPN 安装成功，服务器 IP: {server_ip}，端口: {port}'
+                'message': f'OpenVPN 安装成功，服务器 IP: {server_ip}，端口: {port}',
+                'redirect': '/' # 告诉前端刷新到根路径
             })
         else:
             return jsonify({'status': 'error', 'message': f'安装失败: {stderr}'})
