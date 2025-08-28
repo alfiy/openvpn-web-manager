@@ -44,9 +44,6 @@ function refreshPage() {
         .catch(console.error);
 }
 
-function startAutoRefresh() {
-    autoRefreshInterval = setInterval(refreshPage, 5000);
-}
 
 /* 统一绑定 */
 function bindAll() {
@@ -253,12 +250,16 @@ document.addEventListener('click', e => {
         const cls = d.status === 'success' ? 'alert-success' : 'alert-danger';
         msg.innerHTML = `<div class="alert ${cls}">${d.message}</div>`;
         if (d.status === 'success') {
-            setTimeout(() => msg.innerHTML = '', 2000);
-            window.clientAjax.load();   // 局部重拉
+            toggleCustomDate();
+            window.clientAjax.load();
         }
+        // 成功或失败的提示都在 5 秒后自动消失
+        setTimeout(() => msg.innerHTML = '', 5000);
     })
     .catch(err => {
         msg.innerHTML = `<div class="alert alert-danger">${err}</div>`;
+        // 确保错误提示也能自动消失
+        setTimeout(() => msg.innerHTML = '', 5000);
     });
 });
 
@@ -410,11 +411,12 @@ function bindUninstall() {
                     l.style.display = 'none';
                     m.textContent = d.message;
                     m.className = d.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
-                    if (data.status === 'success') {
-                        setTimeout(() => {
-                            location.href = data.redirect + '?ts=' + Date.now();
-                        }, 1000);
-                    }
+                    if (d.status === 'success') setTimeout(refreshPage,1200);
+                    // if (data.status === 'success') {
+                    //     setTimeout(() => {
+                    //         location.href = data.redirect + '?ts=' + Date.now();
+                    //     }, 1000);
+                    // }
                 })
                 .catch(err => {
                     l.style.display = 'none';
