@@ -242,6 +242,7 @@ tls-cipher TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256
 ignore-unknown-option block-outside-dns
 setenv opt block-outside-dns
 verb 3
+log openvpn.log
 EOF
     
     echo "🎉 OpenVPN installation completed successfully!"
