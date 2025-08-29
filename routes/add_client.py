@@ -57,9 +57,7 @@ def add_client():
     except (TypeError, ValueError):
         expiry_days = 3650
 
-    port = get_openvpn_port()
-
-    # 4. 执行 easy-rsa 命令
+    # 4. 执行 easy-rsa 命令并生成 .ovpn
     try:
         commands = [
             # 生成客户端证书
@@ -68,49 +66,41 @@ def add_client():
                 f'cd /etc/openvpn/easy-rsa && EASYRSA_CERT_EXPIRE={expiry_days} '
                 f'./easyrsa --batch build-client-full "{client_name}" nopass'
             ],
-            # 生成 .ovpn 配置文件
+            # 基于 client-template.txt 追加证书与密钥
             [
                 'sudo', 'bash', '-c', f'''
                 set -e
-                cd /etc/openvpn/easy-rsa
+                CONFIG="/etc/openvpn/client/{client_name}.ovpn"
 
-                # 基础配置
-                cp /etc/openvpn/client-template.txt "/etc/openvpn/client/{client_name}.ovpn" 2>/dev/null || cat > "/etc/openvpn/client/{client_name}.ovpn" <<EOF
-client
-dev tun
-proto udp
-remote $(curl -s ifconfig.me || echo localhost) {port}
-resolv-retry infinite
-nobind
-persist-key
-persist-tun
-remote-cert-tls server
-cipher AES-256-GCM
-verb 3
-EOF
+                # 1) 先复制模板
+                cp /etc/openvpn/client-template.txt "$CONFIG"
 
-                # 追加证书与密钥
-                echo ""  >> "/etc/openvpn/client/{client_name}.ovpn"
-                echo "<ca>" >> "/etc/openvpn/client/{client_name}.ovpn"
-                cat "/etc/openvpn/easy-rsa/pki/ca.crt" >> "/etc/openvpn/client/{client_name}.ovpn"
-                echo "</ca>" >> "/etc/openvpn/client/{client_name}.ovpn"
+                # 2) 追加 CA
+                echo ""  >> "$CONFIG"
+                echo "<ca>" >> "$CONFIG"
+                cat /etc/openvpn/easy-rsa/pki/ca.crt >> "$CONFIG"
+                echo "</ca>" >> "$CONFIG"
 
-                echo ""  >> "/etc/openvpn/client/{client_name}.ovpn"
-                echo "<cert>" >> "/etc/openvpn/client/{client_name}.ovpn"
-                awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/' "/etc/openvpn/easy-rsa/pki/issued/{client_name}.crt" >> "/etc/openvpn/client/{client_name}.ovpn"
-                echo "</cert>" >> "/etc/openvpn/client/{client_name}.ovpn"
+                # 3) 追加客户端证书
+                echo ""  >> "$CONFIG"
+                echo "<cert>" >> "$CONFIG"
+                awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/' \
+                    /etc/openvpn/easy-rsa/pki/issued/{client_name}.crt >> "$CONFIG"
+                echo "</cert>" >> "$CONFIG"
 
-                echo ""  >> "/etc/openvpn/client/{client_name}.ovpn"
-                echo "<key>" >> "/etc/openvpn/client/{client_name}.ovpn"
-                cat "/etc/openvpn/easy-rsa/pki/private/{client_name}.key" >> "/etc/openvpn/client/{client_name}.ovpn"
-                echo "</key>" >> "/etc/openvpn/client/{client_name}.ovpn"
+                # 4) 追加私钥
+                echo ""  >> "$CONFIG"
+                echo "<key>" >> "$CONFIG"
+                cat /etc/openvpn/easy-rsa/pki/private/{client_name}.key >> "$CONFIG"
+                echo "</key>" >> "$CONFIG"
 
-                echo ""  >> "/etc/openvpn/client/{client_name}.ovpn"
-                echo "<tls-crypt>" >> "/etc/openvpn/client/{client_name}.ovpn"
-                cat /etc/openvpn/tls-crypt.key 2>/dev/null || cat /etc/openvpn/ta.key 2>/dev/null || echo "# TLS key not found" >> "/etc/openvpn/client/{client_name}.ovpn"
-                echo "</tls-crypt>" >> "/etc/openvpn/client/{client_name}.ovpn"
+                # 5) 追加 tls-crypt 密钥
+                echo ""  >> "$CONFIG"
+                echo "<tls-crypt>" >> "$CONFIG"
+                cat /etc/openvpn/tls-crypt.key >> "$CONFIG"
+                echo "</tls-crypt>" >> "$CONFIG"
 
-                chmod 644 "/etc/openvpn/client/{client_name}.ovpn"
+                chmod 644 "$CONFIG"
                 '''
             ]
         ]
@@ -126,7 +116,7 @@ EOF
     except subprocess.TimeoutExpired:
         return jsonify({
             'status': 'error',
-            'message': f'生成客户端超时'
+            'message': '生成客户端超时'
         }), 500
     except Exception as e:
         return jsonify({
