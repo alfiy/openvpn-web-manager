@@ -1,5 +1,5 @@
 /* ---------- 简写工具 ---------- */
-const $  = (sel, ctx = document) => ctx.querySelector(sel);
+const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
 
 /* ---------- 带认证 + CSRF 的 fetch ---------- */
@@ -44,14 +44,13 @@ function refreshPage() {
         .catch(console.error);
 }
 
-
 /* 统一绑定 */
 function bindAll() {
     bindInstall();
     bindAddClient();
     bindDownload();
-    bindDisconnect();
-    bindEnable();
+    // bindDisconnect();
+    // bindEnable(); // 移除此调用，其功能已通过事件委托实现
     bindModifyExpiry();
     bindUninstall();
     bindChangePwd();
@@ -186,6 +185,17 @@ function bindAddClient() {
     $$('input[name="expiry_choice"]').forEach(r => r.addEventListener('change', toggleCustomDate));
     toggleCustomDate();
 
+    // 💡 修复：将重置按钮的绑定逻辑移到此处，确保在每次刷新时都能正确绑定
+    const resetButton = $('#reset-btn');
+    if (resetButton) {
+        resetButton.addEventListener('click', () => {
+            const clientNameInput = $('#client_name');
+            if (clientNameInput) {
+                clientNameInput.value = '';
+            }
+        });
+    }
+
     form.addEventListener('submit', e => {
         e.preventDefault();
         const loader = $('#add-client-loader');
@@ -212,22 +222,22 @@ function bindAddClient() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ client_name: nameVal, expiry_days: expiryDays })
         })
-        .then(r => r.json())
-        .then(data => {
-            loader.style.display = 'none';
-            const cls = data.status === 'success' ? 'alert-success' : 'alert-danger';
-            msgDiv.innerHTML = `<div class="alert ${cls}">${data.message}</div>`;
-            if (data.status === 'success') {
-                form.reset();
-                toggleCustomDate();
-                setTimeout(() => msgDiv.innerHTML = '', 2000);
-                window.clientAjax.load();
-            }
-        })
-        .catch(err => {
-            loader.style.display = 'none';
-            msgDiv.innerHTML = `<div class="alert alert-danger">${err}</div>`;
-        });
+            .then(r => r.json())
+            .then(data => {
+                loader.style.display = 'none';
+                const cls = data.status === 'success' ? 'alert-success' : 'alert-danger';
+                msgDiv.innerHTML = `<div class="alert ${cls}">${data.message}</div>`;
+                if (data.status === 'success') {
+                    form.reset();
+                    toggleCustomDate();
+                    setTimeout(() => msgDiv.innerHTML = '', 2000);
+                    window.clientAjax.load();
+                }
+            })
+            .catch(err => {
+                loader.style.display = 'none';
+                msgDiv.innerHTML = `<div class="alert alert-danger">${err}</div>`;
+            });
     });
 }
 
@@ -245,22 +255,22 @@ document.addEventListener('click', e => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ client_name: name })
     })
-    .then(r => r.json())
-    .then(d => {
-        const cls = d.status === 'success' ? 'alert-success' : 'alert-danger';
-        msg.innerHTML = `<div class="alert ${cls}">${d.message}</div>`;
-        if (d.status === 'success') {
-            toggleCustomDate();
-            window.clientAjax.load();
-        }
-        // 成功或失败的提示都在 5 秒后自动消失
-        setTimeout(() => msg.innerHTML = '', 5000);
-    })
-    .catch(err => {
-        msg.innerHTML = `<div class="alert alert-danger">${err}</div>`;
-        // 确保错误提示也能自动消失
-        setTimeout(() => msg.innerHTML = '', 5000);
-    });
+        .then(r => r.json())
+        .then(d => {
+            const cls = d.status === 'success' ? 'alert-success' : 'alert-danger';
+            msg.innerHTML = `<div class="alert ${cls}">${d.message}</div>`;
+            if (d.status === 'success') {
+                toggleCustomDate();
+                window.clientAjax.load();
+            }
+            // 成功或失败的提示都在 5 秒后自动消失
+            setTimeout(() => msg.innerHTML = '', 5000);
+        })
+        .catch(err => {
+            msg.innerHTML = `<div class="alert alert-danger">${err}</div>`;
+            // 确保错误提示也能自动消失
+            setTimeout(() => msg.innerHTML = '', 5000);
+        });
 });
 
 /* ---------- 下载（可直接走超链接，因此仅在你需要按钮时使用） ---------- */
@@ -268,24 +278,6 @@ function bindDownload() {
     $$('.download-btn:not([data-bound])').forEach(btn => {
         btn.setAttribute('data-bound', 'true');
         btn.addEventListener('click', () => location.href = `/download_client/${btn.dataset.client}`);
-    });
-}
-
-/* ---------- 禁用 / 启用 ---------- */
-function bindDisconnect() {
-    $$('.disconnect-btn:not([data-bound])').forEach(btn => {
-        btn.setAttribute('data-bound', 'true');
-        btn.addEventListener('click', () => {
-            if (!confirm(`确认要禁用客户端 “${btn.dataset.client}” 吗？`)) return;
-            authFetch('/disconnect_client', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ client_name: btn.dataset.client })
-            })
-            .then(r => r.json())
-            .then(d => { alert(d.message); if (d.status === 'success') refreshPage(); })
-            .catch(console.error);
-        });
     });
 }
 
@@ -299,9 +291,9 @@ function bindEnable() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ client_name: btn.dataset.client })
             })
-            .then(r => r.json())
-            .then(d => { alert(d.message); if (d.status === 'success') refreshPage(); })
-            .catch(console.error);
+                .then(r => r.json())
+                .then(d => { alert(d.message); if (d.status === 'success') refreshPage(); })
+                .catch(console.error);
         });
     });
 }
@@ -309,7 +301,7 @@ function bindEnable() {
 /* ---------- 修改到期 ---------- */
 function bindModifyExpiry() {
     /* 全局只创建一个实例，避免重复 new */
-    const modalEl  = $('#modifyExpiryModal');
+    const modalEl = $('#modifyExpiryModal');
     const modalIns = bootstrap.Modal.getOrCreateInstance(modalEl);
 
     /* 事件委托：打开弹窗 */
@@ -342,23 +334,23 @@ function bindModifyExpiry() {
             }
 
             const loader = $('#modify-expiry-loader');
-            const msg    = $('#modify-expiry-message');
+            const msg = $('#modify-expiry-message');
             loader.style.display = 'inline-block';
-            btnConfirm.disabled  = true;
+            btnConfirm.disabled = true;
 
             /* 先把焦点移出按钮，防止 aria-hidden 警告 */
             btnConfirm.blur();
 
             try {
                 const res = await authFetch('/modify_client_expiry', {
-                    method : 'POST',
+                    method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body   : JSON.stringify({ client_name: name, expiry_days: days })
+                    body: JSON.stringify({ client_name: name, expiry_days: days })
                 });
                 const data = await res.json();
 
                 loader.style.display = 'none';
-                btnConfirm.disabled  = false;
+                btnConfirm.disabled = false;
 
                 const cls = data.status === 'success' ? 'alert-success' : 'alert-danger';
                 msg.innerHTML = `<div class="alert ${cls}">${data.message}</div>`;
@@ -372,7 +364,7 @@ function bindModifyExpiry() {
                 }
             } catch (err) {
                 loader.style.display = 'none';
-                btnConfirm.disabled  = false;
+                btnConfirm.disabled = false;
                 msg.innerHTML = `<div class="alert alert-danger">${err}</div>`;
             }
         });
@@ -411,7 +403,7 @@ function bindUninstall() {
                     l.style.display = 'none';
                     m.textContent = d.message;
                     m.className = d.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
-                    if (d.status === 'success') setTimeout(refreshPage,1200);
+                    if (d.status === 'success') setTimeout(refreshPage, 1200);
                 })
                 .catch(err => {
                     l.style.display = 'none';
@@ -430,53 +422,54 @@ function bindChangePwd() {
 
     // 依赖已在 HTML 中先加载 password-confirm.js
     PasswordConfirm(form, {
-        passwordSel  : '[name="password"]',
-        confirmSel   : '[name="confirmPassword"]',
-        liveCheck    : true,
-        beforeSubmit : true,
-        onSuccess    : () => {
+        passwordSel: '[name="password"]',
+        confirmSel: '[name="confirmPassword"]',
+        liveCheck: true,
+        beforeSubmit: true,
+        onSuccess: () => {
             const fd = new FormData(form);
             authFetch('/change_password', {
-                method : 'POST',
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body   : JSON.stringify({
+                body: JSON.stringify({
                     old_pwd: fd.get('old_pwd'),
                     new_pwd: fd.get('password')
                 })
             })
-            .then(r => r.json())
-            .then(d => {
-                alert(d.message || '密码修改成功！');
-                if (d.status === 'success') {
-                    bootstrap.Modal.getInstance($('#changePwdModal')).hide();
-                    form.reset();
-                }
-            })
-            .catch(alert);
+                .then(r => r.json())
+                .then(d => {
+                    alert(d.message || '密码修改成功！');
+                    if (d.status === 'success') {
+                        bootstrap.Modal.getInstance($('#changePwdModal')).hide();
+                        form.reset();
+                    }
+                })
+                .catch(alert);
         }
     });
 }
 
 /* ---------- 初始化 ---------- */
 document.addEventListener('DOMContentLoaded', () => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // 💡 确保 dateInput 元素存在
     const dateInput = $('#expiry_date');
-    if (dateInput) dateInput.min = tomorrow.toISOString().split('T')[0];
+    if (dateInput) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        dateInput.min = tomorrow.toISOString().split('T')[0];
+    }
 
     bindAll();
     startAutoRefresh();
-
-    $('#reset-btn')?.addEventListener('click', () => $('#client_name').value = '');
 });
 
 /* ---------- 客户端搜索 ---------- */
 (() => {
-    const input   = document.getElementById('client-search');
-    const tbody   = document.getElementById('client-tbody');
-    const paging  = document.getElementById('pagination');
-    const pageInfo= document.getElementById('page-info');
-    const noData  = document.getElementById('no-data');
+    const input = document.getElementById('client-search');
+    const tbody = document.getElementById('client-tbody');
+    const paging = document.getElementById('pagination');
+    const pageInfo = document.getElementById('page-info');
+    const noData = document.getElementById('no-data');
     const PER_PAGE = 10;
 
     /* 统一渲染 */
@@ -493,46 +486,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tbody.innerHTML = data.clients.map((c, idx) => {
             const rowIdx = (data.page - 1) * PER_PAGE + idx + 1;
+
+            // 💡 修复：根据客户端状态动态显示按钮
+            const actionButton = c.disabled
+                ? `<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">重新启用</button>`
+                : `<button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">禁用</button>`;
+
             return `
-              <tr>
-                <td>${rowIdx}</td>
-                <td>${c.name}</td>
-                <td>
-                  ${c.online
+                <tr>
+                    <td>${rowIdx}</td>
+                    <td>${c.name}</td>
+                    <td>
+                    ${c.online
                     ? `<span class="badge bg-success"><i class="fa fa-circle"></i> 在线</span>
-                       ${c.vpn_ip ? `<br><small class="text-success">VPN: ${c.vpn_ip}</small>` : ''}
-                       ${c.real_ip ? `<br><small class="text-muted">来源: ${c.real_ip}</small>` : ''}
-                       ${c.duration ? `<br><small class="text-info">时长: ${c.duration}</small>` : ''}`
+                                ${c.vpn_ip ? `<br><small class="text-success">VPN: ${c.vpn_ip}</small>` : ''}
+                                ${c.real_ip ? `<br><small class="text-muted">来源: ${c.real_ip}</small>` : ''}
+                                ${c.duration ? `<br><small class="text-info">时长: ${c.duration}</small>` : ''}`
                     : `<span class="badge bg-secondary"><i class="fa fa-circle"></i> 离线</span>`
-                  }
-                </td>
-                <td><small class="text-muted">${c.expiry || '未知'}</small></td>
-                <td class="d-flex flex-wrap gap-1">
-                  <a href="/download_client/${c.name}" class="btn btn-sm btn-primary">下载配置</a>
-                  <button class="btn btn-sm btn-info modify-expiry-btn"
-                          data-client="${c.name}"
-                          data-bs-toggle="modal"
-                          data-bs-target="#modifyExpiryModal">修改到期</button>
-                  <button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">禁用</button>
-                  ${c.disabled ? `<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">重新启用</button>` : ''}
-                  <button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">撤销</button>
-                </td>
-              </tr>`;
+                }
+                    </td>
+                    <td><small class="text-muted">${c.expiry || '未知'}</small></td>
+                    <td class="d-flex flex-wrap gap-1">
+                    <a href="/download_client/${c.name}" class="btn btn-sm btn-primary">下载配置</a>
+                    <button class="btn btn-sm btn-info modify-expiry-btn"
+                                data-client="${c.name}"
+                                data-bs-toggle="modal"
+                                data-bs-target="#modifyExpiryModal">修改到期</button>
+                    ${actionButton}
+                    <button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">撤销</button>
+                    </td>
+                </tr>`;
         }).join('');
 
         /* 分页按钮 */
         paging.innerHTML = '';
         if (data.total_pages <= 1) return;
 
-        const make = (page, text, disabled=false, active=false) =>
-            `<li class="page-item ${disabled?'disabled':''} ${active?'active':''}">
-               <a class="page-link" href="#" data-page="${page}">${text}</a>
-             </li>`;
+        const make = (page, text, disabled = false, active = false) =>
+            `<li class="page-item ${disabled ? 'disabled' : ''} ${active ? 'active' : ''}">
+                <a class="page-link" href="#" data-page="${page}">${text}</a>
+              </li>`;
 
         paging.innerHTML += make(data.page - 1, '«', data.page <= 1);
 
         const start = Math.max(1, data.page - 2);
-        const end   = Math.min(data.total_pages, data.page + 2);
+        const end = Math.min(data.total_pages, data.page + 2);
 
         if (start > 1) paging.innerHTML += make(1, 1);
         if (start > 2) paging.innerHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
@@ -546,7 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /* AJAX 拉数据 */
-    function load(page=1, q='') {
+    function load(page = 1, q = '') {
         fetch(`/clients/data?page=${page}&q=${encodeURIComponent(q)}`)
             .then(r => r.json())
             .then(render)
@@ -554,19 +552,63 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /* 事件 */
-    input.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            load(1, input.value.trim());
-        }
-    });
-    paging.addEventListener('click', e => {
-        if (e.target.classList.contains('page-link')) {
-            e.preventDefault();
-            const page = parseInt(e.target.dataset.page);
-            if (page) load(page, input.value.trim());
-        }
-    });
+    if (input) {
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                load(1, input.value.trim());
+            }
+        });
+    }
+
+    if (paging) {
+        paging.addEventListener('click', e => {
+            if (e.target.classList.contains('page-link')) {
+                e.preventDefault();
+                const page = parseInt(e.target.dataset.page);
+                if (page) load(page, input.value.trim());
+            }
+        });
+    }
+
+    // 💡 修复：使用事件委托处理禁用和启用按钮的点击事件
+    if (tbody) {
+        tbody.addEventListener('click', e => {
+            const disconnectBtn = e.target.closest('.disconnect-btn');
+            const enableBtn = e.target.closest('.enable-btn');
+            let url = '';
+            let clientName = '';
+            let confirmationMessage = '';
+
+            if (disconnectBtn) {
+                url = '/disconnect_client';
+                clientName = disconnectBtn.dataset.client;
+                confirmationMessage = `确认要禁用客户端 “${clientName}” 吗？`;
+            } else if (enableBtn) {
+                url = '/enable_client'; // 假设您有这个后端端点
+                clientName = enableBtn.dataset.client;
+                confirmationMessage = `确认要重新启用客户端 “${clientName}” 吗？`;
+            } else {
+                return; // 如果点击的不是这两个按钮，则返回
+            }
+
+            if (!confirm(confirmationMessage)) return;
+
+            authFetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ client_name: clientName })
+            })
+                .then(r => r.json())
+                .then(d => {
+                    alert(d.message);
+                    if (d.status === 'success') {
+                        load(); // 操作成功后刷新页面以更新按钮状态
+                    }
+                })
+                .catch(console.error);
+        });
+    }
 
     /* 首次加载 */
     load();

@@ -33,7 +33,11 @@ disconnect_client_bp = Blueprint('disconnect_client', __name__)
 @json_csrf_protect
 def disconnect_client():
     """Forcefully disconnect a client and prevent auto-reconnection"""
-    client_name = request.form.get('client_name')
+    data = request.json
+    if not data:
+        return jsonify({'status': 'error', 'message': 'Invalid JSON data'}), 400
+
+    client_name = data.get('client_name')
     if not client_name:
         return jsonify({'status': 'error', 'message': 'Client name is required'})
 

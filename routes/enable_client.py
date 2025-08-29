@@ -33,7 +33,11 @@ enable_client_bp = Blueprint('enable_client', __name__)
 @json_csrf_protect
 def enable_client():
     """Re-enable a disabled client by restoring their certificate"""
-    client_name = request.form.get('client_name')
+    data = request.json
+    if not data:
+        return jsonify({'status': 'error', 'message': 'Invalid JSON data'}), 400
+
+    client_name = data.get('client_name')
     if not client_name:
         return jsonify({'status': 'error', 'message': 'Client name is required'})
 
