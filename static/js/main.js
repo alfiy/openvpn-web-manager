@@ -49,8 +49,6 @@ function bindAll() {
     bindInstall();
     bindAddClient();
     bindDownload();
-    // bindDisconnect();
-    // bindEnable(); // 移除此调用，其功能已通过事件委托实现
     bindModifyExpiry();
     bindUninstall();
     bindChangePwd();
