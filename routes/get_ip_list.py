@@ -1,10 +1,12 @@
 import re
 import subprocess
-from flask import Blueprint, jsonify
+from flask import Blueprint, session, request, jsonify
+from routes.helpers import login_required
 
 ip_bp = Blueprint('ip', __name__)
 
 @ip_bp.route('/get_ip_list', methods=['GET'])
+@login_required
 def get_ip_list():
     ip_set = set()
 

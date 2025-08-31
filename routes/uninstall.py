@@ -1,66 +1,51 @@
+# routes/uninstall.py
 from flask import Blueprint, request, jsonify
 import subprocess
-# 导入CSRF验证所需模块
-from flask_wtf.csrf import validate_csrf
-from functools import wraps
-
-# JSON请求CSRF验证装饰器
-def json_csrf_protect(f):
-    """专门用于JSON格式POST请求的CSRF验证装饰器"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # 获取请求头中的CSRF令牌
-        csrf_token = request.headers.get('X-CSRFToken')
-        
-        # 检查令牌是否存在
-        if not csrf_token:
-            return jsonify({'status': 'error', 'message': '缺少CSRF令牌'}), 403
-        
-        # 验证令牌有效性
-        try:
-            validate_csrf(csrf_token)
-        except Exception:
-            return jsonify({'status': 'error', 'message': 'CSRF令牌验证失败，请刷新页面重试'}), 403
-            
-        return f(*args, **kwargs)
-    return decorated_function
+# ✅ 确保导入了 current_user 来获取当前登录用户
+from flask_login import current_user
+from routes.helpers import json_csrf_protect, login_required
 
 uninstall_bp = Blueprint('uninstall', __name__)
 
 @uninstall_bp.route('/uninstall', methods=['POST'])
+@login_required
 @json_csrf_protect
 def uninstall():
+    """
+    通过运行一系列命令来卸载 OpenVPN 服务器。
+    """
+    
+    # ✅ 关键修复：在执行任何命令之前，进行角色权限检查
+    # 确保只有超级管理员可以执行此操作
+    if not current_user.is_authenticated or current_user.role.name != 'SUPER_ADMIN':
+        return jsonify({
+            'status': 'error',
+            'message': '权限不足，无法执行此操作。'
+        }), 403 # 返回 403 Forbidden 状态码
+
     try:
-        # Direct uninstall commands without interactive script
+        # 要执行的命令列表
         commands = [
-            # Stop OpenVPN service
+            # 停止和禁用 OpenVPN 服务
             ['sudo', 'systemctl', 'stop', 'openvpn@server'],
             ['sudo', 'systemctl', 'disable', 'openvpn@server'],
-            # Stop and disable iptables service
+            # 停止和禁用 iptables 服务
             ['sudo', 'systemctl', 'stop', 'iptables-openvpn'],
             ['sudo', 'systemctl', 'disable', 'iptables-openvpn'],
-            # Stop and disable vpnwm service
-            # ['sudo', 'systemctl', 'stop', 'vpnwm'],
-            # ['sudo', 'systemctl', 'disable', 'vpnwm'],
-            # Remove systemd service file
+            # 移除 systemd 服务文件
             ['sudo', 'rm', '-f', '/etc/systemd/system/iptables-openvpn.service'],
-            # Remove systemd service file
-            # ['sudo', 'rm', '-f', '/etc/systemd/system/vpnwm.service'],
-            # Reload systemd
+            # 重新加载 systemd
             ['sudo', 'systemctl', 'daemon-reload'],
-            # Remove iptables scripts
+            # 移除 iptables 脚本
             ['sudo', 'rm', '-f', '/etc/iptables/add-openvpn-rules.sh'],
             ['sudo', 'rm', '-f', '/etc/iptables/rm-openvpn-rules.sh'],
-            # Remove OpenVPN package
+            # 移除 OpenVPN 软件包
             ['sudo', 'apt-get', 'remove', '--purge', '-y', 'openvpn'],
-            # Clean up configuration files
+            # 清理配置文件和目录
             ['sudo', 'rm', '-rf', '/etc/openvpn'],
             ['sudo', 'rm', '-f', '/etc/sysctl.d/99-openvpn.conf'],
             ['sudo', 'rm', '-rf', '/var/log/openvpn'],
-            ['sudo', 'rm', '-rf', '/etc/openvpn/client'],
-            # Remove client config files from /etc/openvpn/client
-            # ['sudo', 'find', '/etc/openvpn/client/', '-maxdepth', '1', '-name', '*.ovpn', '-delete'],
-            # Restore IP forwarding
+            # 恢复 IP 转发设置
             ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=0'],
         ]
 
@@ -68,7 +53,8 @@ def uninstall():
         for cmd in commands:
             try:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-                if result.returncode != 0 and 'systemctl' not in cmd[0]:  # systemctl commands may fail if service doesn't exist
+                # systemctl 命令在服务不存在时可能会失败，但这不是严重错误
+                if result.returncode != 0 and 'systemctl' not in cmd[0]:
                     failed_commands.append(f"{' '.join(cmd)}: {result.stderr}")
             except subprocess.TimeoutExpired:
                 failed_commands.append(f"{' '.join(cmd)}: Command timed out")
@@ -76,9 +62,16 @@ def uninstall():
                 failed_commands.append(f"{' '.join(cmd)}: {str(cmd_error)}")
 
         if failed_commands:
-            return jsonify({'status': 'warning', 'message': f'OpenVPN partially uninstalled. Some commands failed: {"; ".join(failed_commands)}'})
+            return jsonify({
+                'status': 'warning',
+                'message': f'OpenVPN 部分卸载完成。部分命令失败：{"; ".join(failed_commands)}'
+            })
         else:
-            return jsonify({'status': 'success', 'message': 'OpenVPN completely uninstalled successfully','redirect': '/'})
+            return jsonify({
+                'status': 'success',
+                'message': 'OpenVPN 成功完全卸载。',
+                'redirect': '/'
+            })
 
     except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Uninstall error: {str(e)}'})
+        return jsonify({'status': 'error', 'message': f'卸载时发生错误：{str(e)}'})

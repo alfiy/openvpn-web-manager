@@ -1,37 +1,22 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, render_template
 import os
 import subprocess
 import time
-# 导入CSRF验证所需模块
-from flask_wtf.csrf import validate_csrf
-from functools import wraps
-
-# JSON请求CSRF验证装饰器
-def json_csrf_protect(f):
-    """专门用于JSON格式POST请求的CSRF验证装饰器"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # 获取请求头中的CSRF令牌
-        csrf_token = request.headers.get('X-CSRFToken')
-        
-        # 检查令牌是否存在
-        if not csrf_token:
-            return jsonify({'status': 'error', 'message': '缺少CSRF令牌'}), 403
-        
-        # 验证令牌有效性
-        try:
-            validate_csrf(csrf_token)
-        except Exception:
-            return jsonify({'status': 'error', 'message': 'CSRF令牌验证失败，请刷新页面重试'}), 403
-            
-        return f(*args, **kwargs)
-    return decorated_function
+# 导入通用的装饰器
+from routes.helpers import login_required, json_csrf_protect
 
 install_bp = Blueprint('install', __name__)
 
 SCRIPT_PATH = './ubuntu-openvpn-install.sh'
 
+@install_bp.route('/install', methods=['GET'])
+@login_required
+def install_page():
+    # 渲染安装页面
+    return render_template('install.html')
+
 @install_bp.route('/install', methods=['POST'])
+@login_required
 @json_csrf_protect  # 应用CSRF保护装饰器
 def install():
     # 1. 检查脚本是否存在
@@ -87,12 +72,12 @@ def install():
             text=True
         )
 
-        # 安装脚本交互输入（端口已作为第 1 参数，IP 已作为第 2 参数）
+        # 安装脚本交互输入
         inputs = [
-            '1\n',               # UDP
-            '1\n',               # DNS
-            '\n',                # 默认客户端名
-            '1\n'                # 无密码
+            '1\n',         # UDP
+            '1\n',         # DNS
+            '\n',          # 默认客户端名
+            '1\n'          # 无密码
         ]
         for cmd in inputs:
             process.stdin.write(cmd)

@@ -1,35 +1,13 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, url_for
 import os
 import subprocess
-from utils.openvpn_utils import log_message,get_openvpn_port
-# 导入CSRF验证所需模块
-from flask_wtf.csrf import validate_csrf
-from functools import wraps
-
-# JSON请求CSRF验证装饰器
-def json_csrf_protect(f):
-    """专门用于JSON格式POST请求的CSRF验证装饰器"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # 获取请求头中的CSRF令牌
-        csrf_token = request.headers.get('X-CSRFToken')
-        
-        # 检查令牌是否存在
-        if not csrf_token:
-            return jsonify({'status': 'error', 'message': '缺少CSRF令牌'}), 403
-        
-        # 验证令牌有效性
-        try:
-            validate_csrf(csrf_token)
-        except Exception:
-            return jsonify({'status': 'error', 'message': 'CSRF令牌验证失败，请刷新页面重试'}), 403
-            
-        return f(*args, **kwargs)
-    return decorated_function
+from utils.openvpn_utils import log_message, get_openvpn_port
+from routes.helpers import login_required, json_csrf_protect
 
 enable_client_bp = Blueprint('enable_client', __name__)
 
 @enable_client_bp.route('/enable_client', methods=['POST'])
+@login_required
 @json_csrf_protect
 def enable_client():
     """Re-enable a disabled client by restoring their certificate"""
@@ -39,11 +17,11 @@ def enable_client():
 
     client_name = data.get('client_name')
     if not client_name:
-        return jsonify({'status': 'error', 'message': 'Client name is required'})
+        return jsonify({'status': 'error', 'message': 'Client name is required'}), 400
 
     client_name = client_name.strip()
     if not client_name:
-        return jsonify({'status': 'error', 'message': 'Client name is required'})
+        return jsonify({'status': 'error', 'message': 'Client name is required'}), 400
 
     log_message(f"Re-enabling client: {client_name}")
     print(f"[ENABLE] Starting re-enable process for client: {client_name}", flush=True)
@@ -178,31 +156,31 @@ def enable_client():
 
             log_message("Client configuration generated successfully")
 
-        # Step 5: Generate new CRL to remove any revocation
-        log_message("Generating new CRL")
-        crl_result = subprocess.run([
-            'sudo', 'bash', '-c', 'cd /etc/openvpn/easy-rsa && ./easyrsa gen-crl'
-        ], capture_output=True, text=True, timeout=60)
+            # Step 5: Generate new CRL to remove any revocation
+            log_message("Generating new CRL")
+            crl_result = subprocess.run([
+                'sudo', 'bash', '-c', 'cd /etc/openvpn/easy-rsa && ./easyrsa gen-crl'
+            ], capture_output=True, text=True, timeout=60)
 
-        if crl_result.returncode != 0:
-            error_msg = f"Failed to generate CRL: {crl_result.stderr}"
-            log_message(error_msg)
-            return jsonify({'status': 'error', 'message': error_msg})
+            if crl_result.returncode != 0:
+                error_msg = f"Failed to generate CRL: {crl_result.stderr}"
+                log_message(error_msg)
+                return jsonify({'status': 'error', 'message': error_msg})
 
-        # Step 6: Update CRL in OpenVPN directory
-        try:
-            subprocess.run(['sudo', 'cp', '/etc/openvpn/easy-rsa/pki/crl.pem', '/etc/openvpn/crl.pem'], check=True)
-            subprocess.run(['sudo', 'chmod', '644', '/etc/openvpn/crl.pem'], check=True)
-            log_message("CRL updated successfully")
-        except Exception as e:
-            log_message(f"Warning: Failed to update CRL: {e}")
+            # Step 6: Update CRL in OpenVPN directory
+            try:
+                subprocess.run(['sudo', 'cp', '/etc/openvpn/easy-rsa/pki/crl.pem', '/etc/openvpn/crl.pem'], check=True)
+                subprocess.run(['sudo', 'chmod', '644', '/etc/openvpn/crl.pem'], check=True)
+                log_message("CRL updated successfully")
+            except Exception as e:
+                log_message(f"Warning: Failed to update CRL: {e}")
 
         # Step 7: Reload OpenVPN service
         log_message("Reloading OpenVPN service")
         reload_methods = [
             ['sudo', 'killall', '-SIGUSR1', 'openvpn'],
             ['sudo', 'systemctl', 'reload', 'openvpn@server'],
-            # ['sudo', 'systemctl', 'restart', 'openvpn@server']
+            ['sudo', 'systemctl', 'restart', 'openvpn@server']
         ]
 
         reload_success = False

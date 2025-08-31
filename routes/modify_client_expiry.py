@@ -6,30 +6,7 @@ import tempfile
 import shutil
 from datetime import datetime, timedelta
 from utils.openvpn_utils import get_openvpn_port
-# 导入CSRF验证所需模块
-from flask_wtf.csrf import validate_csrf
-from functools import wraps
-
-# JSON请求CSRF验证装饰器
-def json_csrf_protect(f):
-    """专门用于JSON格式POST请求的CSRF验证装饰器"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # 获取请求头中的CSRF令牌
-        csrf_token = request.headers.get('X-CSRFToken')
-        
-        # 检查令牌是否存在
-        if not csrf_token:
-            return jsonify({'status': 'error', 'message': '缺少CSRF令牌'}), 403
-        
-        # 验证令牌有效性
-        try:
-            validate_csrf(csrf_token)
-        except Exception:
-            return jsonify({'status': 'error', 'message': 'CSRF令牌验证失败，请刷新页面重试'}), 403
-            
-        return f(*args, **kwargs)
-    return decorated_function
+from routes.helpers import json_csrf_protect, login_required
 
 modify_client_expiry_bp = Blueprint('modify_client_expiry', __name__)
 
@@ -37,6 +14,9 @@ modify_client_expiry_bp = Blueprint('modify_client_expiry', __name__)
 _CN_RE = re.compile(r'/CN=([^/]+)')
 
 def _extract_cn(subject: str) -> str:
+    """
+    从证书主题字符串中提取通用名称（CN）。
+    """
     m = _CN_RE.search(subject)
     return m.group(1) if m else ""
 
@@ -90,13 +70,16 @@ def _cleanup_index(index_file: str, client_name: str) -> None:
             os.unlink(tmp_path)
             raise
     except Exception as cleanup_err:
-        print(f"Warning: failed to cleanup index.txt -> {cleanup_err}")
+        print(f"Warning: failed to cleanup index.txt -> {cleanup_err}", flush=True)
 
 # ---------- 主路由 ----------
 @modify_client_expiry_bp.route('/modify_client_expiry', methods=['POST'])
-@json_csrf_protect
+@login_required # 确保用户已登录
+@json_csrf_protect # 确保请求有CSRF保护
 def modify_client_expiry():
-    """Modify client certificate expiration date by revoke + reissue"""
+    """
+    通过吊销旧证书并重新颁发新证书来修改客户端证书的到期日。
+    """
     data = request.get_json()
     client_name = data.get('client_name')
     expiry_days = data.get('expiry_days')
@@ -150,15 +133,19 @@ def modify_client_expiry():
             'sudo', 'bash', '-c', f'''
             cp /etc/openvpn/client-template.txt /etc/openvpn/client/{client_name}.ovpn
             {{
+                echo ""
                 echo "<ca>"
                 cat {easy_rsa_dir}/pki/ca.crt
                 echo "</ca>"
+                echo ""
                 echo "<cert>"
                 awk "/BEGIN/,/END CERTIFICATE/" {easy_rsa_dir}/pki/issued/{client_name}.crt
                 echo "</cert>"
+                echo ""
                 echo "<key>"
                 cat {easy_rsa_dir}/pki/private/{client_name}.key
                 echo "</key>"
+                echo ""
                 echo "<tls-crypt>"
                 cat /etc/openvpn/tls-crypt.key
                 echo "</tls-crypt>"
@@ -175,7 +162,7 @@ def modify_client_expiry():
             'sudo', 'systemctl', 'reload', 'openvpn@server'
         ], capture_output=True, text=True)
 
-        # Step 6: Clean up index.txt (原子化、按 serial+CN 去重)
+        # Step 6: Clean up index.txt
         _cleanup_index(index_file, client_name)
 
         # Calculate new expiry date

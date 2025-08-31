@@ -1,33 +1,19 @@
 from flask import Blueprint, request, jsonify
 import os
 import subprocess
-from utils.openvpn_utils import get_openvpn_port
 from datetime import datetime, timedelta
 
-# —— CSRF 保护（仅演示，生产环境请用更安全的方案）——
-from flask_wtf.csrf import validate_csrf
-from functools import wraps
-
-def json_csrf_protect(f):
-    """对 JSON POST 请求做 CSRF 校验"""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        csrf_token = request.headers.get('X-CSRFToken')
-        if not csrf_token:
-            return jsonify({'status': 'error', 'message': '缺少 CSRF 令牌'}), 403
-        try:
-            validate_csrf(csrf_token)
-        except Exception:
-            return jsonify({'status': 'error', 'message': 'CSRF 令牌验证失败，请刷新页面重试'}), 403
-        return f(*args, **kwargs)
-    return decorated
-
+# 导入通用的装饰器
+from routes.helpers import login_required, json_csrf_protect
+# 假设存在这个工具类
+from utils.openvpn_utils import get_openvpn_port
 
 add_client_bp = Blueprint('add_client', __name__)
 SCRIPT_PATH = './ubuntu-openvpn-install.sh'
 
 
 @add_client_bp.route('/add_client', methods=['POST'])
+@login_required
 @json_csrf_protect
 def add_client():
     """新增 OpenVPN 客户端（JSON 接口）"""
@@ -108,6 +94,13 @@ def add_client():
         for cmd in commands:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             if result.returncode != 0:
+                # 检查是否是重复用户
+                if "Request file already exists" in result.stderr:
+                    return jsonify({
+                        'status': 'error',
+                        'message': f'客户端 {client_name} 已存在，请使用不同名称'
+                    }), 400
+                # 其他错误
                 return jsonify({
                     'status': 'error',
                     'message': f'命令执行失败: {result.stderr}'
