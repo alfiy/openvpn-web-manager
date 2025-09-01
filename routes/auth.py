@@ -3,7 +3,9 @@ from flask import Blueprint, render_template, request, jsonify, session, url_for
 from flask_wtf.csrf import generate_csrf
 from werkzeug.security import check_password_hash
 from datetime import datetime, timedelta, timezone
+from flask_mail import Message
 import secrets
+from flask import current_app
 
 # 导入 Flask-Login 相关的函数
 from flask_login import login_user, logout_user, current_user, login_required
@@ -11,7 +13,7 @@ from flask_login import login_user, logout_user, current_user, login_required
 # 请确保这些导入语句与你的项目结构相匹配
 from models import db, User, Role
 
-auth_bp = Blueprint('auth', __name__)
+auth_bp = Blueprint('auth_bp', __name__)
 
 @auth_bp.route('/api/csrf-token')
 def get_csrf_token():
@@ -53,21 +55,21 @@ def forgot_password():
 
     if not user:
         flash('邮箱未注册', 'danger')
-        return redirect(url_for('auth.forgot_password'))
+        return redirect(url_for('auth_bp.forgot_password'))
 
     token = generate_token()
     user.reset_token  = token
     user.reset_expire = datetime.now(timezone.utc) + timedelta(minutes=30)
     db.session.commit()
 
-    link = url_for('auth.reset_password', token=token, _external=True)
+    link = url_for('auth_bp.reset_password', token=token, _external=True)
     # 邮件发送逻辑，需要配置 mail 实例
-    # msg = Message('密码重置', recipients=[email])
-    # msg.body = f'点击链接重置密码 (30分钟内有效): {link}'
-    # mail.send(msg)
+    msg = Message('密码重置', recipients=[email])
+    msg.body = f'点击链接重置密码 (30分钟内有效): {link}'
+    current_app.extensions['mail'].send(msg)
 
     flash('密码重置邮件已发送，请检查收件箱', 'success')
-    return redirect(url_for('auth.login'))
+    return redirect(url_for('auth_bp.login'))
 
 @auth_bp.route('/reset_password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
@@ -75,14 +77,14 @@ def reset_password(token):
     user = User.query.filter_by(reset_token=token).first()
     if not user:
         flash('链接无效', 'danger')
-        return redirect(url_for('auth.login'))
+        return redirect(url_for('auth_bp.login'))
 
     if user.reset_expire.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         flash('链接已过期', 'danger')
-        return redirect(url_for('auth.login'))
+        return redirect(url_for('auth_bp.login'))
 
     if request.method == 'POST':
-        new_pwd = request.form['new_pwd'].strip()
+        new_pwd = request.form['password'].strip()
         if len(new_pwd) < 6:
             flash('密码至少需要6个字符', 'danger')
             return redirect(url_for('auth.reset_password', token=token))
@@ -93,35 +95,43 @@ def reset_password(token):
         db.session.commit()
 
         flash('密码已重置，请重新登录', 'success')
-        return redirect(url_for('auth.login'))
+        return redirect(url_for('auth_bp.login'))
 
     return render_template('reset_password.html')
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     """处理用户登录。"""
-    # 如果是 POST 请求，处理登录逻辑
-    if request.method == 'POST':
-        # ... (你的 POST 登录逻辑，保持原样)
-        data = request.get_json(silent=True)
-        if not data:
-            return jsonify({'status': 'error', 'message': '无效的JSON请求'}), 400
-        
-        username = data.get('username')
-        password = data.get('password')
-        
-        user = User.query.filter_by(username=username).first()
-        
-        if user and user.check_password(password):
-            login_user(user)
-            # 登录成功后返回 JSON 响应
-            return jsonify({'status': 'success', 'message': '登录成功'}), 200
-        else:
-            return jsonify({'status': 'error', 'message': '用户名或密码不正确'}), 401
+    # GET 请求：渲染登录页面（包含 CSRF 令牌）
+    if request.method == 'GET':
+        return render_template('login.html', csrf_token=generate_csrf())
+
+    # POST 请求：处理登录逻辑
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'status': 'error', 'message': '无效的 JSON 请求'}), 400
+
+    username = data.get('username')
+    password = data.get('password')
+
+    user = User.query.filter_by(username=username).first()
+
+    if user and user.check_password(password):
+        login_user(user)
+        # 登录成功后返回 JSON 响应
+        return jsonify({
+            'status': 'success',
+            'message': '登录成功',
+            'redirect': url_for('main_bp.index')
+        }), 200
+    else:
+        # 登录失败时返回 JSON 响应
+        return jsonify({
+            'status': 'error',
+            'message': '用户名或密码不正确'
+        }), 401
     
-    # 如果是 GET 请求，只渲染登录页面
-    # ✅ 核心修复点：确保这里没有任何重定向或登录状态检查
-    return render_template('login.html', csrf_token=generate_csrf())
+
 
 @auth_bp.route('/change_password', methods=['POST'])
 @login_required
@@ -146,7 +156,7 @@ def logout():
     """处理用户注销。"""
     # 使用 Flask-Login 的 logout_user 函数
     logout_user()
-    return redirect(url_for('auth.login'))
+    return redirect(url_for('auth_bp.login'))
 
 @auth_bp.route('/api/check_auth')
 def check_auth():

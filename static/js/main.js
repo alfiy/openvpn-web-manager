@@ -767,7 +767,6 @@ function bindUserManagement() {
     fetchUsers();
 }
 
-
 /* ---------- 初始化和权限控制 ---------- */
 document.addEventListener('DOMContentLoaded', () => {
     // 获取当前用户角色

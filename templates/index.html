@@ -41,14 +41,14 @@
             <h1 class="mb-0">OpenVPN管理界面</h1>
             <div class="dropdown">
                 <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    {{ session.get('username', '用户') }} ({{ current_user.role_name }})
+                    {{ current_user.username }} ({{ current_user.role_name }})
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
                     <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#changePwdModal">修改密码</a></li>
                     {% if current_user and current_user.role_name == '超级管理员' %}
                         <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#userManagementModal">用户管理</a></li>
                     {% endif %}
-                    <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">退出登录</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('auth_bp.logout') }}">退出登录</a></li>
                 </ul>
             </div>
         </header>

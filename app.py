@@ -78,13 +78,13 @@ def create_app():
     # 告诉 Flask-Login 如何加载用户
     @login_manager.user_loader
     def load_user(user_id):
-        user = User.query.get(int(user_id))
+        user = db.session.get(User, int(user_id))
         return user
 
     # 配置未授权用户的处理方式
     @login_manager.unauthorized_handler
     def unauthorized_callback():
-        return redirect(url_for('auth.login'))
+        return redirect(url_for('auth_bp.login'))
 
     @app.errorhandler(CSRFError)
     def csrf_error(reason):

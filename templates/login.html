@@ -19,10 +19,6 @@
         <div class="card shadow">
             <div class="card-header text-center"><h4>OpenVPN管理登录</h4></div>
             <div class="card-body">
-                <!-- 登录失败提示 -->
-                {% if error %}
-                <div class="alert alert-danger" id="errorAlert">{{ error }}</div>
-                {% endif %}
 
                 <form method="POST" id="login-form">
                     <div class="mb-3">
@@ -41,49 +37,44 @@
                 <div id="actionBtnWrapper" class="w-100">
                     {% if error %}
                     <!-- 登录失败：显示“忘记密码” -->
-                    <a href="{{ url_for('auth.forgot_password') }}" class="btn btn-warning w-100">忘记密码</a>
+                    <a href="{{ url_for('auth_bp.forgot_password') }}" class="btn btn-warning w-100">忘记密码</a>
                     {% else %}
                     <!-- 默认：显示“注册新用户” -->
-                    <a href="{{ url_for('auth.register') }}" class="btn btn-outline-success w-100">注册新用户</a>
+                    <a href="{{ url_for('auth_bp.register') }}" class="btn btn-outline-success w-100">注册新用户</a>
                     {% endif %}
                 </div>
             </div>
         </div>
     </div>
-
     <script>
+        /* ---------- 登录业务处理 ---------- */
         document.addEventListener('DOMContentLoaded', function () {
             const loginForm = document.getElementById('login-form');
             const errorMessageDiv = document.getElementById('error-message');
+            const actionBtnWrapper = document.getElementById('actionBtnWrapper');
 
-            // 监听表单提交事件
             loginForm.addEventListener('submit', async function (event) {
-                event.preventDefault(); // 阻止表单的默认提交行为
+                event.preventDefault(); // 阻止默认表单提交
 
                 // 隐藏之前的错误信息
                 errorMessageDiv.classList.add('hidden');
                 errorMessageDiv.textContent = '';
 
-                const form = event.target;
-                const formData = new FormData(form);
+                // 获取表单数据
+                const formData = new FormData(loginForm);
                 const data = Object.fromEntries(formData.entries());
 
                 // 获取 CSRF 令牌
                 const csrfTokenElement = document.querySelector('meta[name="csrf-token"]');
                 if (!csrfTokenElement) {
-                    console.error("无法找到 meta 标签中的 CSRF 令牌。");
+                    console.error("找不到 CSRF 令牌！");
                     errorMessageDiv.textContent = "登录失败：缺少安全令牌。";
                     errorMessageDiv.classList.remove('hidden');
                     return;
                 }
                 const csrfToken = csrfTokenElement.getAttribute('content');
 
-                // console.log("正在准备发送登录请求...");
-                // console.log("发送的数据:", data);
-                // console.log("使用的 CSRF 令牌:", csrfToken);
-
                 try {
-                    // 发送 POST 请求
                     const response = await fetch('/login', {
                         method: 'POST',
                         headers: {
@@ -93,40 +84,47 @@
                         body: JSON.stringify(data)
                     });
 
-                    console.log("收到服务器响应，状态码:", response.status);
-
-                    // 检查响应是否成功 (状态码 200-299)
                     if (response.ok) {
                         const result = await response.json();
-                        console.log("响应 JSON:", result);
 
                         if (result.status === 'success') {
-                            // console.log("登录成功，正在重定向到主页...");
-                            window.location.href = '/'; // 登录成功后重定向
+                            // 登录成功，跳转到后端返回的页面
+                            window.location.href = result.redirect;
                         } else {
-                            // 后端返回的登录失败信息
-                            console.log("登录失败:", result.message);
-                            errorMessageDiv.textContent = result.message || '登录失败，请重试。';
+                            // 登录失败
+                            errorMessageDiv.textContent = result.message || '用户名或密码错误，请重试。';
                             errorMessageDiv.classList.remove('hidden');
+
+                            // 替换按钮为“忘记密码”
+                            actionBtnWrapper.innerHTML = `
+                                <a href="{{ url_for('auth_bp.forgot_password') }}" class="btn btn-warning w-100">忘记密码</a>
+                            `;
                         }
                     } else {
-                        // 处理非成功的 HTTP 状态码
+                        // 非 2xx 状态码处理
                         const errorText = await response.text();
+                        let msg = '登录失败：服务器返回错误。';
                         try {
                             const errorJson = JSON.parse(errorText);
-                            console.error("登录失败的 JSON 响应:", errorJson);
-                            errorMessageDiv.textContent = errorJson.message || '登录失败：服务器内部错误。';
-                        } catch (e) {
-                            console.error("登录失败的原始响应:", errorText);
-                            errorMessageDiv.textContent = '登录失败：服务器返回了无效的响应。';
-                        }
+                            msg = errorJson.message || msg;
+                        } catch {}
+                        errorMessageDiv.textContent = msg;
                         errorMessageDiv.classList.remove('hidden');
+
+                        // 替换按钮为“忘记密码”
+                        actionBtnWrapper.innerHTML = `
+                            <a href="{{ url_for('auth_bp.forgot_password') }}" class="btn btn-warning w-100">忘记密码</a>
+                        `;
                     }
-                } catch (error) {
-                    // 处理网络请求失败，例如断网
-                    console.error('登录请求失败:', error);
+                } catch (err) {
+                    console.error('登录请求失败:', err);
                     errorMessageDiv.textContent = '登录请求失败，请检查网络连接。';
                     errorMessageDiv.classList.remove('hidden');
+
+                    // 替换按钮为“忘记密码”
+                    actionBtnWrapper.innerHTML = `
+                        <a href="{{ url_for('auth_bp.forgot_password') }}" class="btn btn-warning w-100">忘记密码</a>
+                    `;
                 }
             });
         });

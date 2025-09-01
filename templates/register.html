@@ -43,7 +43,7 @@
                     </div>
 
                     <button type="submit" class="btn btn-primary w-100 mb-2">立即注册</button>
-                    <a href="{{ url_for('auth.login') }}" class="btn btn-outline-secondary w-100">返回登录</a>
+                    <a href="{{ url_for('auth_bp.login') }}" class="btn btn-outline-secondary w-100">返回登录</a>
                 </form>
             </div>
         </div>
@@ -70,14 +70,14 @@
         document.getElementById('registerForm').addEventListener('submit', async e => {
             e.preventDefault();   // 组件已保证密码一致
             const form = new FormData(e.target);
-            const res = await fetch('{{ url_for("auth.register") }}', {
+            const res = await fetch('{{ url_for("auth_bp.register") }}', {
                 method: 'POST',
                 body: new URLSearchParams(form)
             });
             const data = await res.json();
 
             if (data.status === 'success') {
-                window.location = '{{ url_for("auth.login") }}';
+                window.location = '{{ url_for("auth_bp.login") }}';
             } else {
                 document.getElementById('failReason').textContent = data.message;
                 new bootstrap.Modal(document.getElementById('failModal')).show();
