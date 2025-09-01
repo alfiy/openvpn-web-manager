@@ -12,7 +12,7 @@ def login_required(f):
         if not current_user.is_authenticated:
             if request.is_json:
                 return jsonify({'error': 'Not logged in'}), 401
-            return redirect(url_for('auth.login'))
+            return redirect(url_for('auth_bp.login'))
         return f(*args, **kwargs)
     return decorated
 
@@ -22,7 +22,7 @@ def require_login():
     if not current_user.is_authenticated:
         if request.is_json:
             return jsonify({'error': 'Not logged in'}), 401
-        return redirect(url_for('auth.login'))
+        return redirect(url_for('auth_bp.login'))
 
 def role_required(required_roles):
     """Decorator: Checks if the logged-in user's role is in the allowed list."""
@@ -33,7 +33,7 @@ def role_required(required_roles):
             if not current_user.is_authenticated:
                 if request.is_json:
                     return jsonify({'error': 'Not logged in'}), 401
-                return redirect(url_for('auth.login'))
+                return redirect(url_for('auth_bp.login'))
 
             # 使用 current_user 对象直接访问角色信息
             # 无需再从数据库查询用户
