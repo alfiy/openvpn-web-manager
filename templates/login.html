@@ -3,123 +3,133 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenVPN 管理面板 - 登录</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>登录 - OpenVPN管理界面</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6;
-        }
+        body{background:#f8f9fa;display:flex;align-items:center;justify-content:center;height:100vh}
+        .login-container{width:100%;max-width:400px;padding:15px}
         .hidden {
             display: none;
         }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
-    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-sm">
-        <div class="text-center mb-6">
-            <h1 class="text-3xl font-bold text-gray-800">登录</h1>
-            <p class="text-gray-500 mt-2">使用您的账户登录</p>
+<body>
+    <div class="login-container">
+        <div class="card shadow">
+            <div class="card-header text-center"><h4>OpenVPN管理登录</h4></div>
+            <div class="card-body">
+                <!-- 登录失败提示 -->
+                {% if error %}
+                <div class="alert alert-danger" id="errorAlert">{{ error }}</div>
+                {% endif %}
+
+                <form method="POST" id="login-form">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">用户名</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">密码</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <div id="error-message" class="text-red-500 text-center mb-4 hidden"></div>
+                    <button type="submit" class="btn btn-primary w-100 mb-2">登录</button>
+                </form>
+
+                <!-- 动态按钮区域 -->
+                <div id="actionBtnWrapper" class="w-100">
+                    {% if error %}
+                    <!-- 登录失败：显示“忘记密码” -->
+                    <a href="{{ url_for('auth.forgot_password') }}" class="btn btn-warning w-100">忘记密码</a>
+                    {% else %}
+                    <!-- 默认：显示“注册新用户” -->
+                    <a href="{{ url_for('auth.register') }}" class="btn btn-outline-success w-100">注册新用户</a>
+                    {% endif %}
+                </div>
+            </div>
         </div>
-        <form id="login-form">
-            <div class="mb-4">
-                <label for="username" class="block text-sm font-medium text-gray-700">用户名</label>
-                <input type="text" id="username" name="username" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" required>
-            </div>
-            <div class="mb-6">
-                <label for="password" class="block text-sm font-medium text-gray-700">密码</label>
-                <input type="password" id="password" name="password" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" required>
-            </div>
-            <div id="error-message" class="text-red-500 text-center mb-4 hidden"></div>
-            <div>
-                <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                    登录
-                </button>
-            </div>
-        </form>
     </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const loginForm = document.getElementById('login-form');
-    const errorMessageDiv = document.getElementById('error-message');
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const loginForm = document.getElementById('login-form');
+            const errorMessageDiv = document.getElementById('error-message');
 
-    // 监听表单提交事件
-    loginForm.addEventListener('submit', async function(event) {
-        event.preventDefault(); // 阻止表单的默认提交行为
+            // 监听表单提交事件
+            loginForm.addEventListener('submit', async function (event) {
+                event.preventDefault(); // 阻止表单的默认提交行为
 
-        // 隐藏之前的错误信息
-        errorMessageDiv.classList.add('hidden');
-        errorMessageDiv.textContent = '';
+                // 隐藏之前的错误信息
+                errorMessageDiv.classList.add('hidden');
+                errorMessageDiv.textContent = '';
 
-        const form = event.target;
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
+                const form = event.target;
+                const formData = new FormData(form);
+                const data = Object.fromEntries(formData.entries());
 
-        // 获取 CSRF 令牌
-        const csrfTokenElement = document.querySelector('meta[name="csrf-token"]');
-        if (!csrfTokenElement) {
-            console.error("无法找到 meta 标签中的 CSRF 令牌。");
-            errorMessageDiv.textContent = "登录失败：缺少安全令牌。";
-            errorMessageDiv.classList.remove('hidden');
-            return;
-        }
-        const csrfToken = csrfTokenElement.getAttribute('content');
+                // 获取 CSRF 令牌
+                const csrfTokenElement = document.querySelector('meta[name="csrf-token"]');
+                if (!csrfTokenElement) {
+                    console.error("无法找到 meta 标签中的 CSRF 令牌。");
+                    errorMessageDiv.textContent = "登录失败：缺少安全令牌。";
+                    errorMessageDiv.classList.remove('hidden');
+                    return;
+                }
+                const csrfToken = csrfTokenElement.getAttribute('content');
 
-        console.log("正在准备发送登录请求...");
-        console.log("发送的数据:", data);
-        console.log("使用的 CSRF 令牌:", csrfToken);
+                // console.log("正在准备发送登录请求...");
+                // console.log("发送的数据:", data);
+                // console.log("使用的 CSRF 令牌:", csrfToken);
 
-        try {
-            // 发送 POST 请求
-            const response = await fetch('/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
-                },
-                body: JSON.stringify(data)
-            });
+                try {
+                    // 发送 POST 请求
+                    const response = await fetch('/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: JSON.stringify(data)
+                    });
 
-            console.log("收到服务器响应，状态码:", response.status);
+                    console.log("收到服务器响应，状态码:", response.status);
 
-            // 检查响应是否成功 (状态码 200-299)
-            if (response.ok) {
-                const result = await response.json();
-                console.log("响应 JSON:", result);
+                    // 检查响应是否成功 (状态码 200-299)
+                    if (response.ok) {
+                        const result = await response.json();
+                        console.log("响应 JSON:", result);
 
-                if (result.status === 'success') {
-                    console.log("登录成功，正在重定向到主页...");
-                    window.location.href = '/'; // 登录成功后重定向
-                } else {
-                    // 后端返回的登录失败信息
-                    console.log("登录失败:", result.message);
-                    errorMessageDiv.textContent = result.message || '登录失败，请重试。';
+                        if (result.status === 'success') {
+                            // console.log("登录成功，正在重定向到主页...");
+                            window.location.href = '/'; // 登录成功后重定向
+                        } else {
+                            // 后端返回的登录失败信息
+                            console.log("登录失败:", result.message);
+                            errorMessageDiv.textContent = result.message || '登录失败，请重试。';
+                            errorMessageDiv.classList.remove('hidden');
+                        }
+                    } else {
+                        // 处理非成功的 HTTP 状态码
+                        const errorText = await response.text();
+                        try {
+                            const errorJson = JSON.parse(errorText);
+                            console.error("登录失败的 JSON 响应:", errorJson);
+                            errorMessageDiv.textContent = errorJson.message || '登录失败：服务器内部错误。';
+                        } catch (e) {
+                            console.error("登录失败的原始响应:", errorText);
+                            errorMessageDiv.textContent = '登录失败：服务器返回了无效的响应。';
+                        }
+                        errorMessageDiv.classList.remove('hidden');
+                    }
+                } catch (error) {
+                    // 处理网络请求失败，例如断网
+                    console.error('登录请求失败:', error);
+                    errorMessageDiv.textContent = '登录请求失败，请检查网络连接。';
                     errorMessageDiv.classList.remove('hidden');
                 }
-            } else {
-                // 处理非成功的 HTTP 状态码
-                const errorText = await response.text();
-                try {
-                    const errorJson = JSON.parse(errorText);
-                    console.error("登录失败的 JSON 响应:", errorJson);
-                    errorMessageDiv.textContent = errorJson.message || '登录失败：服务器内部错误。';
-                } catch (e) {
-                    console.error("登录失败的原始响应:", errorText);
-                    errorMessageDiv.textContent = '登录失败：服务器返回了无效的响应。';
-                }
-                errorMessageDiv.classList.remove('hidden');
-            }
-        } catch (error) {
-            // 处理网络请求失败，例如断网
-            console.error('登录请求失败:', error);
-            errorMessageDiv.textContent = '登录请求失败，请检查网络连接。';
-            errorMessageDiv.classList.remove('hidden');
-        }
-    });
-});
-</script>
+            });
+        });
+    </script>
 </body>
 </html>
