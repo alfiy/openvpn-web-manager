@@ -298,8 +298,8 @@ function bindAddClient() {
     // 页面加载完成后绑定事件
     document.addEventListener('DOMContentLoaded', () => {
         bindAddClient();
-        bindUserManagement();  
-        bindAddUserForm();     
+        // bindUserManagement();  
+        // bindAddUserForm();     
     });
 
 /* ---------- 修改到期 ---------- */
@@ -307,6 +307,14 @@ function bindModifyExpiry() {
     /* 全局只创建一个实例，避免重复 new */
     const modalEl = qs('#modifyExpiryModal');
     const modalIns = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+        /* 事件委托：打开弹窗 */
+    document.body.addEventListener('click', e => {
+        if (e.target.classList.contains('modify-expiry-btn')) {
+            qs('#modify-client-name').value = e.target.dataset.client;
+            modalIns.show();
+        }
+    });
 
     /* 自定义日期联动 */
     qsa('input[name="modify_expiry_choice"]').forEach(radio => {
@@ -317,10 +325,12 @@ function bindModifyExpiry() {
 
     /* 确认按钮只绑一次 */
     const btnConfirm = qs('#confirm-modify-expiry');
+    
     if (btnConfirm && !btnConfirm.hasAttribute('data-bound')) {
-        btnConfirm.setAttribute('data-bound', 'true');
-
+        btnConfirm.setAttribute('data-bound', 'true'); // 修复代码中的注释，确保只绑定一次
+        
         btnConfirm.addEventListener('click', async () => {
+            // 将获取 name 变量的代码移动到这里
             const name = qs('#modify-client-name').value;
 
             let days;
@@ -360,7 +370,6 @@ function bindModifyExpiry() {
                 msg.innerHTML = `<div class="alert ${cls}">${data.message}</div>`;
 
                 if (data.status === 'success') {
-                    /* 延迟 500ms 再关闭，让消息能被看到，也确保焦点已不在按钮上 */
                     setTimeout(() => {
                         modalIns.hide();
                         window.clientAjax.load();
@@ -417,14 +426,6 @@ function bindChangePwd() {
             }
         }
     });
-}
-
-/* ---------- 统一绑定入口 ---------- */
-function bindAll() {
-    bindChangePwd();
-    const role = document.body.dataset.role;
-    if (role === 'SUPER_ADMIN') { bindInstall(); bindUninstall(); bindUserManagement(); }
-    if (role === 'SUPER_ADMIN' || role === 'ADMIN') { bindAddClient(); bindModifyExpiry(); }
 }
 
 
@@ -767,6 +768,14 @@ function bindUserManagement() {
     fetchUsers();
 }
 
+/* ---------- 统一绑定入口 ---------- */
+function bindAll() {
+    bindChangePwd();
+    const role = document.body.dataset.role;
+    if (role === 'SUPER_ADMIN') { bindInstall(); bindUninstall(); }
+    if (role === 'SUPER_ADMIN' || role === 'ADMIN') { bindAddClient(); bindModifyExpiry(); }
+}
+
 /* ---------- 初始化和权限控制 ---------- */
 document.addEventListener('DOMContentLoaded', () => {
     // 获取当前用户角色
@@ -804,6 +813,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 启动自动刷新
     startAutoRefresh();
 
+    bindUserManagement();
     // === SUPER_ADMIN 额外绑定用户管理 ===
     if (userRole === 'SUPER_ADMIN') {
         bindUserManagement(); // 内部已经包含 fetchUsers + bindAddUserForm
