@@ -1,0 +1,108 @@
+/**
+ * 这个模块包含了安装和卸载的逻辑
+ */
+import { qs, showCustomMessage, showCustomConfirm, authFetch, isValidIP } from './utils.js';
+import { refreshPage } from './refresh.js';
+
+export function bindInstall() {
+    const btn = qs('#install-btn');
+    if (!btn || btn.hasAttribute('data-bound')) return;
+    btn.setAttribute('data-bound', 'true');
+
+    const modalEl = qs('#installModal');
+    const modal = modalEl ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
+
+    btn.addEventListener('click', async () => {
+        if (!modal) return;
+        const sel = qs('#install-ip-select');
+        const wrap = qs('#manual-ip-wrapper');
+        sel.innerHTML = '<option disabled selected>正在获取…</option>';
+        wrap && (wrap.style.display = 'none');
+
+        try {
+            const list = await authFetch('/get_ip_list').then(r => r.json());
+            sel.innerHTML = '';
+            list.forEach(ip => sel.appendChild(new Option(ip, ip)));
+            sel.appendChild(new Option('手动输入…', ''));
+        } catch {
+            sel.innerHTML = '<option value="">手动输入…</option>';
+            wrap && (wrap.style.display = 'block');
+        }
+        modal.show();
+    });
+
+    qs('#install-ip-select')?.addEventListener('change', function () {
+        const wrap = qs('#manual-ip-wrapper');
+        wrap && (wrap.style.display = this.value ? 'none' : 'block');
+    });
+
+    qs('#confirm-install')?.addEventListener('click', async () => {
+        const port = Number(qs('#install-port').value);
+        const sel = qs('#install-ip-select');
+        const ip = sel.value || qs('#install-ip-input').value.trim();
+
+        if (!Number.isInteger(port) || port < 1025 || port > 65534) {
+            return showCustomMessage('端口号必须在 1025-65534 之间');
+        }
+        if (!ip) return showCustomMessage('请选择或输入服务器 IP');
+        if (!sel.value && !isValidIP(ip)) return showCustomMessage('IP 格式不正确');
+
+        modal?.hide();
+        const loader = qs('#install-loader');
+        const msg = qs('#status-message');
+        loader && (loader.style.display = 'block');
+        msg && (msg.className = 'alert alert-info', msg.textContent = '正在安装 OpenVPN...', msg.classList.remove('d-none'));
+
+        try {
+            const res = await authFetch('/install', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ port, ip })
+            });
+            const data = await res.json();
+            loader && (loader.style.display = 'none');
+            if (msg) {
+                msg.textContent = data.message;
+                msg.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
+            }
+            if (data.status === 'success') setTimeout(() => location.href = (data.redirect || '/'), 1000);
+        } catch (err) {
+            loader && (loader.style.display = 'none');
+            if (msg) { msg.textContent = '安装失败: ' + err; msg.className = 'alert alert-danger'; }
+        }
+    });
+
+    modalEl?.addEventListener('hide.bs.modal', () => qs('#manual-ip-wrapper') && (qs('#manual-ip-wrapper').style.display = 'none'));
+}
+
+export function bindUninstall() {
+    document.addEventListener('click', e => {
+        const btn = e.target.closest('#uninstall-btn');
+        if (!btn) return;
+        
+        showCustomConfirm('确定要卸载OpenVPN吗? 所有客户端配置将被删除!', async ok => {
+            if (!ok) return;
+            const loader = qs('#uninstall-loader');
+            const msg = qs('#status-message');
+            loader && (loader.style.display = 'block');
+            msg && (msg.className = 'alert alert-info', msg.textContent = '正在卸载OpenVPN...', msg.classList.remove('d-none'));
+
+            try {
+                const data = await authFetch('/uninstall', { method: 'POST' }).then(r => r.json());
+                loader.style.display = 'none';
+                msg.textContent = data.message;
+                msg.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
+                if (data.status === 'success') setTimeout(() => location.reload(), 1200);
+            } catch (err) {
+                loader.style.display = 'none';
+                msg.textContent = '卸载失败: ' + err;
+                msg.className = 'alert alert-danger';
+            }
+        });
+    });
+}
+
+export function init() {
+    bindInstall();
+    bindUninstall();
+}
