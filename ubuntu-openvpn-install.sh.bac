@@ -1,19 +1,6 @@
 #!/bin/bash
 # Ubuntu OpenVPN installer with uninstall functionality
 
-# Function definitions must come before they are called.
-# This function resolves the public IP address of the server.
-function resolvePublicIP() {
-    # Using a reliable web service to get the public IP is more robust
-    # than trying to infer it from internal network interfaces.
-    PUBLIC_IP=$(curl -s ifconfig.me)
-    if [[ -z "$PUBLIC_IP" ]]; then
-        echo "Failed to resolve public IP." >&2
-        return 1
-    fi
-    echo "$PUBLIC_IP"
-}
-
 # Function to check if the user is root
 function isRoot() {
     if [ "$EUID" -ne 0 ]; then
@@ -38,12 +25,12 @@ function checkOS() {
     fi
     
     source /etc/os-release
-    if [[ "$ID" != "ubuntu" ]]; then
+    if [[ $ID != "ubuntu" ]]; then
         echo "❌ This script only supports Ubuntu systems."
         exit 1
     fi
     
-    echo "✅ Ubuntu $VERSION_ID detected."
+    echo "✅ Ubuntu $VERSION_ID detected"
 }
 
 # Initial checks
@@ -59,33 +46,89 @@ function initialCheck() {
     checkOS
 }
 
+# Function to get internal IP for NAT environment
+function resolvePublicIP() {
+    # For NAT environments, use internal IP instead of external IP
+    # First try to get the internal IP from hostname -I
+    INTERNAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    
+    # If hostname -I fails, try ip route method
+    if [[ -z "$INTERNAL_IP" ]]; then
+        INTERNAL_IP=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[^ ]+')
+    fi
+    
+    # If both methods fail, try to get from network interfaces
+    if [[ -z "$INTERNAL_IP" ]]; then
+        INTERNAL_IP=$(ip addr show | grep 'inet ' | grep -v '127.0.0.1' | head -n1 | awk '{print $2}' | cut -d'/' -f1)
+    fi
+    
+    # Check if we got an internal IP
+    if [[ -n "$INTERNAL_IP" ]]; then
+        echo "$INTERNAL_IP"
+    else
+        echo "Failed to resolve internal IP"
+        return 1
+    fi
+}
+
+# ✅ 接收端口号参数，默认为1194
+OPENVPN_PORT=${1:-1194}
+SERVER_IP=${2:-$(resolvePublicIP)}
+
+
 # Main installation function
 function installOpenVPN() {
     echo "🚀 Starting OpenVPN installation..."
-    
-    # Only install necessary packages, OpenVPN is already being installed by apt.
     apt-get update
-    apt-get install -y openvpn iptables openssl ca-certificates curl
+    apt-get install -y iptables openssl ca-certificates wget curl build-essential pkg-config libssl-dev liblzo2-dev libpam0g-dev libnl-3-dev libnl-genl-3-dev libcap-ng-dev liblz4-dev
+
+    # ----------------------------------------------------------------------
+    # 安装 openvpn：使用本地 resource/openvpn-2.6.14.tar.gz
+    # ----------------------------------------------------------------------
+  	OPENVPN_TGZ_PATH="$(dirname "$0")/resource/openvpn-2.6.14.tar.gz"
+    OPENVPN_BUILD_DIR="$(dirname "$0")/resource/openvpn-2.6.14"
+    
+    if [[ ! -f "$OPENVPN_TGZ_PATH" ]]; then
+        echo "❌ 本地文件 "$OPENVPN_TGZ_PATH" 不存在，请检查路径或放文件后再运行脚本。"
+        exit 1
+    fi
+    echo "📦 使用本地 openvpn 包：$OPENVPN_TGZ_PATH"
+    
+    mkdir -p "$OPENVPN_BUILD_DIR"
+    tar xzf "$LOCAL_TGZ" --strip-components=1 --directory "$OPENVPN_BUILD_DIR"
+    
+    cd "$OPENVPN_BUILD_DIR"
+    ./configure
+    make -j$(nproc)
+	sudo make install
 
     if [[ -d /etc/openvpn/easy-rsa/ ]]; then
         rm -rf /etc/openvpn/easy-rsa/
     fi
 
-    mkdir -p /etc/openvpn/client
-    echo "📂 Created /etc/openvpn/client directory."
+    # mkdir /etc/openvpn/client
+    if [[ ! -d /etc/openvpn/client ]]; then
+        mkdir -p /etc/openvpn/client
+        echo "📂 Created /etc/openvpn/client directory"
+    else
+        echo "ℹ️ /etc/openvpn/client already exists, skipping creation"
+    fi
 
-    # Use an absolute path based on the script's directory to avoid errors.
-    EASYRSA_TGZ="$(dirname "$0")/resource/easy-rsa/EasyRSA-3.1.2.tgz"
-    if [[ ! -f "$EASYRSA_TGZ" ]]; then
-        echo "❌ 本地文件 $EASYRSA_TGZ 不存在，请检查路径或放文件后再运行脚本。"
+
+    # ----------------------------------------------------------------------
+    # 安装 easy-rsa：使用本地 resource/easy-rsa/EasyRSA-3.1.2.tgz
+    # ----------------------------------------------------------------------
+    LOCAL_TGZ="$(dirname "$0")/resource/easy-rsa/EasyRSA-3.1.2.tgz"
+    if [[ ! -f "$LOCAL_TGZ" ]]; then
+        echo "❌ 本地文件 $LOCAL_TGZ 不存在，请检查路径或放文件后再运行脚本。"
         exit 1
     fi
-    echo "📦 使用本地 Easy-RSA 包：$EASYRSA_TGZ."
+    echo "📦 使用本地 Easy-RSA 包：$LOCAL_TGZ"
     mkdir -p /etc/openvpn/easy-rsa
-    tar xzf "$EASYRSA_TGZ" --strip-components=1 --directory /etc/openvpn/easy-rsa
+    tar xzf "$LOCAL_TGZ" --strip-components=1 --directory /etc/openvpn/easy-rsa
 
     # Generate certificates
-    cd /etc/openvpn/easy-rsa/ || exit 1
+    cd /etc/openvpn/easy-rsa/ || return
     ./easyrsa init-pki
     ./easyrsa --batch --req-cn="OpenVPN-CA" build-ca nopass
     ./easyrsa --batch build-server-full server nopass
@@ -134,7 +177,8 @@ verb 3
 EOF
 
     # Create directories
-    mkdir -p /etc/openvpn/ccd /var/log/openvpn
+    mkdir -p /etc/openvpn/ccd
+    mkdir -p /var/log/openvpn
     
     # Enable IP forwarding
     echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-openvpn.conf
@@ -213,13 +257,13 @@ tls-cipher TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256
 ignore-unknown-option block-outside-dns
 setenv opt block-outside-dns
 verb 3
-log openvpn.log
 EOF
     
     echo "🎉 OpenVPN installation completed successfully!"
 }
 
-# ---
+
+
 # Script execution starts here
 echo "🚀 Ubuntu OpenVPN Installer & Manager"
 echo "======================================"
@@ -227,41 +271,38 @@ echo "======================================"
 # Check for root, TUN, OS...
 initialCheck
 
-# The function call for SERVER_IP is now placed after the function is defined.
-OPENVPN_PORT=${1:-1194}
-SERVER_IP=${2:-$(resolvePublicIP)}
-
 # Check if OpenVPN is already installed
 if [[ -e /etc/openvpn/server.conf ]]; then
-    echo "OpenVPN has installed."
+    echo "OpenVPN has installed"
 else
     installOpenVPN
     # Generate default "server" client after installation
     echo "📱 Generating default server client configuration..."
-    cd /etc/openvpn/easy-rsa/ || exit 1
+    cd /etc/openvpn/easy-rsa/ || exit
     EASYRSA_CERT_EXPIRE=3650 ./easyrsa --batch build-client-full "server" nopass
     echo "✅ Client server added."
-    
+
     # Generate client config
     cp /etc/openvpn/client-template.txt "/etc/openvpn/client/server.ovpn"
     {
         echo "<ca>"
         cat "/etc/openvpn/easy-rsa/pki/ca.crt"
         echo "</ca>"
-        
+
         echo "<cert>"
         awk '/BEGIN/,/END CERTIFICATE/' "/etc/openvpn/easy-rsa/pki/issued/server.crt"
         echo "</cert>"
-        
+
         echo "<key>"
         cat "/etc/openvpn/easy-rsa/pki/private/server.key"
         echo "</key>"
-        
+
         echo "<tls-crypt>"
         cat /etc/openvpn/tls-crypt.key
         echo "</tls-crypt>"
     } >>"/etc/openvpn/client/server.ovpn"
-    
+
     echo ""
     echo "📄 Default client configuration written to /etc/openvpn/client/server.ovpn"
 fi
+
