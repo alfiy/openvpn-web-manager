@@ -72,3 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
     PasswordConfirm(form, opts);
   });
 });
+
+export function init(){
+  PasswordConfirm();
+}
