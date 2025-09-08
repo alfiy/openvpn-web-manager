@@ -299,7 +299,7 @@
                     <h5 class="modal-title" id="changePwdModalLabel">修改密码</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form id="change-pwd-form" method="post" data-pwd-confirm data-pwd-confirm-msg="两次输入的新密码不一致，请重新输入">
+                <form id="change-pwd-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <div class="modal-body">
                         <div class="mb-3">
@@ -308,15 +308,13 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="new-pwd">新密码</label>
-                            <input type="password" class="form-control" id="new-pwd" name="password"
-                                   required minlength="8"
-                                   pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@!%?&])[A-Za-z\d@$!%?&]{8,}$" title="需包含大小写字母、数字和特殊字符（@!%?&），至少8位">
-                            <div class="form-text text-muted">需包含大小写字母、数字和特殊字符（@!%?&），至少8位</div>
+                            <input type="password" class="form-control" id="new-pwd" name="password" required minlength="8">
+                            <div class="form-text text-muted">需包含大小写字母、数字和特殊字符，至少8位</div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="confirm-pwd">确认新密码</label>
-                            <input type="password" class="form-control" id="confirm-pwd" name="confirmPassword" required minlength="8" pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@!%?&])[A-Za-z\d@$!%?&]{8,}$">
-                            <div id="pwd-mismatch-error" class="text-danger form-text d-none">两次输入的新密码不一致，请重新输入</div>
+                            <input type="password" class="form-control" id="confirm-pwd" name="confirmPassword" required minlength="8">
+                            <div class="invalid-feedback">两次输入的新密码不一致，请重新输入</div>
                         </div>
                     </div>
                     <div class="modal-footer">
