@@ -95,20 +95,20 @@ function PasswordConfirm(form, opts = {}) {
     }
 }
 
-/* 自动初始化：页面上所有带 data-pwd-confirm 的表单 */
-document.addEventListener('DOMContentLoaded', () => {
+/**
+ * 统一的初始化入口
+ * 在 main.js 中被调用
+ */
+export function init() {
     document.querySelectorAll('form[data-pwd-confirm]').forEach(form => {
         // 通过 data-* 属性传参
         const opts = {};
-        if (form.dataset.pwdConfirmMsg)    opts.mismatchMsg = form.dataset.pwdConfirmMsg;
+        if (form.dataset.pwdConfirmMsg) opts.mismatchMsg = form.dataset.pwdConfirmMsg;
         if (form.dataset.pwdLive === 'false') opts.liveCheck = false;
         if (form.dataset.pwdStrengthMsg) opts.passwordStrengthMsg = form.dataset.pwdStrengthMsg;
-        if (form.dataset.pwdPattern)     opts.passwordPattern = new RegExp(form.dataset.pwdPattern);
+        if (form.dataset.pwdPattern)      opts.passwordPattern = new RegExp(form.dataset.pwdPattern);
 
+        // 调用核心函数
         PasswordConfirm(form, opts);
     });
-});
-
-// export function init(){
-//   PasswordConfirm();
-// }
+}
