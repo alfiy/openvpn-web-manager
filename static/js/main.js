@@ -68,11 +68,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 调用统一的绑定函数，启动整个应用
     bindAll();
-    startAutoRefresh();
+    // startAutoRefresh();
     // 启动自动刷新，只在需要它的页面上调用
     // 检查 body 标签是否有 data-page-type 属性，并且其值为 'auto-refresh'
-    // const pageType = document.body.dataset.pageType;
-    // if (pageType === 'auto-refresh') {
-    //     startAutoRefresh();
-    // }
+    const pageType = document.body.dataset.pageType;
+    if (pageType === 'dashboard') {
+        startAutoRefresh();
+    }
 });
