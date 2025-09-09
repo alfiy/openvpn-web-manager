@@ -63,36 +63,51 @@ def enable_client():
             log_message("OpenVPN PKI not found")
             return jsonify({'status': 'error', 'message': 'OpenVPN PKI not found. Please ensure OpenVPN is installed and configured.'})
 
-        # Step 3: Check current certificate status
-        log_message("Checking certificate status")
-        with open('/etc/openvpn/easy-rsa/pki/index.txt', 'r') as f:
+        # Step 3: 检查当前证书状态
+        log_message("检查证书状态")
+        index_file_path = '/etc/openvpn/easy-rsa/pki/index.txt'
+        with open(index_file_path, 'r') as f:
             lines = f.readlines()
 
         client_found = False
         client_revoked = False
+        
+        # 构造精确匹配的CN字符串
+        target_cn = f'/CN={client_name}'
 
         for line in lines:
-            if f'CN={client_name}/' in line or f'CN={client_name}' in line:
-                client_found = True
-                if line.startswith('R'):  # Revoked
-                    client_revoked = True
-                    log_message(f"Client {client_name} certificate is revoked")
-                elif line.startswith('V'):  # Valid
-                    log_message(f"Client {client_name} certificate is already valid")
-                break
+            parts = line.strip().split('\t')
+            # 确保行有足够的字段，并且第6个字段（主题）以目标CN结尾
+            if len(parts) >= 6 and parts[5].strip().endswith(target_cn):
+                # 进一步检查以确保是精确匹配，而不是部分匹配
+                cn_part = parts[5]
+                # 找到CN的起始位置，即最后一个'='之后
+                cn_value = cn_part[cn_part.rfind('=') + 1:]
+                
+                if cn_value == client_name:
+                    client_found = True
+                    status = parts[0]
+                    if status == 'R':  # 已吊销
+                        client_revoked = True
+                        log_message(f"客户端 {client_name} 的证书已被吊销")
+                    elif status == 'V':  # 有效
+                        log_message(f"客户端 {client_name} 的证书已有效")
+                    break # 找到精确匹配后退出循环
 
         if not client_found:
-            log_message(f"Client {client_name} not found in PKI")
-            return jsonify({'status': 'error', 'message': f'Client {client_name} not found in certificate database'})
+            log_message(f"在 PKI 数据库中未找到客户端 {client_name}")
+            return jsonify({'status': 'error', 'message': f'在证书数据库中未找到客户端 {client_name}'})
 
-        # Step 4: If certificate is revoked, create a new one
+        # Step 4: 如果证书已吊销，创建新证书
         if client_revoked:
-            log_message(f"Creating new certificate for revoked client: {client_name}")
+            log_message(f"为已吊销的客户端 {client_name} 创建新证书")
 
-            # Remove old revoked entries from index
+            # 移除 index 文件中旧的吊销条目，使用精确匹配
             filtered_lines = []
             for line in lines:
-                if f'CN={client_name}/' not in line and f'CN={client_name}' not in line:
+                parts = line.strip().split('\t')
+                # 再次精确匹配，确保只删除目标客户端的行
+                if not (len(parts) >= 6 and parts[5].strip().endswith(f'CN={client_name}')):
                     filtered_lines.append(line)
 
             # Write back filtered content
