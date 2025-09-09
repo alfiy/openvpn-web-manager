@@ -20,6 +20,7 @@ function authFetch(url, opts = {}) {
         });
 }
 
+// 定义全局变量，用于存储定时器ID，以便后续可以清除
 let autoRefreshInterval;
 
 /* ---------- 页面局部刷新 ---------- */
@@ -44,6 +45,26 @@ function refreshPage() {
         .catch(console.error);
 }
 
+// --- 解决 Uncaught ReferenceError 的关键部分 ---
+
+/* ---------- 自动刷新逻辑 ---------- */
+function startAutoRefresh() {
+    // 设置一个定时器，每隔 5 秒刷新一次页面
+    autoRefreshInterval = setInterval(() => {
+        refreshPage();
+        // 刷新客户端列表，因为客户端列表是独立的 AJAX 模块
+        if (window.clientAjax && window.clientAjax.load) {
+            window.clientAjax.load();
+        }
+    }, 5000);
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+}
+
 /* 统一绑定 */
 function bindAll() {
     bindInstall();
@@ -52,6 +73,8 @@ function bindAll() {
     bindModifyExpiry();
     bindUninstall();
     bindChangePwd();
+    // 💡 你之前没有 `bindEnable`，所以这里也补上
+    bindEnable(); 
 }
 
 /* ---------- 有效期单选按钮联动 ---------- */
@@ -458,7 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     bindAll();
-    startAutoRefresh();
+    startAutoRefresh(); // 现在这个函数已经定义了，不会报错了
 });
 
 /* ---------- 客户端搜索 ---------- */
@@ -485,10 +508,25 @@ document.addEventListener('DOMContentLoaded', () => {
         tbody.innerHTML = data.clients.map((c, idx) => {
             const rowIdx = (data.page - 1) * PER_PAGE + idx + 1;
 
-            // 💡 修复：根据客户端状态动态显示按钮
-            const actionButton = c.disabled
-                ? `<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">重新启用</button>`
-                : `<button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">禁用</button>`;
+            // 根据客户端状态动态生成按钮
+            let actionButtonsHTML = '';
+            if (c.disabled) {
+                // 如果客户端被禁用，只显示“重新启用”按钮
+                actionButtonsHTML = `
+                    <button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">重新启用</button>
+                `;
+            } else {
+                // 如果客户端未被禁用，同时显示“下载、修改、禁用和撤销”按钮
+                actionButtonsHTML = `
+                    <a href="/download_client/${c.name}" class="btn btn-sm btn-primary">下载配置</a>
+                    <button class="btn btn-sm btn-info modify-expiry-btn"
+                            data-client="${c.name}"
+                            data-bs-toggle="modal"
+                            data-bs-target="#modifyExpiryModal">修改到期</button>
+                    <button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">禁用</button>
+                    <button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">撤销</button>
+                `;
+            }
 
             return `
                 <tr>
@@ -505,13 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </td>
                     <td><small class="text-muted">${c.expiry || '未知'}</small></td>
                     <td class="d-flex flex-wrap gap-1">
-                    <a href="/download_client/${c.name}" class="btn btn-sm btn-primary">下载配置</a>
-                    <button class="btn btn-sm btn-info modify-expiry-btn"
-                                data-client="${c.name}"
-                                data-bs-toggle="modal"
-                                data-bs-target="#modifyExpiryModal">修改到期</button>
-                    ${actionButton}
-                    <button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">撤销</button>
+                    ${actionButtonsHTML}
                     </td>
                 </tr>`;
         }).join('');
@@ -523,7 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const make = (page, text, disabled = false, active = false) =>
             `<li class="page-item ${disabled ? 'disabled' : ''} ${active ? 'active' : ''}">
                 <a class="page-link" href="#" data-page="${page}">${text}</a>
-              </li>`;
+            </li>`;
 
         paging.innerHTML += make(data.page - 1, '«', data.page <= 1);
 
