@@ -36,7 +36,6 @@
 </head>
 <body data-role="{{ current_user.role.name }}" data-user-id="{{ current_user.id }}" data-page="dashboard">
     <div class="container py-4">
-        <!-- 页面头部 -->
         <header class="d-flex justify-content-between align-items-center mb-4">
             <h1 class="mb-0">OpenVPN管理界面</h1>
             <div class="dropdown">
@@ -53,7 +52,6 @@
             </div>
         </header>
 
-        <!-- OpenVPN 状态卡片 -->
         <section class="row mb-4" id="status-card-section">
             <div class="col-12">
                 <div class="card">
@@ -85,311 +83,299 @@
             </div>
         </section>
 
-        <!-- 客户端管理区域（当已安装/运行时显示） -->
         {% if status in ['running', 'installed'] %}
-<section class="row g-4">
-    {% if current_user and current_user.role_name in ['管理员', '超级管理员'] %}
-    <!-- 添加客户端卡片 -->
-    <div class="col-md-6">
-        <div class="card h-100">
-            <header class="card-header"><h5 class="mb-0">添加客户端</h5></header>
-            <div class="card-body">
-                <form id="add-client-form">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <section class="row g-4">
+            {% if current_user and current_user.role_name in ['管理员', '超级管理员'] %}
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <header class="card-header"><h5 class="mb-0">添加客户端</h5></header>
+                    <div class="card-body">
+                        <form id="add-client-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-                    <h6 class="fw-bold mb-2">客户端名称</h6>
-                    <div class="mb-3">
-                        <input type="text" class="form-control" id="client_name" name="client_name"
-                                required pattern="^[A-Za-z0-9_\-]+$" title="仅允许字母、数字、下划线和破折号">
-                        <div class="form-text text-muted">仅允许字母、数字、下划线和破折号</div>
+                            <h6 class="fw-bold mb-2">客户端名称</h6>
+                            <div class="mb-3">
+                                <input type="text" class="form-control" id="client_name" name="client_name"
+                                        required pattern="^[A-Za-z0-9_\-]+$" title="仅允许字母、数字、下划线和破折号">
+                                <div class="form-text text-muted">仅允许字母、数字、下划线和破折号</div>
+                            </div>
+
+                            <h6 class="fw-bold mb-2">证书有效期</h6>
+                            <div class="btn-group btn-group-sm mb-2" role="group" aria-label="证书有效期选择">
+                                <input type="radio" class="btn-check" name="expiry_choice" id="expiry30" value="30" checked>
+                                <label class="btn btn-outline-primary" for="expiry30">30 天</label>
+
+                                <input type="radio" class="btn-check" name="expiry_choice" id="expiry60" value="60">
+                                <label class="btn btn-outline-primary" for="expiry60">60 天</label>
+
+                                <input type="radio" class="btn-check" name="expiry_choice" id="expiry90" value="90">
+                                <label class="btn btn-outline-primary" for="expiry90">90 天</label>
+
+                                <input type="radio" class="btn-check" name="expiry_choice" id="expiryCustom" value="custom">
+                                <label class="btn btn-outline-primary" for="expiryCustom">选择日期</label>
+                            </div>
+
+                            <div class="ms-3 mt-2 d-none" id="expiryDateWrapper">
+                                <label for="expiry_date" class="form-label fw-normal">选择到期日期</label>
+                                <input type="date" class="form-control w-75" id="expiry_date" min="{{ today }}">
+                                <div class="form-text text-muted">选择证书的具体到期日期（不可早于今日）</div>
+                            </div>
+
+                            <div class="d-flex gap-2 mt-3">
+                                <button type="button" class="btn btn-secondary" id="reset-btn">重置</button>
+                                <button type="submit" class="btn btn-success">添加客户端</button>
+                            </div>
+
+                            <div id="add-client-loader" class="mt-2" style="display:none;">处理中...</div>
+                            <div id="add-client-message" class="mt-2"></div>
+                        </form>
                     </div>
-
-                    <h6 class="fw-bold mb-2">证书有效期</h6>
-                    <div class="btn-group btn-group-sm mb-2" role="group" aria-label="证书有效期选择">
-                        <input type="radio" class="btn-check" name="expiry_choice" id="expiry30" value="30" checked>
-                        <label class="btn btn-outline-primary" for="expiry30">30 天</label>
-
-                        <input type="radio" class="btn-check" name="expiry_choice" id="expiry60" value="60">
-                        <label class="btn btn-outline-primary" for="expiry60">60 天</label>
-
-                        <input type="radio" class="btn-check" name="expiry_choice" id="expiry90" value="90">
-                        <label class="btn btn-outline-primary" for="expiry90">90 天</label>
-
-                        <input type="radio" class="btn-check" name="expiry_choice" id="expiryCustom" value="custom">
-                        <label class="btn btn-outline-primary" for="expiryCustom">选择日期</label>
-                    </div>
-
-                    <div class="ms-3 mt-2 d-none" id="expiryDateWrapper">
-                        <label for="expiry_date" class="form-label fw-normal">选择到期日期</label>
-                        <input type="date" class="form-control w-75" id="expiry_date" min="{{ today }}">
-                        <div class="form-text text-muted">选择证书的具体到期日期（不可早于今日）</div>
-                    </div>
-
-                    <div class="d-flex gap-2 mt-3">
-                        <button type="button" class="btn btn-secondary" id="reset-btn">重置</button>
-                        <button type="submit" class="btn btn-success">添加客户端</button>
-                    </div>
-
-                    <div id="add-client-loader" class="mt-2" style="display:none;">处理中...</div>
-                    <div id="add-client-message" class="mt-2"></div>
-                </form>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- 客户端管理卡片 -->
-    <div class="{% if current_user and current_user.role_name in ['管理员', '超级管理员'] %}col-md-6{% else %}col-12{% endif %}">
-        <div class="card h-100">
-            <header class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">客户端管理</h5>
-                <small id="page-info" class="text-muted"></small>
-            </header>
-            <div class="card-body">
-                <!-- 搜索框 -->
-                <div class="mb-3">
-                    <input type="text" id="client-search"
-                           class="form-control form-control-sm"
-                           placeholder="搜索客户端名称后回车...">
-                </div>
-                <!-- 表格 -->
-                <div id="client-revoke-msg" class="mt-2"></div>
-                <div class="table-responsive">
-                    <table class="table table-hover" id="client-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>客户端名称</th>
-                                <th>在线状态</th>
-                                <th>到期时间</th>
-                                {% if current_user and current_user.role_name in ['管理员', '超级管理员'] %}
-                                    <th>操作</th>
-                                {% endif %}
-                            </tr>
-                        </thead>
-                        <tbody id="client-tbody"></tbody>
-                    </table>
-                </div>
-
-                <!-- 分页 -->
-                <nav aria-label="客户端分页导航">
-                    <ul class="pagination pagination-sm justify-content-center" id="pagination"></ul>
-                </nav>
-                <div class="loader" id="revoke-loader" style="display:none;"></div>
-                <div id="revoke-message" class="mt-3" role="alert"></div>
-                <!-- 无数据提示 -->
-                <p id="no-data" class="text-muted mb-0" style="display:none;">
-                    没有客户端证书。请添加新客户端。
-                </p>
-            </div>
-        </div>
-    </div>
-</section>
-{% endif %}
-
-    <!-- 确认模态框 (用于 showCustomConfirm) -->
-    <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="confirmModalLabel">确认操作</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- 消息将在此处动态设置 -->
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" id="confirmModal-confirm-btn">确认</button>
                 </div>
             </div>
-        </div>
-    </div>
+            {% endif %}
 
-    <!-- 修改到期时间模态框 -->
-    <div class="modal fade" id="modifyExpiryModal" tabindex="-1" aria-labelledby="modifyExpiryModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="modifyExpiryModalLabel">修改客户端到期时间</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="modify-expiry-form">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="{% if current_user and current_user.role_name in ['管理员', '超级管理员'] %}col-md-6{% else %}col-12{% endif %}">
+                <div class="card h-100">
+                    <header class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">客户端管理</h5>
+                        <small id="page-info" class="text-muted"></small>
+                    </header>
+                    <div class="card-body">
                         <div class="mb-3">
-                            <label class="form-label">客户端名称</label>
-                            <input type="text" class="form-control" id="modify-client-name" name="client_name" readonly>
+                            <input type="text" id="client-search"
+                                   class="form-control form-control-sm"
+                                   placeholder="搜索客户端名称后回车...">
+                        </div>
+                        <div id="client-revoke-msg" class="mt-2"></div>
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="client-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>客户端名称</th>
+                                        <th>在线状态</th>
+                                        <th>到期时间</th>
+                                        {% if current_user and current_user.role_name in ['管理员', '超级管理员'] %}
+                                            <th>操作</th>
+                                        {% endif %}
+                                    </tr>
+                                </thead>
+                                <tbody id="client-tbody"></tbody>
+                            </table>
                         </div>
 
-                        <h6 class="fw-bold mb-2">新的证书有效期</h6>
-                        <div class="btn-group btn-group-sm mb-2" role="group">
-                            <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiry30" value="30" checked>
-                            <label class="btn btn-outline-primary" for="modify-expiry30">30 天</label>
-
-                            <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiry60" value="60">
-                            <label class="btn btn-outline-primary" for="modify-expiry60">60 天</label>
-
-                            <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiry90" value="90">
-                            <label class="btn btn-outline-primary" for="modify-expiry90">90 天</label>
-
-                            <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiryCustom" value="custom">
-                            <label class="btn btn-outline-primary" for="modify-expiryCustom">选择日期</label>
-                        </div>
-
-                        <div class="ms-3 mt-2 d-none" id="modifyCustomDateWrapper">
-                            <label class="form-label">选择到期日期</label>
-                            <input type="date" class="form-control w-75" id="modify-expiry-date" min="{{ today }}">
-                            <div class="form-text text-muted">选择证书的具体到期日期（不可早于今日）</div>
-                        </div>
-                    </form>
-                    <div id="modify-expiry-message" class="mt-3"></div>
-                </div>
-                <div class="modal-footer">
-                    <div class="loader me-auto" id="modify-expiry-loader" style="display:none;"></div>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" id="confirm-modify-expiry">确认修改</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 安装 OpenVPN 模态框 -->
-    <div class="modal fade" id="installModal" tabindex="-1" aria-labelledby="installModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-sm">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="installModalLabel">安装 OpenVPN</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="install-form">
-                        <div class="mb-3">
-                            <label class="form-label" for="install-port">端口号</label>
-                            <input type="number" class="form-control" id="install-port" name="port" value="1194" min="1025" max="65534" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label" for="install-ip-select">服务器 IP</label>
-                            <select class="form-select" id="install-ip-select" name="server_ip" required>
-                                <option disabled selected>正在获取…</option>
-                            </select>
-                            <div class="form-text text-muted mt-1">若未找到目标IP，可手动输入</div>
-                        </div>
-                        <div class="mb-3" id="manual-ip-wrapper" style="display:none;">
-                            <input type="text" class="form-control" id="install-ip-input" name="manual_ip"
-                                   placeholder="例如 192.168.1.100"
-                                   pattern="^(?:\d{1,3}\.){3}\d{1,3}$"
-                                   title="请输入合法的IP地址">
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" id="confirm-install">确认安装</button>
+                        <nav aria-label="客户端分页导航">
+                            <ul class="pagination pagination-sm justify-content-center" id="pagination"></ul>
+                        </nav>
+                        <div class="loader" id="revoke-loader" style="display:none;"></div>
+                        <div id="revoke-message" class="mt-3" role="alert"></div>
+                        <p id="no-data" class="text-muted mb-0" style="display:none;">
+                            没有客户端证书。请添加新客户端。
+                        </p>
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
+        </section>
+        {% endif %}
 
-    <!-- 修改密码模态框 -->
-    <div class="modal fade" id="changePwdModal" tabindex="-1" aria-labelledby="changePwdModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="changePwdModalLabel">修改密码</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <form id="change-pwd-form">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="confirmModalLabel">确认操作</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
                     <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label" for="old-pwd">旧密码</label>
-                            <input type="password" class="form-control" id="old-pwd" name="old_pwd" required minlength="6">
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label" for="new-pwd">新密码</label>
-                            <input type="password" class="form-control" id="new-pwd" name="password" required minlength="8">
-                            <div class="form-text text-muted">需包含大小写字母、数字和特殊字符，至少8位</div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label" for="confirm-pwd">确认新密码</label>
-                            <input type="password" class="form-control" id="confirm-pwd" name="confirmPassword" required minlength="8">
-                            <div class="invalid-feedback">两次输入的新密码不一致，请重新输入</div>
-                        </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="button" class="btn btn-primary" id="confirmModal-confirm-btn">确认</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="modifyExpiryModal" tabindex="-1" aria-labelledby="modifyExpiryModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="modifyExpiryModalLabel">修改客户端到期时间</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="modify-expiry-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <div class="mb-3">
+                                <label class="form-label">客户端名称</label>
+                                <input type="text" class="form-control" id="modify-client-name" name="client_name" readonly>
+                            </div>
+
+                            <h6 class="fw-bold mb-2">新的证书有效期</h6>
+                            <div class="btn-group btn-group-sm mb-2" role="group">
+                                <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiry30" value="30" checked>
+                                <label class="btn btn-outline-primary" for="modify-expiry30">30 天</label>
+
+                                <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiry60" value="60">
+                                <label class="btn btn-outline-primary" for="modify-expiry60">60 天</label>
+
+                                <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiry90" value="90">
+                                <label class="btn btn-outline-primary" for="modify-expiry90">90 天</label>
+
+                                <input type="radio" class="btn-check" name="modify_expiry_choice" id="modify-expiryCustom" value="custom">
+                                <label class="btn btn-outline-primary" for="modify-expiryCustom">选择日期</label>
+                            </div>
+
+                            <div class="ms-3 mt-2 d-none" id="modifyCustomDateWrapper">
+                                <label class="form-label">选择到期日期</label>
+                                <input type="date" class="form-control w-75" id="modify-expiry-date" min="{{ today }}">
+                                <div class="form-text text-muted">选择证书的具体到期日期（不可早于今日）</div>
+                            </div>
+                        </form>
+                        <div id="modify-expiry-message" class="mt-3"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <div class="loader me-auto" id="modify-expiry-loader" style="display:none;"></div>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="button" class="btn btn-primary" id="confirm-modify-expiry">确认修改</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="installModal" tabindex="-1" aria-labelledby="installModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="installModalLabel">安装 OpenVPN</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="install-form">
+                            <div class="mb-3">
+                                <label class="form-label" for="install-port">端口号</label>
+                                <input type="number" class="form-control" id="install-port" name="port" value="1194" min="1025" max="65534" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="install-ip-select">服务器 IP</label>
+                                <select class="form-select" id="install-ip-select" name="server_ip" required>
+                                    <option disabled selected>正在获取…</option>
+                                </select>
+                                <div class="form-text text-muted mt-1">若未找到目标IP，可手动输入</div>
+                            </div>
+                            <div class="mb-3" id="manual-ip-wrapper" style="display:none;">
+                                <input type="text" class="form-control" id="install-ip-input" name="manual_ip"
+                                        placeholder="例如 192.168.1.100"
+                                        pattern="^(?:\d{1,3}\.){3}\d{1,3}$"
+                                        title="请输入合法的IP地址">
+                            </div>
+                        </form>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                        <button type="submit" class="btn btn-primary">确认修改</button>
+                        <button type="button" class="btn btn-primary" id="confirm-install">确认安装</button>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- 用户管理模态框 (仅超级管理员可见) -->
-    <div class="modal fade" id="userManagementModal" tabindex="-1" aria-labelledby="userManagementModalLabel"
-         aria-hidden="true">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content" id="confirm-modify-expiry">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="userManagementModalLabel">用户管理</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- 添加新用户表单 -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="mb-0">添加新用户</h6>
-                        </div>
-                        <div class="card-body">
-                            <form id="add-user-form">
-                                <div class="row g-2">
-                                    <div class="col-md-3">
-                                        <input type="text" class="form-control" placeholder="用户名" name="username" required>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <input type="email" class="form-control" placeholder="邮箱" name="email" required>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <input type="password" class="form-control" placeholder="密码" name="password"
-                                               required>
-                                    </div>
-                                    <div class="col-md-2">
-                                        <select class="form-select" name="role" required>
-                                            <option value="NORMAL">普通用户</option>
-                                            <option value="ADMIN">管理员</option>
-                                            <option value="SUPER_ADMIN">超级管理员</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-12 text-end">
-                                        <button type="submit" class="btn btn-primary btn-sm">添加用户</button>
-                                    </div>
-                                </div>
-                                <div id="add-user-message" class="mt-2"></div>
-                            </form>
-                        </div>
+        <div class="modal fade" id="changePwdModal" tabindex="-1" aria-labelledby="changePwdModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="changePwdModalLabel">修改密码</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-
-                    <!-- 用户列表 -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h6 class="mb-0">现有用户列表</h6>
+                    <form id="change-pwd-form" data-pwd-confirm>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label" for="old-pwd">旧密码</label>
+                                <input type="password" class="form-control" id="old-pwd" name="old_pwd" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="new-pwd">新密码</label>
+                                <input type="password" class="form-control" id="new-pwd" name="password" required>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="confirm-pwd">确认新密码</label>
+                                <input type="password" class="form-control" id="confirm-pwd" name="confirmPassword" required>
+                                <div class="invalid-feedback"></div>
+                            </div>
                         </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-hover">
-                                    <thead>
-                                        <tr>
-                                            <th>ID</th>
-                                            <th>用户名</th>
-                                            <th>邮箱</th>
-                                            <th>权限</th>
-                                            <th>操作</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="user-table-body">
-                                    </tbody>
-                                </table>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="submit" class="btn btn-primary">确认修改</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="userManagementModal" tabindex="-1" aria-labelledby="userManagementModalLabel"
+             aria-hidden="true">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content" id="confirm-modify-expiry">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="userManagementModalLabel">用户管理</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">添加新用户</h6>
+                            </div>
+                            <div class="card-body">
+                                <form id="add-user-form" data-pwd-confirm>
+                                    <div class="row g-2 align-items-center">
+                                        <div class="col-12 col-md">
+                                            <input type="text" class="form-control" placeholder="用户名" name="username" required>
+                                        </div>
+                                        <div class="col-12 col-md">
+                                            <input type="email" class="form-control" placeholder="邮箱" name="email" required>
+                                        </div>
+                                        <div class="col-12 col-md">
+                                            <input type="password" class="form-control" placeholder="密码" name="password" required>
+                                        </div>
+                                        <div class="col-12 col-md">
+                                            <input type="password" class="form-control" placeholder="确认密码" name="confirmPassword" required>
+                                        </div>
+                                        <div class="col-12 col-md-auto">
+                                            <select class="form-select" name="role" required>
+                                                <option value="NORMAL">普通用户</option>
+                                                <option value="ADMIN">管理员</option>
+                                                <option value="SUPER_ADMIN">超级管理员</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-12 col-md-auto">
+                                            <button type="submit" class="btn btn-primary btn-sm">添加用户</button>
+                                        </div>
+                                    </div>
+                                    <div id="add-user-message" class="mt-2"></div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">现有用户列表</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>用户名</th>
+                                                <th>邮箱</th>
+                                                <th>权限</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="user-table-body">
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -398,10 +384,7 @@
         </div>
     </div>
 
-    <!-- JS 依赖 -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- <script src="{{ url_for('static', filename='js/password-confirm.js') }}"></script> -->
-   
     <script type="module" src="../static/js/main.js"></script>
 </body>
 </html>

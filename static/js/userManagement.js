@@ -3,40 +3,63 @@
  */
 import { qs, showCustomMessage, showCustomConfirm, authFetch } from './utils.js';
 
+// 获取模态框本身，这是我们事件绑定的目标
+const userManagementModal = document.getElementById('userManagementModal');
+
 // 统一的初始化函数，作为模块的入口
 export function init() {
-    const card = qs('#user-management-card');
-    if (!card || card.hasAttribute('data-bound')) return;
-    card.setAttribute('data-bound', 'true');
+    // 检查模态框是否存在，如果不存在则直接返回
+    if (!userManagementModal) {
+        console.error('User management modal not found. Skipping initialization.');
+        return;
+    }
+
+    // 我们只需要绑定一次
+    if (userManagementModal.hasAttribute('data-bound')) return;
+    userManagementModal.setAttribute('data-bound', 'true');
 
     const form = qs('#add-user-form');
     const messageDiv = qs('#add-user-message');
     const tbody = qs('#user-table-body');
     const userId = parseInt(document.body.dataset.userId);
 
+    // 绑定模态框的显示事件
+    // 当模态框被打开时，我们才去获取用户数据
+    userManagementModal.addEventListener('shown.bs.modal', fetchUsers);
+
     // 绑定添加用户表单
-    if (form && !form.hasAttribute('data-bound')) {
-        form.setAttribute('data-bound', 'true');
+    if (form) {
         form.addEventListener('submit', async e => {
             e.preventDefault();
-            const usernameInput = qs('#username');
-            const passwordInput = qs('#password');
-            const roleInput = qs('#role');
+            const usernameInput = qs('input[name="username"]', form);
+            const emailInput = qs('input[name="email"]', form);
+            const passwordInput = qs('input[name="password"]', form);
+            const roleInput = qs('select[name="role"]', form);
+
             const username = usernameInput.value.trim();
+            const email = emailInput.value.trim();
             const password = passwordInput.value;
             const role = roleInput.value;
 
-            if (!username || !password) {
-                messageDiv.innerHTML = '<div class="alert alert-danger">用户名和密码不能为空</div>';
+            if (!username || !email || !password) {
+                messageDiv.innerHTML = '<div class="alert alert-danger">用户名、邮箱和密码不能为空</div>';
                 return;
             }
 
             try {
-                const res = await authFetch('/add_user', {
+                const res = await authFetch('/add_users', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password, role })
+                    body: JSON.stringify({ username, email, password, role })
                 });
+
+                // ✅ 修复：在解析 JSON 之前，先检查响应是否成功
+                if (!res.ok) {
+                    const errorData = await res.json();
+                    // 如果后端返回了 message，则使用它，否则使用默认信息
+                    throw new Error(errorData.message || '未知错误');
+                }
+
                 const data = await res.json();
                 const cls = data.status === 'success' ? 'alert-success' : 'alert-danger';
                 messageDiv.innerHTML = `<div class="alert ${cls}">${data.message}</div>`;
@@ -47,12 +70,16 @@ export function init() {
                     fetchUsers(); // 成功后刷新用户列表
                 }
             } catch (error) {
+                // 现在 catch 块可以正确捕获并显示自定义的错误信息了
                 messageDiv.innerHTML = `<div class="alert alert-danger">添加用户失败: ${error.message}</div>`;
             }
         });
     }
 
     async function fetchUsers() {
+        const tbody = qs('#user-table-body');
+        if (!tbody) return;
+        
         try {
             const res = await authFetch('/get_users');
             const data = await res.json();
@@ -67,16 +94,19 @@ export function init() {
     }
 
     function renderUsers(users) {
+        const tbody = qs('#user-table-body');
         if (!tbody) return;
+        const userId = parseInt(document.body.dataset.userId);
+
         if (users.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center">没有用户</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">没有用户</td></tr>';
             return;
         }
 
         tbody.innerHTML = users.map((u, index) => {
             // 过滤掉当前用户，防止用户删除自己
-            if (u.id === userId) return ''; 
-
+            if (u.id === userId) return '';
+            
             const actionButtons = [];
             actionButtons.push(`<button class="btn btn-sm btn-info change-role" data-user-id="${u.id}" data-current-role="${u.role}">切换权限</button>`);
             actionButtons.push(`<button class="btn btn-sm btn-warning reset-pwd" data-user-id="${u.id}">重置密码</button>`);
@@ -86,24 +116,35 @@ export function init() {
                 <tr>
                     <td>${index + 1}</td>
                     <td>${u.username}</td>
+                    <td>${u.email || 'N/A'}</td>
                     <td>${u.role}</td>
                     <td class="d-flex flex-wrap gap-1">${actionButtons.join('')}</td>
                 </tr>`;
         }).join('');
     }
 
-    // 事件委托处理操作按钮
-    card.addEventListener('click', async e => {
+    // 事件委托处理操作按钮，绑定到模态框上
+    userManagementModal.addEventListener('click', async e => {
         const target = e.target.closest('.change-role, .reset-pwd, .delete-user');
         if (!target) return;
         e.preventDefault();
 
         const uid = target.dataset.userId;
 
+        // 找到当前的模态框遮罩层
+        const modalBackdrop = document.querySelector('.modal-backdrop');
+        
         if (target.classList.contains('change-role')) {
             const currentRole = target.dataset.currentRole;
-            const newRole = currentRole === 'ADMIN' ? 'USER' : 'ADMIN';
+            const newRole = currentRole === 'ADMIN' ? 'NORMAL' : 'ADMIN';
+
+            // 临时隐藏模态框的遮罩层
+            if (modalBackdrop) modalBackdrop.classList.add('d-none');
+
             showCustomConfirm(`确定将用户权限从 ${currentRole} 切换到 ${newRole} 吗？`, async (confirmed) => {
+                // 恢复模态框的遮罩层
+                if (modalBackdrop) modalBackdrop.classList.remove('d-none');
+                
                 if (!confirmed) return;
                 try {
                     const res = await authFetch('/change_user_role', {
@@ -119,7 +160,13 @@ export function init() {
                 }
             });
         } else if (target.classList.contains('reset-pwd')) {
+            // 临时隐藏模态框的遮罩层
+            if (modalBackdrop) modalBackdrop.classList.add('d-none');
+
             showCustomConfirm('确定要重置该用户的密码吗？', async (confirmed) => {
+                // 恢复模态框的遮罩层
+                if (modalBackdrop) modalBackdrop.classList.remove('d-none');
+                
                 if (!confirmed) return;
                 try {
                     const res = await authFetch('/reset_user_password', {
@@ -134,7 +181,13 @@ export function init() {
                 }
             });
         } else if (target.classList.contains('delete-user')) {
+            // 临时隐藏模态框的遮罩层
+            if (modalBackdrop) modalBackdrop.classList.add('d-none');
+
             showCustomConfirm('警告：确定要删除该用户吗？此操作不可逆！', async (confirmed) => {
+                // 恢复模态框的遮罩层
+                if (modalBackdrop) modalBackdrop.classList.remove('d-none');
+                
                 if (!confirmed) return;
                 try {
                     const res = await authFetch('/delete_user', {
@@ -151,7 +204,4 @@ export function init() {
             });
         }
     });
-
-    // 在模块初始化时自动获取并渲染用户列表
-    fetchUsers();
 }

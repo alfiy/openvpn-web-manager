@@ -7,7 +7,7 @@ add_users_bp = Blueprint('add_users', __name__)
 
 @add_users_bp.route('/add_users', methods=['POST'])
 @login_required
-@role_required(Role.SUPER_ADMIN)  # 仅超级管理员可用
+@role_required([Role.SUPER_ADMIN])
 def add_users():
     """
     新增用户接口（JSON）
@@ -16,13 +16,17 @@ def add_users():
     username = (data.get('username') or '').strip()
     email = (data.get('email') or '').strip()
     password = (data.get('password') or '').strip()
-    role = (data.get('role') or 'NORMAL').strip()
+    
+    # 原始的字符串角色名
+    role_str = (data.get('role') or 'NORMAL').strip()
 
     if not username or not email or not password:
         return jsonify({'status': 'error', 'message': '用户名、邮箱和密码不能为空'}), 400
 
-    # 检查角色有效性
-    if role not in [Role.NORMAL, Role.ADMIN, Role.SUPER_ADMIN]:
+    # ✅ 修复：将字符串转换为 Role 枚举成员
+    try:
+        role = Role[role_str]
+    except KeyError:
         return jsonify({'status': 'error', 'message': '角色无效'}), 400
 
     # 检查用户名或邮箱是否已存在
@@ -30,6 +34,7 @@ def add_users():
         return jsonify({'status': 'error', 'message': '用户名或邮箱已存在'}), 400
 
     try:
+        # ✅ 修复：将转换后的 role 枚举对象传递给 User 构造函数
         user = User(username=username, email=email, role=role)
         user.set_password(password)
         db.session.add(user)

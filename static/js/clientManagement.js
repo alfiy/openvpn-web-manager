@@ -40,22 +40,25 @@ function render(data) {
         const rowIdx = (data.page - 1) * PER_PAGE + idx + 1;
         const actionButtons = [];
 
-        actionButtons.push(`<a href="/download_client/${c.name}" class="btn btn-sm btn-primary">下载配置</a>`);
+        // 新增的业务逻辑判断
+        if (c.disabled) {
+            // 如果客户端被禁用，只显示“重新启用”按钮
+            actionButtons.push(`<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">重新启用</button>`);
+        } else {
+            // 如果客户端未被禁用，则显示所有按钮（根据角色权限）
+            actionButtons.push(`<a href="/download_client/${c.name}" class="btn btn-sm btn-primary">下载配置</a>`);
 
-        if (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') {
-            actionButtons.push(`<button class="btn btn-sm btn-info modify-expiry-btn"
+            if (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') {
+                actionButtons.push(`<button class="btn btn-sm btn-info modify-expiry-btn"
                                             data-client="${c.name}"
                                             data-bs-toggle="modal"
                                             data-bs-target="#modifyExpiryModal">修改到期</button>`);
-
-            const actionButton = c.disabled
-                ? `<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">重新启用</button>`
-                : `<button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">禁用</button>`;
-            actionButtons.push(actionButton);
-            
-            actionButtons.push(`<button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">撤销</button>`);
+                                            
+                actionButtons.push(`<button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">禁用</button>`);
+                actionButtons.push(`<button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">撤销</button>`);
+            }
         }
-
+    
         return `
             <tr>
                 <td>${rowIdx}</td>
@@ -80,7 +83,7 @@ function render(data) {
     const make = (page, text, disabled = false, active = false) =>
         `<li class="page-item ${disabled ? 'disabled' : ''} ${active ? 'active' : ''}">
             <a class="page-link" href="#" data-page="${page}">${text}</a>
-         </li>`;
+        </li>`;
 
     paging.innerHTML += make(data.page - 1, '«', data.page <= 1);
     const start = Math.max(1, data.page - 2);

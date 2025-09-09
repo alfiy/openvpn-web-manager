@@ -115,6 +115,7 @@ export function showCustomMessage(message, title = '提示') {
     modal.show();
 }
 
+
 /**
  * 显示自定义确认模态框
  * @param {string} message
@@ -126,6 +127,9 @@ export function showCustomConfirm(message, callback, title = '确认操作') {
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     const body = qs('#confirmModal .modal-body');
     const okBtn = qs('#confirmModal-confirm-btn');
+
+    // **关键改动: 确保确认模态框的 z-index 总是高于其他模态框**
+    modalEl.style.zIndex = 1060; 
 
     // 确保标题和消息正确显示
     qs('#confirmModal .modal-title').textContent = title;
@@ -140,6 +144,9 @@ export function showCustomConfirm(message, callback, title = '确认操作') {
 
     // 绑定模态框隐藏事件，以处理取消操作和清理
     modalEl.addEventListener('hide.bs.modal', (e) => {
+        // **关键改动: 隐藏后重置 z-index**
+        modalEl.style.zIndex = ''; 
+
         // 如果是点击了关闭按钮，则执行取消回调
         if (e.relatedTarget && e.relatedTarget.dataset.bsDismiss) {
             callback(false);

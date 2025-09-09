@@ -32,6 +32,7 @@ from routes.get_ip_list import ip_bp
 from routes.index import index_bp
 from routes.get_users import user_bp
 from routes.add_users import add_users_bp
+from routes.delete_user import delete_user_bp
 
 
 def create_app():
@@ -129,6 +130,7 @@ def create_app():
     app.register_blueprint(index_bp)
     app.register_blueprint(user_bp)
     app.register_blueprint(add_users_bp)
+    app.register_blueprint(delete_user_bp)
 
     return app
 
