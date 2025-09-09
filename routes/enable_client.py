@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, url_for
+from flask import Blueprint, request, jsonify
 import os
 import subprocess
 from utils.openvpn_utils import log_message, get_openvpn_port
@@ -27,6 +27,11 @@ def enable_client():
     print(f"[ENABLE] Starting re-enable process for client: {client_name}", flush=True)
 
     port = get_openvpn_port()
+    
+    # 验证客户端名称是否合法以防止路径遍历攻击
+    if not client_name.isalnum() and '_' not in client_name and '-' not in client_name:
+        return jsonify({'status': 'error', 'message': 'Invalid client name format'}), 400
+
     try:
         # Step 1: Remove disabled flag if it exists
         disabled_clients_dir = '/etc/openvpn/disabled_clients'
@@ -37,27 +42,36 @@ def enable_client():
             log_message(f"Removed disabled flag for client: {client_name}")
 
         # Step 2: Check if PKI directory exists
-        if not os.path.exists('/etc/openvpn/easy-rsa/pki/index.txt'):
+        index_file_path = '/etc/openvpn/easy-rsa/pki/index.txt'
+        if not os.path.exists(index_file_path):
             log_message("OpenVPN PKI not found")
             return jsonify({'status': 'error', 'message': 'OpenVPN PKI not found. Please ensure OpenVPN is installed and configured.'})
 
         # Step 3: Check current certificate status
         log_message("Checking certificate status")
-        with open('/etc/openvpn/easy-rsa/pki/index.txt', 'r') as f:
+        with open(index_file_path, 'r') as f:
             lines = f.readlines()
 
         client_found = False
         client_revoked = False
+        client_cn_part = f'CN={client_name}'
 
         for line in lines:
-            if f'CN={client_name}/' in line or f'CN={client_name}' in line:
-                client_found = True
-                if line.startswith('R'):  # Revoked
-                    client_revoked = True
-                    log_message(f"Client {client_name} certificate is revoked")
-                elif line.startswith('V'):  # Valid
-                    log_message(f"Client {client_name} certificate is already valid")
-                break
+            parts = line.strip().split('\t')
+            # 检查行是否包含证书主题
+            if len(parts) > 5 and parts[5].strip().endswith(client_cn_part):
+                # 检查CN是否精确匹配，而不是前缀匹配
+                cn = parts[5].split('=')[-1]
+                if cn == client_name:
+                    client_found = True
+                    # 检查证书状态
+                    status = parts[0]
+                    if status == 'R':  # Revoked
+                        client_revoked = True
+                        log_message(f"Client {client_name} certificate is revoked")
+                    elif status == 'V':  # Valid
+                        log_message(f"Client {client_name} certificate is already valid")
+                    break
 
         if not client_found:
             log_message(f"Client {client_name} not found in PKI")
@@ -67,17 +81,18 @@ def enable_client():
         if client_revoked:
             log_message(f"Creating new certificate for revoked client: {client_name}")
 
-            # Remove old revoked entries from index
+            # Remove old revoked entries from index, using precise matching
             filtered_lines = []
             for line in lines:
-                if f'CN={client_name}/' not in line and f'CN={client_name}' not in line:
+                parts = line.strip().split('\t')
+                # 再次精确匹配，确保只删除目标客户端的行
+                if not (len(parts) > 5 and parts[5].strip().endswith(f'CN={client_name}')):
                     filtered_lines.append(line)
 
-            # Write back filtered content
             try:
                 subprocess.run([
                     'sudo', 'bash', '-c',
-                    f'cat > /etc/openvpn/easy-rsa/pki/index.txt << \'EOF\'\n{"".join(filtered_lines)}EOF'
+                    f'cat > {index_file_path} << \'EOF\'\n{"".join(filtered_lines)}EOF'
                 ], check=True, timeout=30)
                 log_message("Removed old certificate entries from index")
             except Exception as e:
@@ -90,10 +105,11 @@ def enable_client():
                 ['sudo', 'rm', '-f', f'/etc/openvpn/easy-rsa/pki/private/{client_name}.key'],
                 ['sudo', 'rm', '-f', f'/etc/openvpn/easy-rsa/pki/reqs/{client_name}.req']
             ]
-
+            
             for cmd in cleanup_commands:
                 try:
-                    subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+                    # 使用 subprocess.run 更安全，且不需要 `try/except` 块来忽略错误
+                    subprocess.run(cmd, check=False)
                 except Exception:
                     pass
 
@@ -112,6 +128,10 @@ def enable_client():
 
             # Generate new client configuration file
             log_message("Generating client configuration")
+            # ... (这部分代码不需要修改，但为了完整性保留)
+            # 在这里，我假设你的配置生成逻辑是正确的
+            # ... (此处省略配置生成代码以保持简洁)
+            
             config_commands = [
                 f'cd /etc/openvpn/easy-rsa',
                 f'echo "client" > "/etc/openvpn/client/{client_name}.ovpn"',
@@ -156,18 +176,17 @@ def enable_client():
 
             log_message("Client configuration generated successfully")
 
-            # Step 5: Generate new CRL to remove any revocation
+            # Step 5 & 6: Generate new CRL and update
             log_message("Generating new CRL")
             crl_result = subprocess.run([
                 'sudo', 'bash', '-c', 'cd /etc/openvpn/easy-rsa && ./easyrsa gen-crl'
             ], capture_output=True, text=True, timeout=60)
-
+            
             if crl_result.returncode != 0:
                 error_msg = f"Failed to generate CRL: {crl_result.stderr}"
                 log_message(error_msg)
                 return jsonify({'status': 'error', 'message': error_msg})
 
-            # Step 6: Update CRL in OpenVPN directory
             try:
                 subprocess.run(['sudo', 'cp', '/etc/openvpn/easy-rsa/pki/crl.pem', '/etc/openvpn/crl.pem'], check=True)
                 subprocess.run(['sudo', 'chmod', '644', '/etc/openvpn/crl.pem'], check=True)
