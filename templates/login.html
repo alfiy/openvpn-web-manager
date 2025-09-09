@@ -3,16 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - OpenVPN管理界面</title>
+    <title>登录 - 管理界面</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <style>
-        body{background:#f8f9fa;display:flex;align-items:center;justify-content:center;height:100vh}
-        .login-container{width:100%;max-width:400px;padding:15px}
+  <style>
+        body {
+            background: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            /* 允许底部内容固定 */
+            position: relative;
+        }
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 15px;
+        }
         .hidden {
             display: none;
         }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-running { background-color: #28a745; }
+        .status-installed { background-color: #ffc107; }
+        .status-not-installed { background-color: #dc3545; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* 新增样式，使页脚固定在底部并居中 */
+        .fixed-bottom-footer {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            padding: 10px;
+        }
     </style>
+
 </head>
 <body>
     <div class="login-container">
@@ -46,6 +88,11 @@
             </div>
         </div>
     </div>
+
+        <footer class="container-fluid fixed-bottom-footer">
+            <p class="text-center text-muted small">本系统仅面向《计算机信息网络国际联网管理暂行规定》所允许的内部办公自用场景，请勿用于未经批准的跨境联网活动。</p>
+        </footer>
+
     <script>
         /* ---------- 登录业务处理 ---------- */
         document.addEventListener('DOMContentLoaded', function () {
