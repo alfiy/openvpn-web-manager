@@ -3,6 +3,8 @@
  */
 import { qs, qsa, showCustomMessage, showCustomConfirm, authFetch, toggleCustomDate } from './utils.js';
 
+const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
 let userRole = (document.body.dataset.role || '').toUpperCase();
 const userId = document.body.dataset.userId;
 
@@ -203,12 +205,15 @@ export function bindAddClient() {
         }
 
         try {
-            const res = await authFetch('/add_client', {
+            const data = await authFetch('/add_client', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                 },
                 body: JSON.stringify({ client_name: nameVal, expiry_days: expiryDays })
             });
-            const data = await res.json();
+            
             
             loader.style.display = 'none';
             const cls = data.status === 'success' ? 'alert-success' : 'alert-danger';
@@ -222,6 +227,7 @@ export function bindAddClient() {
         } catch(err) {
             loader.style.display = 'none';
             msgDiv.innerHTML = `<div class="alert alert-danger">${err}</div>`;
+            setTimeout(() => msgDiv.innerHTML = '', 2000);
         }
     });
 }
