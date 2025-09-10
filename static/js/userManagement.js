@@ -175,7 +175,16 @@ export function init() {
                         body: JSON.stringify({ user_id: uid })
                     });
                     const data = await res.json();
-                    showCustomMessage(data.message);
+                    if (data.status === 'success') {
+                        // 如果后端返回了新密码字段，就单独显示它
+                        const message = `密码重置成功！新密码是：**${data.new_password}**`;
+                        // 你可以使用 showCustomMessage 来显示这个消息，可能需要调整 showCustomMessage 支持HTML
+                        showCustomMessage(message);
+                        fetchUsers();
+                    } else {
+                        // 如果失败，显示错误信息
+                        showCustomMessage(`重置密码失败: ${data.message}`);
+                    }
                 } catch (error) {
                     showCustomMessage(`重置密码失败: ${error.message}`);
                 }

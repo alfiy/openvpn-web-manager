@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from flask_mail import Message
 import secrets
 from flask import current_app
+from functools import wraps
+import logging
 
 # 导入 Flask-Login 相关的函数
 from flask_login import login_user, logout_user, current_user, login_required
@@ -39,6 +41,11 @@ def register():
         db.session.commit()
         return jsonify({'status': 'success'})
     return render_template('register.html')
+
+@auth_bp.route('/api/check_auth')
+def check_auth():
+    """检查用户是否已登录。"""
+    return jsonify({'logged_in': current_user.is_authenticated})
 
 def generate_token():
     """生成一个安全的令牌。"""
@@ -132,7 +139,6 @@ def login():
         }), 401
     
 
-
 @auth_bp.route('/change_password', methods=['POST'])
 @login_required
 def change_password():
@@ -158,7 +164,131 @@ def logout():
     logout_user()
     return redirect(url_for('auth_bp.login'))
 
-@auth_bp.route('/api/check_auth')
-def check_auth():
-    """检查用户是否已登录。"""
-    return jsonify({'logged_in': current_user.is_authenticated})
+def admin_required(f):
+    """
+    一个自定义装饰器，用于限制只有管理员才能访问的路由。
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # 如果用户未登录或角色不是管理员或超级管理员，则返回 JSON 错误
+        if not current_user.is_authenticated or (current_user.role != Role.ADMIN and current_user.role != Role.SUPER_ADMIN):
+            # 返回一个 403 Forbidden 错误，并附带 JSON 消息
+            return jsonify({'status': 'error', 'message': '权限不足'}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
+@auth_bp.route('/change_user_role', methods=['POST'])
+@login_required
+@admin_required
+def change_user_role():
+    """
+    管理员或超级管理员切换用户的权限。
+    """
+    # 记录日志，便于调试
+    logging.info(f"User {current_user.id} is attempting to change a user's role.")
+    
+    try:
+        data = request.get_json()
+        if not data:
+            # 如果请求体不是 JSON，返回错误
+            return jsonify({'status': 'error', 'message': '请求需要是JSON格式'}), 400
+
+        user_id = data.get('user_id')
+        new_role_str = data.get('new_role')
+
+        if not user_id or not new_role_str:
+            return jsonify({'status': 'error', 'message': '缺少用户ID或新角色'}), 400
+
+        # 验证用户ID是否为整数
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            return jsonify({'status': 'error', 'message': '用户ID无效'}), 400
+
+        # 检查新角色是否是有效的枚举值
+        new_role = new_role_str.upper()
+        if new_role not in [role.name for role in Role]:
+            return jsonify({'status': 'error', 'message': '新角色无效'}), 400
+
+        # 查找目标用户
+        user_to_change = User.query.get(user_id)
+        if not user_to_change:
+            return jsonify({'status': 'error', 'message': '用户不存在'}), 404
+
+        # 阻止管理员修改超级管理员的权限
+        if current_user.role == Role.ADMIN and user_to_change.role == Role.SUPER_ADMIN:
+             return jsonify({'status': 'error', 'message': '您无权修改超级管理员的权限'}), 403
+
+        # 阻止用户修改自己的权限
+        if user_to_change.id == current_user.id:
+            return jsonify({'status': 'error', 'message': '无法修改自己的权限'}), 403
+
+        # 更新用户的角色
+        user_to_change.role = Role[new_role]
+        db.session.commit()
+        
+        logging.info(f"User {current_user.id} successfully changed the role of user {user_id} to {new_role}.")
+        
+        # 返回成功响应
+        return jsonify({
+            'status': 'success',
+            'message': f'用户 {user_to_change.username} 的权限已成功切换到 {new_role}'
+        }), 200
+
+    except Exception as e:
+        # 捕获所有其他异常，并返回通用错误消息
+        logging.error(f"Error changing user role: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': f'服务器内部错误: {str(e)}'}), 500
+
+@auth_bp.route('/reset_user_password', methods=['POST'])
+@login_required
+@admin_required
+def reset_user_password():
+    """
+    管理员或超级管理员重置用户的密码。
+    成功后返回生成的明文密码。
+    """
+    logging.info(f"User {current_user.id} is attempting to reset a user's password.")
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': '请求需要是JSON格式'}), 400
+
+        user_id = data.get('user_id')
+        if not user_id:
+            return jsonify({'status': 'error', 'message': '缺少用户ID'}), 400
+
+        # 查找目标用户
+        user_to_reset = User.query.get(user_id)
+        if not user_to_reset:
+            return jsonify({'status': 'error', 'message': '用户不存在'}), 404
+
+        # 阻止管理员重置超级管理员的密码
+        if current_user.role == Role.ADMIN and user_to_reset.role == Role.SUPER_ADMIN:
+            return jsonify({'status': 'error', 'message': '您无权重置超级管理员的密码'}), 403
+
+        # 阻止用户重置自己的密码
+        if user_to_reset.id == current_user.id:
+            return jsonify({'status': 'error', 'message': '无法重置自己的密码'}), 403
+
+        # 生成一个16位的复杂密码
+        new_password = secrets.token_urlsafe(16)
+        
+        # 重置密码
+        user_to_reset.set_password(new_password)
+        db.session.commit()
+
+        logging.info(f"User {current_user.id} successfully reset the password for user {user_to_reset.id}.")
+        
+        # 返回成功响应，并在消息中包含明文密码
+        return jsonify({
+            'status': 'success',
+            'message': f'密码已成功重置！新密码是: {new_password}',
+            'new_password': new_password
+        }), 200
+
+    except Exception as e:
+        logging.error(f"Error resetting user password: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': f'服务器内部错误: {str(e)}'}), 500
+

@@ -19,7 +19,7 @@ import { init as ChangePassword } from './changePassword.js';
  * 这是一个总入口，只在页面加载时调用一次
  */
 function bindAll() {
-    const role = document.body.dataset.role;
+    const role = document.body.dataset.role.toUpperCase();
 
     // 根据角色初始化相应的模块
     if (role === 'SUPER_ADMIN') {

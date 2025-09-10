@@ -84,3 +84,13 @@ export default class PasswordConfirm {
         tip.style.display = 'none';
     }
 }
+
+// 导出 init 函数，它负责找到表单并创建 PasswordConfirm 实例
+export function init() {
+    // 找到所有带有 data-validate-pwd 属性的表单
+    const forms = document.querySelectorAll('form[data-validate-pwd]');
+    forms.forEach(form => {
+        // 为每个找到的表单创建一个 PasswordConfirm 实例
+        new PasswordConfirm(form);
+    });
+}

@@ -76,27 +76,55 @@ export function bindInstall() {
 }
 
 export function bindUninstall() {
-    document.addEventListener('click', e => {
-        const btn = e.target.closest('#uninstall-btn');
-        if (!btn) return;
+    const btn = qs('#uninstall-btn');
+    // 如果按钮不存在或已绑定，则直接返回
+    if (!btn || btn.hasAttribute('data-bound')) {
+        return;
+    }
+    // 添加一个自定义属性来标记该函数已绑定，防止重复绑定
+    btn.setAttribute('data-bound', 'true');
+
+    btn.addEventListener('click', () => {
         
-        showCustomConfirm('确定要卸载OpenVPN吗? 所有客户端配置将被删除!', async ok => {
-            if (!ok) return;
+        showCustomConfirm('确定要卸载OpenVPN吗? 所有客户端配置将被删除!', async (ok) => {
+            if (!ok) {
+                return;
+            }
+
             const loader = qs('#uninstall-loader');
             const msg = qs('#status-message');
-            loader && (loader.style.display = 'block');
-            msg && (msg.className = 'alert alert-info', msg.textContent = '正在卸载OpenVPN...', msg.classList.remove('d-none'));
+
+            if (loader) {
+                loader.style.display = 'block';
+            }
+            if (msg) {
+                msg.className = 'alert alert-info';
+                msg.textContent = '正在卸载OpenVPN...';
+                msg.classList.remove('d-none');
+            }
 
             try {
                 const data = await authFetch('/uninstall', { method: 'POST' }).then(r => r.json());
-                loader.style.display = 'none';
-                msg.textContent = data.message;
-                msg.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
-                if (data.status === 'success') setTimeout(() => location.reload(), 1200);
+                
+                if (loader) {
+                    loader.style.display = 'none';
+                }
+                if (msg) {
+                    msg.textContent = data.message;
+                    msg.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
+                }
+                
+                if (data.status === 'success') {
+                    setTimeout(() => location.reload(), 1200);
+                }
             } catch (err) {
-                loader.style.display = 'none';
-                msg.textContent = '卸载失败: ' + err;
-                msg.className = 'alert alert-danger';
+                if (loader) {
+                    loader.style.display = 'none';
+                }
+                if (msg) {
+                    msg.textContent = '卸载失败: ' + err;
+                    msg.className = 'alert alert-danger';
+                }
             }
         });
     });
