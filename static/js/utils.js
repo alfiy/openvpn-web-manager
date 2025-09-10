@@ -53,28 +53,37 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * 封装带认证和 CSRF 的 fetch
- * @param {string} url
- * @param {RequestInit} opts
- * @returns {Promise<Response>}
+ * 带有认证功能的 Fetch 请求封装
+ * @param {string} url - 请求 URL
+ * @param {object} options - Fetch 请求选项
+ * @returns {Promise<object>} - 返回一个 Promise，成功时解析 JSON 数据
  */
-export function authFetch(url, opts = {}) {
-    const headers = new Headers(opts.headers || {});
-    const meta = qs('meta[name="csrf-token"]');
-    // 如果存在 CSRF token 且请求头中没有，则添加
-    if (meta && !headers.has('X-CSRFToken')) headers.set('X-CSRFToken', meta.content);
-    
-    // 异步链式调用
-    return fetch(url, { ...opts, headers, credentials: 'same-origin' })
-        .then(r => {
-            if (r.status === 401) { location.href = '/login'; throw new Error('未登录'); }
-            // 检查响应是否正常
-            if (!r.ok) {
-                // 如果响应不正常，尝试解析 JSON 错误信息
-                return r.json().then(e => Promise.reject(e.message || '服务器错误'));
-            }
-            return r;
-        });
+export async function authFetch(url, options = {}) {
+  // 假设你从某个地方获取 CSRF 令牌，例如从 meta 标签
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+  // 如果请求方法不是 GET，且未包含 CSRF 令牌，则添加
+  if (options.method && options.method.toUpperCase() !== 'GET') {
+    options.headers = {
+      ...options.headers,
+      'X-CSRFToken': csrfToken
+    };
+  }
+
+  const response = await fetch(url, options);
+
+  // 检查响应状态码。如果不是 2xx，则抛出错误。
+  if (!response.ok) {
+    // 如果响应体是 JSON，则解析并作为错误信息
+    const errorData = await response.json();
+    const error = new Error(errorData.message || '请求失败');
+    error.status = response.status;
+    error.data = errorData;
+    throw error;
+  }
+
+  // 成功响应，解析 JSON
+  return response.json();
 }
 
 /**

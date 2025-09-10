@@ -100,7 +100,6 @@ function render(data) {
 /* AJAX 拉数据 */
 export function loadClients(page = 1, q = '') {
     authFetch(`/clients/data?page=${page}&q=${encodeURIComponent(q)}`)
-        .then(r => r.json())
         .then(render)
         .catch(console.error);
 }
