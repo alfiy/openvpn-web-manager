@@ -26,6 +26,7 @@ function render(data) {
     }
     
     if (!clientsToRender.length) {
+        
         tbody.innerHTML = '';
         paging.innerHTML = '';
         noData.style.display = 'block';

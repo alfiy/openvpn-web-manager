@@ -28,13 +28,13 @@ function bindAll() {
         initUserManagement();
     } else if (role === 'ADMIN') {
         initClientManagement();
-    } else if (role === 'USER') {
+    } else if (role === 'NORMAL') {
         initClientManagement();
     }
-
+    
     // 初始化密码确认模块，这是一个通用的功能
     initPasswordConfirm();
-    // ChangePassword();
+    ChangePassword();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
