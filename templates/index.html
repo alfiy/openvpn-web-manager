@@ -37,7 +37,7 @@
 <body data-role="{{ current_user.role.name }}" data-user-id="{{ current_user.id }}" data-page="dashboard">
     <div class="container py-4">
         <header class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="mb-0">管理界面</h1>
+            <h1 class="mb-0">OpenVPN 管理界面</h1>
             <div class="dropdown">
                 <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                     {{ current_user.username }} ({{ current_user.role_name }})
@@ -86,8 +86,8 @@
         {% if status in ['running', 'installed'] %}
         <section class="row g-4">
             {% if current_user and current_user.role_name in ['管理员', '超级管理员'] %}
-            <div class="col-md-6">
-                <div class="card h-100">
+            <div class="col-md-4">
+                <div class="card">
                     <header class="card-header"><h5 class="mb-0">添加客户端</h5></header>
                     <div class="card-body">
                         <form id="add-client-form">
@@ -134,7 +134,7 @@
             </div>
             {% endif %}
 
-            <div class="{% if current_user and current_user.role_name in ['管理员', '超级管理员'] %}col-md-6{% else %}col-12{% endif %}">
+            <div class="{% if current_user and current_user.role_name in ['管理员', '超级管理员'] %}col-md-8{% else %}col-12{% endif %}">
                 <div class="card h-100">
                     <header class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">客户端管理</h5>
