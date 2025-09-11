@@ -215,12 +215,12 @@ def enable_client():
                 continue
 
         if not reload_success:
-            log_message("Warning: OpenVPN reload failed, changes may not be immediate")
+            log_message("Warning: OpenVPN重新加载失败，更改可能不会立即生效")
 
-        success_msg = f'Client {client_name} has been successfully re-enabled'
+        success_msg = f'Client {client_name} 已成功重新启用'
         if client_revoked:
-            success_msg += ' with a new certificate'
-        success_msg += '. The client can now reconnect to the VPN.'
+            success_msg += ' 使用新证书'
+        success_msg += '. 客户端现在可以重新连接到VPN了.'
 
         log_message(f"Successfully re-enabled client: {client_name}")
         return jsonify({'status': 'success', 'message': success_msg})
