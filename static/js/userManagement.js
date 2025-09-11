@@ -47,31 +47,28 @@ export function init() {
             }
 
             try {
-                const res = await authFetch('/add_users', {
+                const data = await authFetch('/add_users', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, email, password, role })
                 });
 
-                // ✅ 修复：在解析 JSON 之前，先检查响应是否成功
-                if (!res.ok) {
-                    const errorData = await res.json();
+                    if (data.status !== 'success') {
+                    console.log("data error", data);
                     // 如果后端返回了 message，则使用它，否则使用默认信息
-                    throw new Error(errorData.message || '未知错误');
-                }
-
-                const data = await res.json();
-                const cls = data.status === 'success' ? 'alert-success' : 'alert-danger';
+                    throw new Error(data.message || '未知错误');
+    }
+                const cls = 'alert-success';
                 messageDiv.innerHTML = `<div class="alert ${cls}">${data.message}</div>`;
 
-                if (data.status === 'success') {
-                    form.reset();
-                    setTimeout(() => messageDiv.innerHTML = '', 3000);
-                    fetchUsers(); // 成功后刷新用户列表
-                }
+                form.reset();
+                setTimeout(() => messageDiv.innerHTML = '', 3000);
+                fetchUsers(); // 成功后刷新用户列表
+                
             } catch (error) {
                 // 现在 catch 块可以正确捕获并显示自定义的错误信息了
                 messageDiv.innerHTML = `<div class="alert alert-danger">添加用户失败: ${error.message}</div>`;
+                setTimeout(() => messageDiv.innerHTML = '', 2000);
             }
         });
     }
@@ -199,12 +196,12 @@ export function init() {
                 
                 if (!confirmed) return;
                 try {
-                    const res = await authFetch('/delete_user', {
+                    const data = await authFetch('/delete_user', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ user_id: uid })
                     });
-                    const data = await res.json();
+                    
                     showCustomMessage(data.message);
                     if (data.status === 'success') fetchUsers();
                 } catch (error) {
