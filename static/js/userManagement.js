@@ -81,8 +81,8 @@ export function init() {
         if (!tbody) return;
         
         try {
-            const res = await authFetch('/get_users');
-            const data = await res.json();
+            const data = await authFetch('/get_users');
+            // const data = await res.json();
             if (data.status === 'success') {
                 renderUsers(data.users);
             } else {
