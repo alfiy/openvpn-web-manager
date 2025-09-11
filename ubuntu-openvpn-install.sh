@@ -137,6 +137,8 @@ EOF
 
     # Create directories
     mkdir -p /etc/openvpn/ccd /var/log/openvpn
+
+    chown -R nobody:nogroup /var/log/openvpn
     
     # Enable IP forwarding
     echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-openvpn.conf
@@ -219,6 +221,7 @@ log openvpn.log
 EOF
 
     # create disable enable client script
+    mkdir -p /etc/openvpn/scripts /etc/openvpn/disabled_clients
     cat > /etc/openvpn/scripts/client-connect.sh << EOF
 #!/bin/bash
 
