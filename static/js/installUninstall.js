@@ -70,7 +70,8 @@ export function bindInstall() {
         } catch (err) {
             loader && (loader.style.display = 'none');
             if (msg) { 
-                msg.textContent = '安装失败: ' + err; msg.className = 'alert alert-danger'; 
+                msg.textContent = '安装失败: ' + err; 
+                msg.className = 'alert alert-danger'; 
                 
             }
         }

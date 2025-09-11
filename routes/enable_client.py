@@ -10,33 +10,40 @@ enable_client_bp = Blueprint('enable_client', __name__)
 @login_required
 @json_csrf_protect
 def enable_client():
-    """Re-enable a disabled client by removing the flag file"""
+    """通过删除标志文件来重新启用客户端"""
     try:
-        data = json.loads(request.data)
-    except (json.JSONDecodeError, KeyError) as e:
-        log_message(f"Error parsing JSON from request: {e}")
-        return jsonify({'status': 'error', 'message': 'Invalid JSON or missing client_name'}), 400
+        data = request.get_json()
+        if not data:
+            log_message("Invalid JSON data from request.")
+            return jsonify({'status': 'error', 'message': '请求数据格式错误'}), 400
+        
+        client_name = data.get('client_name', '').strip()
+        if not client_name:
+            log_message("Client name is missing.")
+            return jsonify({'status': 'error', 'message': '客户端名称不能为空'}), 400
 
-    client_name = data.get('client_name', '').strip()
-    if not client_name:
-        return jsonify({'status': 'error', 'message': 'Client name is required'}), 400
+        log_message(f"Starting re-enable process for client: {client_name}")
 
-    log_message(f"Starting re-enable process for client: {client_name}")
-
-    try:
-        # Step 1: Remove the disabled flag file
         disabled_clients_dir = '/etc/openvpn/disabled_clients'
-        flag_file = os.path.join(disabled_clients_dir, client_name)
+        flag_file_path = os.path.join(disabled_clients_dir, client_name)
 
-        if os.path.exists(flag_file):
-            subprocess.run(['sudo', 'rm', '-f', flag_file], check=True)
-            log_message(f"Removed disabled flag file for client: {client_name}")
-        else:
-            log_message(f"Client {client_name} is not disabled or flag file not found.")
+        if not os.path.exists(flag_file_path):
+            log_message(f"Client {client_name} is already enabled or flag file not found at {flag_file_path}.")
             return jsonify({
                 'status': 'warning',
-                'message': f'Client {client_name} 已经处于启用状态或未被禁用。'
+                'message': f'客户端 {client_name} 已经处于启用状态或未被禁用。'
             })
+
+        # 使用与 revoke_client.py 相同的模式执行命令
+        # 这种模式能够处理路径中的特殊字符，并且更可靠
+        try:
+            cmd = ['sudo', 'rm', '-f', flag_file_path]
+            log_message(f"Executing command: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            log_message(f"Command successful: {result.stdout}")
+        except subprocess.CalledProcessError as e:
+            log_message(f"Command failed during re-enable process: {e.stderr}")
+            return jsonify({'status': 'error', 'message': f'删除标志文件失败：{e.stderr}'}), 500
 
         log_message(f"Successfully re-enabled client: {client_name}")
         return jsonify({
@@ -44,9 +51,6 @@ def enable_client():
             'message': f'客户端 {client_name} 已成功重新启用。'
         })
 
-    except subprocess.CalledProcessError as e:
-        log_message(f"Command failed during re-enable process: {e}")
-        return jsonify({'status': 'error', 'message': f'命令执行失败：{str(e)}'}), 500
     except Exception as e:
-        log_message(f"Unexpected error during re-enable: {e}")
+        log_message(f"Unexpected error during re-enable: {str(e)}")
         return jsonify({'status': 'error', 'message': f'重新启用过程中发生意外错误：{str(e)}'}), 500
