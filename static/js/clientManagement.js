@@ -149,14 +149,14 @@ function bindClientEvents() {
         showCustomConfirm(confirmMessage, async (confirmed) => {
             if (!confirmed) return;
             try {
-                const res = await authFetch(url, {
+                const data = await authFetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ client_name: clientName })
                 });
-                const d = await res.json();
-                showCustomMessage(d.message);
-                if (d.status === 'success') {
+                
+                showCustomMessage(data.message);
+                if (data.status === 'success') {
                     loadClients();
                 }
             } catch (err) {
@@ -278,12 +278,11 @@ export function bindModifyExpiry() {
             btnConfirm.blur();
 
             try {
-                const res = await authFetch('/modify_client_expiry', {
+                const data = await authFetch('/modify_client_expiry', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ client_name: name, expiry_days: days })
                 });
-                const data = await res.json();
 
                 loader.style.display = 'none';
                 btnConfirm.disabled = false;
@@ -301,6 +300,7 @@ export function bindModifyExpiry() {
                 loader.style.display = 'none';
                 btnConfirm.disabled = false;
                 msg.innerHTML = `<div class="alert alert-danger">${err}</div>`;
+                setTimeout(() => msg.innerHTML = '', 2000);
             }
         });
     }

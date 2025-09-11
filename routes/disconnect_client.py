@@ -146,7 +146,7 @@ def disconnect_client():
         log_message(f"Successfully disconnected and disabled client: {client_name}")
         return jsonify({
             'status': 'success',
-            'message': f'Client {client_name} has been permanently disconnected and disabled. Client certificate has been revoked and cannot reconnect until manually re-enabled.'
+            'message': f'客户端 {client_name} 已被永久断开和禁用。其证书已被吊销，除非手动重新启用，否则无法再次连接。'
         })
 
     except subprocess.TimeoutExpired:
