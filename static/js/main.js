@@ -19,17 +19,17 @@ import { init as ChangePassword } from './changePassword.js';
  * 这是一个总入口，只在页面加载时调用一次
  */
 function bindAll() {
-    const role = document.body.dataset.role.toUpperCase();
-
-    // 根据角色初始化相应的模块
-    if (role === 'SUPER_ADMIN') {
-        initInstallUninstall();
-        initClientManagement();
-        initUserManagement();
-    } else if (role === 'ADMIN') {
-        initClientManagement();
-    } else if (role === 'NORMAL') {
-        initClientManagement();
+    const role = document.body.dataset.role;
+    if (role) {
+        // 如果 role 存在，执行依赖角色的初始化逻辑
+        const upperCaseRole = role.toUpperCase();
+        if (upperCaseRole === 'SUPER_ADMIN') {
+            initInstallUninstall();
+            initClientManagement();
+            initUserManagement();
+        } else if (upperCaseRole === 'ADMIN' || upperCaseRole === 'NORMAL') {
+            initClientManagement();
+        }
     }
     
     // 初始化密码确认模块，这是一个通用的功能
