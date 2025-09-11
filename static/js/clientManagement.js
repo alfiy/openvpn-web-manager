@@ -151,7 +151,7 @@ function bindClientEvents() {
             try {
                 const data = await authFetch(url, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    // headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ client_name: clientName })
                 });
                 

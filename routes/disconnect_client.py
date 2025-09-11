@@ -1,160 +1,66 @@
-from flask import Blueprint, session, request, jsonify, redirect, url_for
+from flask import Blueprint, request, jsonify, json
 import os
 import subprocess
 from utils.openvpn_utils import log_message
-from functools import wraps
-from routes.helpers import login_required
-
+from routes.helpers import login_required, json_csrf_protect
 
 disconnect_client_bp = Blueprint('disconnect_client', __name__)
 
 @disconnect_client_bp.route('/disconnect_client', methods=['POST'])
 @login_required
+@json_csrf_protect
 def disconnect_client():
-    """Forcefully disconnect a client and prevent auto-reconnection"""
-    data = request.json
-    if not data:
-        return jsonify({'status': 'error', 'message': 'Invalid JSON data'}), 400
+    """Disable a client by creating a flag file and force disconnection"""
+    try:
+        # 尝试手动解析JSON
+        data = json.loads(request.data)
+    except (json.JSONDecodeError, KeyError) as e:
+        log_message(f"Error parsing JSON from request: {e}")
+        return jsonify({'status': 'error', 'message': 'Invalid JSON or missing client_name'}), 400
 
-    client_name = data.get('client_name')
+    client_name = data.get('client_name', '').strip()
     if not client_name:
-        return jsonify({'status': 'error', 'message': 'Client name is required'})
+        return jsonify({'status': 'error', 'message': 'Client name is required'}), 400
 
-    client_name = client_name.strip()
-    if not client_name:
-        return jsonify({'status': 'error', 'message': 'Client name is required'})
-
-    log_message(f"Starting permanent disconnect process for client: {client_name}")
-    #print(f"[DISCONNECT] Starting permanent disconnect process for client: {client_name}", flush=True)
+    log_message(f"Starting disable process for client: {client_name}")
 
     try:
-        # Step 1: Check if client exists in PKI
-        if not os.path.exists('/etc/openvpn/easy-rsa/pki/index.txt'):
-            log_message("PKI index.txt not found")
-            return jsonify({'status': 'error', 'message': 'OpenVPN PKI not found'})
-
-        # Check if client exists
-        with open('/etc/openvpn/easy-rsa/pki/index.txt', 'r') as f:
-            content = f.read()
-            if f'CN={client_name}/' not in content and f'CN={client_name}' not in content:
-                log_message(f"Client {client_name} not found in PKI")
-                return jsonify({'status': 'error', 'message': f'Client {client_name} not found in certificate database'})
-
-        # Step 2: Mark client as disabled by creating a disabled flag file
+        # Step 1: Create a disabled flag file
         disabled_clients_dir = '/etc/openvpn/disabled_clients'
-        subprocess.run(['sudo', 'mkdir', '-p', disabled_clients_dir], check=False)
-        subprocess.run(['sudo', 'touch', f'{disabled_clients_dir}/{client_name}'], check=True)
-        log_message(f"Created disabled flag for client: {client_name}")
+        subprocess.run(['sudo', 'mkdir', '-p', disabled_clients_dir], check=True)
+        
+        flag_file = os.path.join(disabled_clients_dir, client_name)
+        subprocess.run(['sudo', 'touch', flag_file], check=True)
+        log_message(f"Created disabled flag file for client: {client_name}")
 
-        # Step 3: Temporarily revoke certificate to force immediate disconnection
-        log_message(f"Temporarily revoking certificate for immediate disconnect")
-        revoke_result = subprocess.run([
-            'sudo', 'bash', '-c', f'cd /etc/openvpn/easy-rsa && ./easyrsa --batch revoke "{client_name}"'
-        ], capture_output=True, text=True, timeout=60)
-
-        if revoke_result.returncode != 0 and 'already revoked' not in revoke_result.stderr:
-            log_message(f"Failed to revoke certificate: {revoke_result.stderr}")
-            return jsonify({
-                'status': 'error',
-                'message': f'Failed to revoke certificate: {revoke_result.stderr}'
-            })
-
-        # Step 4: Generate new CRL to apply revocation immediately
-        log_message("Generating new CRL")
-        crl_result = subprocess.run([
-            'sudo', 'bash', '-c', 'cd /etc/openvpn/easy-rsa && ./easyrsa gen-crl'
-        ], capture_output=True, text=True, timeout=60)
-
-        if crl_result.returncode != 0:
-            log_message(f"Failed to generate CRL: {crl_result.stderr}")
-            return jsonify({
-                'status': 'error',
-                'message': f'Failed to generate CRL: {crl_result.stderr}'
-            })
-
-        # Step 5: Update CRL in OpenVPN directory
-        subprocess.run(['sudo', 'rm', '-f', '/etc/openvpn/crl.pem'], check=False)
-        subprocess.run(['sudo', 'cp', '/etc/openvpn/easy-rsa/pki/crl.pem', '/etc/openvpn/crl.pem'], check=True)
-        subprocess.run(['sudo', 'chmod', '644', '/etc/openvpn/crl.pem'], check=True)
-
-        # Step 6: Try management interface disconnect as well
-        disconnect_via_management = False
-        config_files = ['/etc/openvpn/server.conf', '/etc/openvpn/server/server.conf']
-
-        for config_file in config_files:
+        # Step 2: Try to disconnect via management interface
+        try:
+            config_file = '/etc/openvpn/server.conf'
             if os.path.exists(config_file):
-                try:
-                    with open(config_file, 'r') as f:
-                        content = f.read()
-                        for line in content.split('\n'):
-                            if line.strip().startswith('management '):
-                                parts = line.strip().split()
-                                if len(parts) >= 3:
-                                    if ':' in parts[2]:  # TCP socket
-                                        host, port = parts[2].split(':')
-                                        command = f'(echo "kill {client_name}"; sleep 1) | nc {host} {port}'
-                                        log_message(f"Executing management command: {command}")
-                                        kill_result = subprocess.run([
-                                            'sudo', 'bash', '-c', command
-                                        ], capture_output=True, text=True, timeout=10)
-
-                                        if kill_result.returncode == 0:
-                                            disconnect_via_management = True
-                                            log_message("Successfully sent kill command via management interface")
+                with open(config_file, 'r') as f:
+                    for line in f.readlines():
+                        if line.strip().startswith('management '):
+                            parts = line.strip().split()
+                            if len(parts) >= 3:
+                                host, port = parts[1], parts[2]
+                                if port.isdigit():
+                                    kill_command = f'(echo "kill {client_name}"; sleep 1) | nc {host} {port}'
+                                    subprocess.run(['sudo', 'bash', '-c', kill_command], timeout=10)
+                                    log_message(f"Sent kill command to client {client_name} via management interface.")
                                     break
-                except Exception as e:
-                    log_message(f"Error accessing management interface: {e}")
-                break
+        except Exception as e:
+            log_message(f"Warning: Failed to send kill command via management interface: {e}")
+            pass
 
-        # Step 7: Reload OpenVPN to apply CRL changes
-        log_message("Reloading OpenVPN service to apply certificate revocation")
-        reload_methods = [
-            ['sudo', 'killall', '-SIGUSR1', 'openvpn'],
-            ['sudo', 'systemctl', 'reload', 'openvpn@server']
-        ]
-
-        reload_success = False
-        for method in reload_methods:
-            try:
-                result = subprocess.run(method, capture_output=True, text=True, timeout=30)
-                log_message(f"Reload method {' '.join(method)}: {result.returncode}")
-                if result.returncode == 0:
-                    reload_success = True
-                    break
-            except Exception as e:
-                log_message(f"Reload method error: {e}")
-
-        if not reload_success:
-            return jsonify({
-                'status': 'warning',
-                'message': f'Client {client_name} certificate revoked but OpenVPN reload failed. Client will be disconnected on next server restart.'
-            })
-
-        # Step 8: Clean up client files to prevent any reconnection
-        cleanup_commands = [
-            ['sudo', 'rm', '-f', f'/etc/openvpn/client/{client_name}.ovpn'],
-            ['sudo', 'sed', '-i', f'/^{client_name},/d', '/etc/openvpn/ipp.txt'],
-            ['sudo', 'rm', '-f', f'/etc/openvpn/ccd/{client_name}']
-        ]
-
-        for cmd in cleanup_commands:
-            try:
-                subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
-            except Exception:
-                pass
-
-        log_message(f"Successfully disconnected and disabled client: {client_name}")
+        log_message(f"Successfully disabled client: {client_name}")
         return jsonify({
             'status': 'success',
-            'message': f'客户端 {client_name} 已被永久断开和禁用。其证书已被吊销，除非手动重新启用，否则无法再次连接。'
+            'message': f'客户端 {client_name} 已成功禁用。其连接已被终止，将无法重新连接。'
         })
 
-    except subprocess.TimeoutExpired:
-        log_message("Disconnect operation timed out")
-        return jsonify({'status': 'error', 'message': 'Disconnect operation timed out'})
     except subprocess.CalledProcessError as e:
-        log_message(f"Command failed: {e}")
-        return jsonify({'status': 'error', 'message': f'Command failed: {e}'})
+        log_message(f"Command failed during disconnect process: {e}")
+        return jsonify({'status': 'error', 'message': f'命令执行失败：{str(e)}'}), 500
     except Exception as e:
-        log_message(f"Unexpected error: {e}")
-        return jsonify({'status': 'error', 'message': f'Disconnect error: {str(e)}'})
+        log_message(f"Unexpected error during disconnect: {e}")
+        return jsonify({'status': 'error', 'message': f'禁用过程中发生意外错误：{str(e)}'}), 500

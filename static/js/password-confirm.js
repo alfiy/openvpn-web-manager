@@ -87,11 +87,11 @@ export default class PasswordConfirm {
 
 // 导出 init 函数，它负责找到表单并创建 PasswordConfirm 实例
 export function init() {
-    console.log('password-confirm init');
+    // console.log('password-confirm init');
     // 找到所有带有 data-validate-pwd 属性的表单
     const forms = document.querySelectorAll('form[data-pwd-confirm]');
     forms.forEach(form => {
-        console.log('password-confirm init in form');
+        // console.log('password-confirm init in form');
         // 为每个找到的表单创建一个 PasswordConfirm 实例
         new PasswordConfirm(form);
     });
