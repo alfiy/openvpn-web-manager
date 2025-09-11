@@ -59,31 +59,45 @@ document.addEventListener('DOMContentLoaded', () => {
  * @returns {Promise<object>} - 返回一个 Promise，成功时解析 JSON 数据
  */
 export async function authFetch(url, options = {}) {
-  // 假设你从某个地方获取 CSRF 令牌，例如从 meta 标签
-  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const method = options.method ? options.method.toUpperCase() : 'GET';
+    
+    // 创建一个新的 Headers 对象，以避免直接修改原始 options
+    const headers = new Headers(options.headers || {});
 
-  // 如果请求方法不是 GET，且未包含 CSRF 令牌，则添加
-  if (options.method && options.method.toUpperCase() !== 'GET') {
-    options.headers = {
-      ...options.headers,
-      'X-CSRFToken': csrfToken
+    // 对于非 GET 请求，确保设置正确的请求头
+    if (method !== 'GET') {
+        // 如果没有 Content-Type，且存在请求体，则添加
+        if (!headers.has('Content-Type') && options.body) {
+            headers.set('Content-Type', 'application/json');
+        }
+
+        // 如果没有 CSRF 令牌，则添加
+        if (!headers.has('X-CSRFToken') && csrfToken) {
+            headers.set('X-CSRFToken', csrfToken);
+        }
+    }
+
+    // 使用新的 Headers 对象进行 fetch 请求
+    const fetchOptions = {
+        ...options,
+        headers: headers,
     };
-  }
 
-  const response = await fetch(url, options);
+    const response = await fetch(url, fetchOptions);
 
-  // 检查响应状态码。如果不是 2xx，则抛出错误。
-  if (!response.ok) {
-    // 如果响应体是 JSON，则解析并作为错误信息
-    const errorData = await response.json();
-    const error = new Error(errorData.message || '请求失败');
-    error.status = response.status;
-    error.data = errorData;
-    throw error;
-  }
+    if (!response.ok) {
+        // 如果响应状态不是 2xx，尝试解析 JSON 错误信息
+        const errorData = await response.json().catch(() => ({ 
+            message: `HTTP错误: ${response.status} ${response.statusText}` 
+        }));
+        const error = new Error(errorData.message || '请求失败');
+        error.status = response.status;
+        error.data = errorData;
+        throw error;
+    }
 
-  // 成功响应，解析 JSON
-  return response.json();
+    return response.json();
 }
 
 /**

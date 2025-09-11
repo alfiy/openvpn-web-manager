@@ -20,7 +20,8 @@ export function bindInstall() {
         wrap && (wrap.style.display = 'none');
 
         try {
-            const list = await authFetch('/get_ip_list').then(r => r.json());
+            // authFetch 直接返回 JSON 数据，无需再调用 .json()
+            const list = await authFetch('/get_ip_list');
             sel.innerHTML = '';
             list.forEach(ip => sel.appendChild(new Option(ip, ip)));
             sel.appendChild(new Option('手动输入…', ''));
@@ -54,12 +55,12 @@ export function bindInstall() {
         msg && (msg.className = 'alert alert-info', msg.textContent = '正在安装 OpenVPN...', msg.classList.remove('d-none'));
 
         try {
-            const res = await authFetch('/install', {
+            // authFetch 直接返回 JSON 数据
+            const data = await authFetch('/install', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ port, ip })
             });
-            const data = await res.json();
+
             loader && (loader.style.display = 'none');
             if (msg) {
                 msg.textContent = data.message;
@@ -68,7 +69,10 @@ export function bindInstall() {
             if (data.status === 'success') setTimeout(() => location.href = (data.redirect || '/'), 1000);
         } catch (err) {
             loader && (loader.style.display = 'none');
-            if (msg) { msg.textContent = '安装失败: ' + err; msg.className = 'alert alert-danger'; }
+            if (msg) { 
+                msg.textContent = '安装失败: ' + err; msg.className = 'alert alert-danger'; 
+                
+            }
         }
     });
 
@@ -77,15 +81,12 @@ export function bindInstall() {
 
 export function bindUninstall() {
     const btn = qs('#uninstall-btn');
-    // 如果按钮不存在或已绑定，则直接返回
     if (!btn || btn.hasAttribute('data-bound')) {
         return;
     }
-    // 添加一个自定义属性来标记该函数已绑定，防止重复绑定
     btn.setAttribute('data-bound', 'true');
 
     btn.addEventListener('click', () => {
-        
         showCustomConfirm('确定要卸载OpenVPN吗? 所有客户端配置将被删除!', async (ok) => {
             if (!ok) {
                 return;
@@ -104,7 +105,8 @@ export function bindUninstall() {
             }
 
             try {
-                const data = await authFetch('/uninstall', { method: 'POST' }).then(r => r.json());
+                // authFetch 直接返回 JSON 数据
+                const data = await authFetch('/uninstall', { method: 'POST' });
                 
                 if (loader) {
                     loader.style.display = 'none';
