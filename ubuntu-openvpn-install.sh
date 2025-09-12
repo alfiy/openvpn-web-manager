@@ -221,7 +221,8 @@ EOF
 
     # create disable enable client script
     mkdir -p /etc/openvpn/scripts /etc/openvpn/disabled_clients
-    cat > /etc/openvpn/scripts/client-connect.sh << \EOF
+    
+    cat > /etc/openvpn/scripts/client-connect.sh << 'EOF'
 #!/bin/bash
 
 # OpenVPN 自动设置了$common_name环境变量，直接使用即可。
@@ -245,7 +246,7 @@ else
     exit 0
 fi
 
-\EOF
+EOF
 
     chmod +x /etc/openvpn/scripts/client-connect.sh
 
@@ -253,7 +254,7 @@ fi
     echo "🎉 OpenVPN installation completed successfully!"
 }
 
-# ---
+
 # Script execution starts here
 echo "🚀 Ubuntu OpenVPN Installer & Manager"
 echo "======================================"
