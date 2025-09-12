@@ -221,29 +221,31 @@ EOF
 
     # create disable enable client script
     mkdir -p /etc/openvpn/scripts /etc/openvpn/disabled_clients
-    cat > /etc/openvpn/scripts/client-connect.sh << EOF
+    cat > /etc/openvpn/scripts/client-connect.sh << \EOF
 #!/bin/bash
 
-# OpenVPN 自动设置了 $common_name 环境变量，直接使用即可。
+# OpenVPN 自动设置了$common_name环境变量，直接使用即可。
 CLIENT_NAME="${common_name}"
 
-# 检查 $common_name 是否为空
+# 检查 ${common_name} 是否为空
 if [ -z "$CLIENT_NAME" ]; then
     logger -t openvpn-client-connect "ERROR: The common_name environment variable is not set. Rejecting connection."
     exit 1
 fi
 
 # 现在使用正确的通用名来检查禁用标志文件。
+# 修复：将客户端名称添加到路径中
 FLAG_FILE="/etc/openvpn/disabled_clients/${CLIENT_NAME}"
 
 if [ -f "$FLAG_FILE" ]; then
-  logger -t openvpn-client-connect "Client ${CLIENT_NAME} is disabled. Rejecting connection."
-  exit 1
+    logger -t openvpn-client-connect "Client ${CLIENT_NAME} is disabled. Rejecting connection."
+    exit 1
 else
-  logger -t openvpn-client-connect "Client ${CLIENT_NAME} is allowed to connect."
-  exit 0
+    logger -t openvpn-client-connect "Client ${CLIENT_NAME} is allowed to connect."
+    exit 0
 fi
-EOF
+
+\EOF
 
     chmod +x /etc/openvpn/scripts/client-connect.sh
 
