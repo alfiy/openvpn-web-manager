@@ -45,6 +45,7 @@ def uninstall():
             ['sudo', 'rm', '-rf', '/etc/openvpn'],
             ['sudo', 'rm', '-f', '/etc/sysctl.d/99-openvpn.conf'],
             ['sudo', 'rm', '-rf', '/var/log/openvpn'],
+            ['sudo', 'rm', '-rf', '/usr/sbin/openvpn'],
             # 恢复 IP 转发设置
             ['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=0'],
         ]
