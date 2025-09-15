@@ -56,6 +56,7 @@
             <div class="col-12">
                 <div class="card">
                     <header class="card-header"><h5 class="mb-0">OpenVPN状态</h5></header>
+                    <p>{{ status }}</p>
                     <div class="card-body">
                         {% if status == 'running' %}
                             <p><span class="status-indicator status-running"></span> OpenVPN正在运行</p>

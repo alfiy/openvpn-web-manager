@@ -239,6 +239,12 @@ EOF
     # 13. 创建 openvpn@.service 服务单元
     # OpenVPN 在编译安装后不会自动创建这个服务文件
     echo "📁 创建 openvpn@.service 服务文件..."
+
+if [[ ! -d /run/openvpn ]]; then
+    mkdir -p /run/openvpn
+    chmod 755 /run/openvpn
+    echo " Create /run/openvpn directory"
+fi
     cat > /etc/systemd/system/openvpn@.service << EOF
 [Unit]
 Description=OpenVPN connection to %i
