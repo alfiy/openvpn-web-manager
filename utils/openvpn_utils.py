@@ -198,7 +198,7 @@ def get_openvpn_clients():
     clients = []
     online_clients = get_online_clients()
     disabled_clients = set()
-    disabled_clients_dir = '/etc/openvpn/disabled_clients'
+    disabled_clients_dir = '/etc/openvpn/ccd'
     if os.path.exists(disabled_clients_dir):
         try:
             for filename in os.listdir(disabled_clients_dir):

@@ -42,6 +42,7 @@ function render(data) {
     tbody.innerHTML = clientsToRender.map((c, idx) => {
         const rowIdx = (data.page - 1) * PER_PAGE + idx + 1;
         const actionButtons = [];
+        // console.log("c is :", c);
 
         // 新增的业务逻辑判断
         if (c.disabled) {
@@ -139,7 +140,7 @@ function bindClientEvents() {
             url = '/revoke_client';
             confirmMessage = `确定撤销客户端 “${clientName}” 的证书吗？此操作不可恢复！`;
         } else if (targetBtn.classList.contains('disconnect-btn')) {
-            url = '/disconnect_client';
+            url = '/kill_client';
             confirmMessage = `确认要禁用客户端 “${clientName}” 吗？`;
         } else if (targetBtn.classList.contains('enable-btn')) {
             url = '/enable_client';

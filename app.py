@@ -25,7 +25,6 @@ from routes.add_client import add_client_bp
 from routes.revoke_client import revoke_client_bp
 from routes.uninstall import uninstall_bp
 from routes.download_client import download_client_bp
-from routes.disconnect_client import disconnect_client_bp
 from routes.modify_client_expiry import modify_client_expiry_bp
 from routes.enable_client import enable_client_bp
 from routes.get_ip_list import ip_bp
@@ -33,6 +32,8 @@ from routes.index import index_bp
 from routes.get_users import user_bp
 from routes.add_users import add_users_bp
 from routes.delete_user import delete_user_bp
+from routes.kill_client import kill_client_bp
+# from routes.disconnect_client import disconnect_client_bp
 
 
 def create_app():
@@ -123,7 +124,6 @@ def create_app():
     app.register_blueprint(revoke_client_bp)
     app.register_blueprint(uninstall_bp)
     app.register_blueprint(download_client_bp)
-    app.register_blueprint(disconnect_client_bp)
     app.register_blueprint(modify_client_expiry_bp)
     app.register_blueprint(enable_client_bp)
     app.register_blueprint(ip_bp)
@@ -131,6 +131,8 @@ def create_app():
     app.register_blueprint(user_bp)
     app.register_blueprint(add_users_bp)
     app.register_blueprint(delete_user_bp)
+    # app.register_blueprint(disable_client_bp)
+    app.register_blueprint(kill_client_bp)
 
     return app
 
