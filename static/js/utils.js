@@ -62,22 +62,24 @@ export async function authFetch(url, options = {}) {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
     const method = options.method ? options.method.toUpperCase() : 'GET';
     
+    // 如果没有 CSRF 令牌，直接抛出错误
+    if (!csrfToken) {
+        throw new Error("缺少 CSRF 令牌");
+    }
+
     // 创建一个新的 Headers 对象，以避免直接修改原始 options
     const headers = new Headers(options.headers || {});
 
-    // 对于非 GET 请求，确保设置正确的请求头
-    if (method !== 'GET') {
-        // 如果没有 Content-Type，且存在请求体，则添加
-        if (!headers.has('Content-Type') && options.body) {
-            headers.set('Content-Type', 'application/json');
-        }
-
-        // 如果没有 CSRF 令牌，则添加
-        if (!headers.has('X-CSRFToken') && csrfToken) {
-            headers.set('X-CSRFToken', csrfToken);
-        }
+    // 确保设置正确的 Content-Type（如果存在请求体）
+    if (method !== 'GET' && !headers.has('Content-Type') && options.body) {
+        headers.set('Content-Type', 'application/json');
     }
 
+    // 无论请求方法是什么，都添加 CSRF 令牌
+    if (!headers.has('X-CSRFToken')) {
+        headers.set('X-CSRFToken', csrfToken);
+    }
+    
     // 使用新的 Headers 对象进行 fetch 请求
     const fetchOptions = {
         ...options,
@@ -97,7 +99,6 @@ export async function authFetch(url, options = {}) {
         throw error;
     }
 
-    // ⭐ 新增的逻辑：如果 options.returnRawResponse 为 true，则直接返回原始响应对象
     if (options.returnRawResponse) {
         return response;
     }
