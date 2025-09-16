@@ -28,9 +28,11 @@ async function refreshOpenVPNStatus(currentUserRole) {
         let statusText = '';
         const status = statusData.status;
 
+
         // 根据 OpenVPN 状态设置显示文本
         if (status === 'running') {
             statusText = '<span class="status-indicator status-running"></span> OpenVPN正在运行';
+            console.log('in statusbody', status,'currentUserRole',currentUserRole);
         } else if (status === 'installed') {
             statusText = '<span class="status-indicator status-installed"></span> OpenVPN已安装但未运行';
         } else {
@@ -50,6 +52,7 @@ async function refreshOpenVPNStatus(currentUserRole) {
             }
 
             if (status === 'running' || status === 'installed') {
+                console.log('in actionsContainer', status,'currentUserRole ', currentUserRole );
                 const uninstallBtn = `<button id="uninstall-btn" class="btn btn-danger">卸载OpenVPN</button>`;
                 actionsContainer.innerHTML += uninstallBtn;
             }
