@@ -3,7 +3,7 @@
  */
 import { qs, qsa } from './utils.js';
 // 从 refresh.js 模块中导入自动刷新相关函数
-import { startAutoRefresh } from './refresh.js';
+import { refreshPage, startAutoRefresh } from './refresh.js';
 // 从 clientManagement.js 模块中导入统一的初始化函数
 import { init as initClientManagement } from './clientManagement.js';
 // 从 userManagement.js 模块中导入统一的初始化函数
@@ -39,7 +39,8 @@ function bindAll() {
 
 document.addEventListener('DOMContentLoaded', () => {
     const userRole = document.body.dataset.role;
-
+    
+    refreshPage(userRole);
     // 根据角色显示/隐藏功能
     const roleMap = {
         'SUPER_ADMIN': ['install-btn', 'uninstall-btn', 'add-client-card', 'clients-card', 'user-management-card'],

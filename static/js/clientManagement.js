@@ -20,8 +20,16 @@ const pageInfo = document.getElementById('page-info');
 const noData = document.getElementById('no-data');
 const PER_PAGE = 10;
 
+// 在文件顶部添加一个检查，确保所有 DOM 元素都存在
+const elementsExist = tbody && paging && pageInfo && noData;
+
 /* 统一渲染表格 */
 function render(data) {
+    if (!elementsExist) {
+        console.warn("客户端管理DOM元素不存在，停止渲染。");
+        return;
+    }
+
     let clientsToRender = data.clients;
     if (userRole === 'USER') {
         clientsToRender = data.clients.filter(c => c.user_id === userId);
@@ -102,6 +110,10 @@ function render(data) {
 
 /* AJAX 拉数据 */
 export function loadClients(page = 1, q = '') {
+    // 在这里再次进行检查，确保函数在合适的页面被调用
+    if (!elementsExist) {
+        return;
+    }
     authFetch(`/clients/data?page=${page}&q=${encodeURIComponent(q)}`)
         .then(render)
         .catch(console.error);

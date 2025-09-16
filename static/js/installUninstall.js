@@ -81,8 +81,10 @@ export function bindInstall() {
 }
 
 export function bindUninstall() {
+    // console.log('in bindUninstall(): ');
     const btn = qs('#uninstall-btn');
     if (!btn || btn.hasAttribute('data-bound')) {
+        // console.log('in bindUninstall(): ', btn);
         return;
     }
     btn.setAttribute('data-bound', 'true');
