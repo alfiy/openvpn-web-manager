@@ -9,7 +9,7 @@ let autoRefreshInterval = null;
  * 局部刷新页面内容
  */
 export function refreshPage() {
-    return authFetch('/')
+    return authFetch('/',  { returnRawResponse: true })
         .then(r => r.text())
         .then(html => {
             const p = new DOMParser(), doc = p.parseFromString(html, 'text/html');

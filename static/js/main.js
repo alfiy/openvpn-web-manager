@@ -25,8 +25,8 @@ function bindAll() {
         const upperCaseRole = role.toUpperCase();
         if (upperCaseRole === 'SUPER_ADMIN') {
             initInstallUninstall();
-            initClientManagement();
             initUserManagement();
+            initClientManagement();
         } else if (upperCaseRole === 'ADMIN' || upperCaseRole === 'NORMAL') {
             initClientManagement();
         }

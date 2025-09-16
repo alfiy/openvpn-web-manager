@@ -97,6 +97,11 @@ export async function authFetch(url, options = {}) {
         throw error;
     }
 
+    // ⭐ 新增的逻辑：如果 options.returnRawResponse 为 true，则直接返回原始响应对象
+    if (options.returnRawResponse) {
+        return response;
+    }
+
     return response.json();
 }
 
