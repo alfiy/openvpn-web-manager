@@ -34,7 +34,6 @@ async function refreshOpenVPNStatus() {
  * 局部刷新页面内容 (调用各个卡片的刷新函数)
  */
 export function refreshPage() {
-    console.log("in refreshPage()");
     refreshOpenVPNStatus(); // 刷新 OpenVPN 状态
     loadClients();          // 刷新客户端列表
 }
@@ -44,7 +43,6 @@ export function refreshPage() {
  * @param {number} ms
  */
 export function startAutoRefresh(ms = 10000) {
-    console.log("startAutoRefresh");
     stopAutoRefresh();
     autoRefreshInterval = setInterval(() => !document.hidden && refreshPage(), ms);
 }
