@@ -46,4 +46,5 @@ sudo systemctl status vpnwm
 http://your-ip-address:8080
 ```
 
-
+3. 登录系统
+系统安装时默认添加了两个用户，super_admin和admin,密码均为admin123.
