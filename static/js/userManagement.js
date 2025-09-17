@@ -144,12 +144,12 @@ export function init() {
                 
                 if (!confirmed) return;
                 try {
-                    const res = await authFetch('/change_user_role', {
+                    const data = await authFetch('/change_user_role', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ user_id: uid, new_role: newRole })
                     });
-                    const data = await res.json();
+                    
                     showCustomMessage(data.message);
                     if (data.status === 'success') fetchUsers();
                 } catch (error) {
@@ -166,12 +166,12 @@ export function init() {
                 
                 if (!confirmed) return;
                 try {
-                    const res = await authFetch('/reset_user_password', {
+                    const data = await authFetch('/reset_user_password', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ user_id: uid })
                     });
-                    const data = await res.json();
+                    
                     if (data.status === 'success') {
                         // 如果后端返回了新密码字段，就单独显示它
                         const message = `密码重置成功！新密码是：**${data.new_password}**`;
