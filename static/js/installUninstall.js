@@ -2,12 +2,12 @@
  * 这个模块包含了安装和卸载的逻辑
  */
 import { qs, showCustomMessage, showCustomConfirm, authFetch, isValidIP } from './utils.js';
-
+import { stopAutoRefresh, startAutoRefresh } from './refresh.js';
 
 export function bindInstall() {
     const btn = qs('#install-btn');
-    if (!btn || btn.hasAttribute('data-bound')) return;
-    btn.setAttribute('data-bound', 'true');
+    // 移除 'data-bound' 检查，因为按钮在每次刷新时都会被重新创建
+    if (!btn) return;
 
     const modalEl = qs('#installModal');
     const modal = modalEl ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
@@ -51,6 +51,10 @@ export function bindInstall() {
         modal?.hide();
         const loader = qs('#install-loader');
         const msg = qs('#status-message');
+
+        // 在开始安装时停止自动刷新
+        stopAutoRefresh();
+
         loader && (loader.style.display = 'block');
         msg && (msg.className = 'alert alert-info', msg.textContent = '正在安装 OpenVPN...', msg.classList.remove('d-none'));
 
@@ -66,7 +70,11 @@ export function bindInstall() {
                 msg.textContent = data.message;
                 msg.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
             }
-            if (data.status === 'success') setTimeout(() => location.href = (data.redirect || '/'), 1000);
+            if (data.status === 'success') {
+                // 在安装成功后也恢复自动刷新
+                // startAutoRefresh(10000, window.currentUserRole); 
+                setTimeout(() => location.href = (data.redirect || '/'), 1000);
+            }
         } catch (err) {
             loader && (loader.style.display = 'none');
             if (msg) { 
@@ -74,6 +82,9 @@ export function bindInstall() {
                 msg.className = 'alert alert-danger'; 
                 
             }
+        } finally{
+            // 无论成功或失败，都在安装流程结束时恢复自动刷新
+            startAutoRefresh(10000, window.currentUserRole);
         }
     });
 
