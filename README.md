@@ -4,11 +4,14 @@
 
 ## 运行项目
 
-目前项目仅支持ubuntu操作系统，开发及测试环境为ubuntu 2204 server
+目前项目仅支持ubuntu操作系统，开发环境为ubuntu 2404 desktop，测试环境为ubuntu2204 server。
 
 0. 安装依赖
 ```bash
+# ubuntu 2404
 sudo apt install python3.12-venv
+# ubuntu 2204
+sudo apt install python3.10-venv
 ```
 
 配置邮件服务
