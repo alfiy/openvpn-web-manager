@@ -312,37 +312,37 @@ ignore-unknown-option block-outside-dns
 verb 3
 EOF
     
-    # create disable enable client script
-    mkdir -p /etc/openvpn/scripts /etc/openvpn/disabled_clients
+#     # create disable enable client script
+#     mkdir -p /etc/openvpn/scripts /etc/openvpn/disabled_clients
 
-    cat > /etc/openvpn/scripts/client-connect.sh << 'EOF'
-#!/bin/bash
+#     cat > /etc/openvpn/scripts/client-connect.sh << 'EOF'
+# #!/bin/bash
 
-# OpenVPN 自动设置了 $common_name 环境变量，直接使用即可。
-CLIENT_NAME="${common_name}"
+# # OpenVPN 自动设置了 $common_name 环境变量，直接使用即可。
+# CLIENT_NAME="${common_name}"
 
-# 检查 ${common_name} 是否为空。如果为空，则说明 OpenVPN 没有正确传递该变量，拒绝连接。
-if [ -z "$CLIENT_NAME" ]; then
-    logger -t openvpn-client-connect "错误：未设置 common_name 环境变量。连接请求被拒绝。"
-    exit 1
-fi
+# # 检查 ${common_name} 是否为空。如果为空，则说明 OpenVPN 没有正确传递该变量，拒绝连接。
+# if [ -z "$CLIENT_NAME" ]; then
+#     logger -t openvpn-client-connect "错误：未设置 common_name 环境变量。连接请求被拒绝。"
+#     exit 1
+# fi
 
-# 使用客户端的通用名来检查禁用标志文件。
-FLAG_FILE="/etc/openvpn/disabled_clients/${CLIENT_NAME}"
+# # 使用客户端的通用名来检查禁用标志文件。
+# FLAG_FILE="/etc/openvpn/disabled_clients/${CLIENT_NAME}"
 
-# 如果标志文件存在，则拒绝连接。
-if [ -f "$FLAG_FILE" ]; then
-    logger -t openvpn-client-connect "客户端 ${CLIENT_NAME} 已被禁用，连接请求被拒绝。"
-    exit 1
-else
-    # 如果标志文件不存在，则允许连接。
-    logger -t openvpn-client-connect "客户端 ${CLIENT_NAME} 已被允许连接。"
-    exit 0
-fi
+# # 如果标志文件存在，则拒绝连接。
+# if [ -f "$FLAG_FILE" ]; then
+#     logger -t openvpn-client-connect "客户端 ${CLIENT_NAME} 已被禁用，连接请求被拒绝。"
+#     exit 1
+# else
+#     # 如果标志文件不存在，则允许连接。
+#     logger -t openvpn-client-connect "客户端 ${CLIENT_NAME} 已被允许连接。"
+#     exit 0
+# fi
 
-EOF
+# EOF
 
-    chmod +x /etc/openvpn/scripts/client-connect.sh
+#     chmod +x /etc/openvpn/scripts/client-connect.sh
 
     
     echo "🎉 OpenVPN installation completed successfully!"

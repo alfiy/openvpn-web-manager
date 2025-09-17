@@ -53,37 +53,6 @@
             </div>
         </header>
 
-        <!-- <section class="row mb-4" id="status-card-section">
-            <div class="col-12">
-                <div class="card">
-                    <header class="card-header"><h5 class="mb-0">OpenVPN状态</h5></header>
-                    <p>{{ status }}</p>
-                    <div class="card-body">
-                        {% if status == 'running' %}
-                            <p><span class="status-indicator status-running"></span> OpenVPN正在运行</p>
-                        {% elif status == 'installed' %}
-                            <p><span class="status-indicator status-installed"></span> OpenVPN已安装但未运行</p>
-                        {% else %}
-                            <p><span class="status-indicator status-not-installed"></span> OpenVPN未安装</p>
-                        {% endif %}
-
-                        <div id="status-message" class="alert alert-info d-none" role="alert"></div>
-
-                        {% if current_user.role_name == '超级管理员' %}
-                            {% if status == 'not_installed' %}
-                                <button id="install-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#installModal">安装OpenVPN</button>
-                                <div class="loader mt-2" id="install-loader" style="display:none;"></div>
-                            {% endif %}
-
-                            {% if status in ['running', 'installed'] %}
-                                <button id="uninstall-btn" class="btn btn-danger">卸载OpenVPN</button>
-                                <div class="loader mt-2" id="uninstall-loader" style="display:none;"></div>
-                            {% endif %}
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </section> -->
         <section class="row mb-4" id="status-card-section">
             <div class="col-12">
                 <div class="card">
