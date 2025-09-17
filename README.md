@@ -26,6 +26,7 @@ MAIL_DEFAULT_SENDER=888888@qq.com
 
 
 1. 进入项目目录执行下面的命令
+
 第一次运行时执行下面的命令进行openvpn-web-manager项目的安装。
 sudo ./run.sh
 安装成功后使用`systemctl`管理vpnwm服务
@@ -47,4 +48,5 @@ http://your-ip-address:8080
 ```
 
 3. 登录系统
+
 系统安装时默认添加了两个用户，super_admin和admin,密码均为admin123.
