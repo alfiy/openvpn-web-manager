@@ -34,7 +34,7 @@ from routes.add_users import add_users_bp
 from routes.delete_user import delete_user_bp
 from routes.kill_client import kill_client_bp
 from routes.status_bp import status_bp
-
+from routes.restart_openvpn import restart_openvpn_bp
 
 
 def create_app():
@@ -134,6 +134,7 @@ def create_app():
     app.register_blueprint(delete_user_bp)
     app.register_blueprint(kill_client_bp)
     app.register_blueprint(status_bp)
+    app.register_blueprint(restart_openvpn_bp)
 
     return app
 

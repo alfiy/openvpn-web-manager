@@ -4,6 +4,7 @@
 import { authFetch, qs } from './utils.js';
 import { loadClients } from './clientManagement.js';
 import { bindInstall, bindUninstall } from './installUninstall.js';
+import { bindRestart } from './restart.js';
 
 let autoRefreshInterval = null;
 
@@ -32,7 +33,7 @@ async function refreshOpenVPNStatus(currentUserRole) {
         // 根据 OpenVPN 状态设置显示文本
         if (status === 'running') {
             statusText = '<span class="status-indicator status-running"></span> OpenVPN正在运行';
-            console.log('in statusbody', status,'currentUserRole',currentUserRole);
+            
         } else if (status === 'installed') {
             statusText = '<span class="status-indicator status-installed"></span> OpenVPN已安装但未运行';
         } else {
@@ -51,8 +52,12 @@ async function refreshOpenVPNStatus(currentUserRole) {
                 actionsContainer.innerHTML += installBtn;
             }
 
+            if (status === 'running') { 
+                const restartBtn = `<button id="restart-btn" class="btn btn-warning me-2">重启OpenVPN</button>`;
+                actionsContainer.innerHTML += restartBtn;
+            }
+
             if (status === 'running' || status === 'installed') {
-                console.log('in actionsContainer', status,'currentUserRole ', currentUserRole );
                 const uninstallBtn = `<button id="uninstall-btn" class="btn btn-danger">卸载OpenVPN</button>`;
                 actionsContainer.innerHTML += uninstallBtn;
             }
@@ -74,6 +79,7 @@ export function refreshPage(currentUserRole) {
             // 确保 DOM 已经更新后再绑定事件
             bindInstall();
             bindUninstall();
+            bindRestart();
         })
         .catch(error => {
             console.error("刷新OpenVPN状态失败:", error);

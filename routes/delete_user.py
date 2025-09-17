@@ -1,8 +1,9 @@
 from flask import Blueprint, jsonify, request
 from routes.helpers import login_required
-from models import User, db # 假设你有 db 对象用于数据库操作
+from models import User, db
+from flask_login import current_user
 
-delete_user_bp = Blueprint('delete_user', __name__) # 你的蓝图已经定义了，这里无需重复定义
+delete_user_bp = Blueprint('delete_user', __name__)
 
 @delete_user_bp.route('/delete_user', methods=['POST'])
 @login_required
@@ -24,6 +25,11 @@ def delete_user():
         # 在这里执行权限检查，确保只有超级管理员可以删除用户
         # 假设 login_required 装饰器已经处理了大部分逻辑，但最好再次确认
         # ... (此处可添加额外的权限检查)
+        if not current_user.is_authenticated or current_user.role.name != 'SUPER_ADMIN':
+            return jsonify({
+                'status': 'error',
+                'message': '权限不足，无法执行此操作。'
+            }), 403 # 返回 403 Forbidden 状态码
 
         user_to_delete = User.query.get(user_id)
         if not user_to_delete:

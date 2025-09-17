@@ -2,7 +2,7 @@
  * 这个模块包含了安装和卸载的逻辑
  */
 import { qs, showCustomMessage, showCustomConfirm, authFetch, isValidIP } from './utils.js';
-import { refreshPage } from './refresh.js';
+
 
 export function bindInstall() {
     const btn = qs('#install-btn');
