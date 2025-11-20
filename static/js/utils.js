@@ -121,8 +121,19 @@ export function isValidIP(ip) {
  * @param {string} prefix
  */
 export function toggleCustomDate(prefix) {
-    const wrapper = qs(`#${prefix}CustomDateWrapper`);
-    const customRadio = qs(`#${prefix}Custom`);
+    let wrapperId, customId;
+
+    if (prefix === 'expiry') {
+        wrapperId = '#expiryDateWrapper';
+        customId = '#expiryCustom';
+    } else if (prefix === 'modify-expiry') {
+        wrapperId = '#modifyCustomDateWrapper';
+        customId = '#modify-expiryCustom';
+    }
+
+    const wrapper = qs(wrapperId);
+    const customRadio = qs(customId);
+
     if (wrapper && customRadio) {
         wrapper.classList.toggle('d-none', !customRadio.checked);
     }
