@@ -1,8 +1,7 @@
 import os
-import json
-from datetime import timedelta, timezone
+from datetime import timedelta
 from dotenv import load_dotenv
-from flask import Flask, render_template, session, jsonify, redirect, url_for
+from flask import Flask, jsonify, redirect, url_for
 from flask_session import Session
 from flask_mail import Mail
 from flask_wtf.csrf import CSRFProtect, generate_csrf, CSRFError
@@ -140,5 +139,9 @@ def create_app():
 
 # ---------------- 启动 ----------------
 if __name__ == '__main__':
+    
+    # 创建应用程序实例（开发模式下）
     app = create_app()
-    app.run(debug=True, host='0.0.0.0', port=8080)
+    print("Starting Flask in Development Mode...")
+    app.run(debug=True, host='0.0.0.0', port=8080, use_reloader=False)
+

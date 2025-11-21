@@ -61,7 +61,7 @@ pip --version
 
 # 安装 Flask 及依赖
 echo "Installing Flask and dependencies (using Tsinghua mirror)..."
-pip install --upgrade flask flask-session werkzeug -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install --upgrade flask flask-session werkzeug gunicorn -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 安装 requirements.txt 里的依赖（如果有）
 REQ_FILE="$SCRIPT_DIR/requirements.txt"
@@ -82,43 +82,59 @@ else
     echo "ubuntu-openvpn-install.sh exists."
 fi
 
-
 # ---------- 自动生成并启用 systemd service ----------
-# SERVICE_NAME="vpnwm.service"
-# SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
+# 设置 PATH 环境变量，确保能找到 python 和 gunicorn
+# 1. 使用 venv 中的 gunicorn 绝对路径
+# 2. -w 1 表示开启1个 worker 进程 (轻量级)
+# 3. -b 0.0.0.0:8080 绑定端口
+# 4. "app:create_app()" 调用 app.py 中的 create_app 函数
+SERVICE_NAME="vpnwm.service"
+SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
 
-# # 用当前目录（脚本所在位置）作为项目根
-# PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 用当前目录（脚本所在位置）作为项目根
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# # 生成 service 文件
-# sudo tee "$SERVICE_PATH" >/dev/null <<EOF
-# [Unit]
-# Description=OpenVPN Web Manager
-# After=network.target
+echo "Generating Systemd Service file at ${SERVICE_PATH}..."
 
-# [Service]
-# Type=simple
-# User=root
-# Group=root
-# WorkingDirectory=${PROJECT_DIR}
-# ExecStart=${PROJECT_DIR}/venv/bin/python app.py
-# ExecStop=/bin/kill -INT \$MAINPID
-# Restart=always
-# RestartSec=5
-# StandardOutput=journal
-# StandardError=journal
+# 生成 service 文件
+sudo tee "$SERVICE_PATH" >/dev/null <<EOF
+[Unit]
+Description=OpenVPN Web Manager
+After=network.target
 
-# [Install]
-# WantedBy=multi-user.target
-# EOF
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=${PROJECT_DIR}
+Environment="PATH=${PROJECT_DIR}/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=${PROJECT_DIR}/venv/bin/gunicorn -w 1 -b 0.0.0.0:8080 "app:create_app()"
+ExecStop=/bin/kill -INT \$MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
-# # 重新加载 systemd 并启动
-# sudo systemctl daemon-reload
-# sudo systemctl enable --now "$SERVICE_NAME"
-# echo "✅ 已生成并启用 ${SERVICE_NAME}"
+[Install]
+WantedBy=multi-user.target
+EOF
 
+# 重新加载 systemd 并启动
+echo "Reloading systemd daemon..."
+sudo systemctl daemon-reload
 
-# # 运行 Flask 应用
-echo "Running Flask application..."
-python "$SCRIPT_DIR/app.py"
+echo "Enabling and starting ${SERVICE_NAME}..."
+sudo systemctl enable "$SERVICE_NAME"
+sudo systemctl restart "$SERVICE_NAME"
+
+echo "✅ 服务已启动！"
+echo "查看状态命令: sudo systemctl status ${SERVICE_NAME}"
+echo "查看日志命令: sudo journalctl -u ${SERVICE_NAME} -f"
+
+# 打印当前服务状态
+sudo systemctl status "${SERVICE_NAME}" --no-pager
+
+# 运行 Flask 应用(开发模式)
+# echo "Running Flask application..."
+# python "$SCRIPT_DIR/app.py"
 
