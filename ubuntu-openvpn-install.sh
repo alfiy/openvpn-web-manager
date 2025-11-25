@@ -159,6 +159,8 @@ function installOpenVPN() {
 port $OPENVPN_PORT
 proto udp
 dev tun
+user nobody
+group nogroup
 persist-key
 persist-tun
 keepalive 10 120
@@ -166,7 +168,7 @@ topology subnet
 server 10.8.0.0 255.255.255.0
 ifconfig-pool-persist ipp.txt
 push "dhcp-option DNS 1.1.1.1"
-push "dhcp-option DNS 1.0.0.1"
+push "dhcp-option DNS 114.114.114.114"
 push "redirect-gateway def1 bypass-dhcp"
 dh none
 ecdh-curve prime256v1
@@ -182,10 +184,8 @@ tls-server
 tls-version-min 1.2
 tls-cipher TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256
 client-config-dir /etc/openvpn/ccd
-management 127.0.0.1 7505
 status /var/log/openvpn/status.log
 verb 3
-log /var/log/openvpn/openvpn.log
 EOF
 
     # 9. 创建必要的目录
@@ -240,12 +240,6 @@ EOF
     # 13. 创建 openvpn@.service 服务单元
     # OpenVPN 在编译安装后不会自动创建这个服务文件
     echo "📁 创建 openvpn@.service 服务文件..."
-
-if [[ ! -d /run/openvpn ]]; then
-    mkdir -p /run/openvpn
-    chmod 755 /run/openvpn
-    echo " Create /run/openvpn directory"
-fi
     cat > /etc/systemd/system/openvpn@.service << EOF
 [Unit]
 Description=OpenVPN connection to %i
@@ -309,45 +303,12 @@ tls-client
 tls-version-min 1.2
 tls-cipher TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256
 ignore-unknown-option block-outside-dns
+setenv opt block-outside-dns
 verb 3
 EOF
     
-#     # create disable enable client script
-#     mkdir -p /etc/openvpn/scripts /etc/openvpn/disabled_clients
-
-#     cat > /etc/openvpn/scripts/client-connect.sh << 'EOF'
-# #!/bin/bash
-
-# # OpenVPN 自动设置了 $common_name 环境变量，直接使用即可。
-# CLIENT_NAME="${common_name}"
-
-# # 检查 ${common_name} 是否为空。如果为空，则说明 OpenVPN 没有正确传递该变量，拒绝连接。
-# if [ -z "$CLIENT_NAME" ]; then
-#     logger -t openvpn-client-connect "错误：未设置 common_name 环境变量。连接请求被拒绝。"
-#     exit 1
-# fi
-
-# # 使用客户端的通用名来检查禁用标志文件。
-# FLAG_FILE="/etc/openvpn/disabled_clients/${CLIENT_NAME}"
-
-# # 如果标志文件存在，则拒绝连接。
-# if [ -f "$FLAG_FILE" ]; then
-#     logger -t openvpn-client-connect "客户端 ${CLIENT_NAME} 已被禁用，连接请求被拒绝。"
-#     exit 1
-# else
-#     # 如果标志文件不存在，则允许连接。
-#     logger -t openvpn-client-connect "客户端 ${CLIENT_NAME} 已被允许连接。"
-#     exit 0
-# fi
-
-# EOF
-
-#     chmod +x /etc/openvpn/scripts/client-connect.sh
-
-    
     echo "🎉 OpenVPN installation completed successfully!"
 }
-
 
 # 脚本执行开始
 echo "🚀 Ubuntu OpenVPN Installer & Manager"

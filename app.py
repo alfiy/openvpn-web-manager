@@ -57,10 +57,19 @@ def create_app():
         MAIL_DEFAULT_SENDER=os.getenv('MAIL_DEFAULT_SENDER')
     )
 
-    # SQLite 单文件数据库
-    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'vpn_users.db')
+    # 生产环境数据目录
+    DATA_DIR = "/var/lib/vpnwm"
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+    # SQLite 单文件数据库/var/lib/vpnwm/vpn_users.db
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(DATA_DIR, 'vpn_users.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    # Session 存储路径
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_FILE_DIR'] = os.path.join(DATA_DIR, "session")
+    os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
 
     # 配置CSRF保护
     app.config['WTF_CSRF_ENABLED'] = True

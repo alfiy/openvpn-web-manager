@@ -4,7 +4,7 @@
 
 ## 运行项目
 
-目前项目仅支持ubuntu操作系统，开发环境为ubuntu 2404 desktop，测试环境为ubuntu2204 server。
+目前项目仅支持ubuntu操作系统，开发环境为ubuntu 2204 desktop，测试环境为ubuntu2204 server。
 
 0. 安装依赖
 ```bash
@@ -28,13 +28,14 @@ MAIL_DEFAULT_SENDER=888888@qq.com
 ```
 
 
-1. 进入项目目录执行下面的命令
+1. 项目部署
 
-第一次运行时执行下面的命令进行openvpn-web-manager项目的安装。
-sudo ./run.sh
-安装成功后使用`systemctl`管理vpnwm服务
+使用下面的部署脚本进行部署
 
 ```bash
+sudo ./deploy.sh
+
+# 部署成功后，使用下面的命令启动
 # 启动vpnwm
 sudo systemctl start vpnwm
 # 停止vpnwm
