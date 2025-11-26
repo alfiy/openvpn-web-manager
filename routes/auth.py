@@ -1,11 +1,10 @@
 # routes/auth.py
-from flask import Blueprint, render_template, request, jsonify, session, url_for, redirect, flash
+from flask import Blueprint, render_template, request, jsonify, session, url_for, redirect, flash, current_app
 from flask_wtf.csrf import generate_csrf
 from werkzeug.security import check_password_hash
 from datetime import datetime, timedelta, timezone
 from flask_mail import Message
 import secrets
-from flask import current_app
 from functools import wraps
 import logging
 from flask_limiter import Limiter
@@ -129,6 +128,7 @@ def login():
 
     if user and user.check_password(password):
         login_user(user)
+        current_app.logger.info(f'用户 {username} 登录成功')
         # 登录成功后返回 JSON 响应
         return jsonify({
             'status': 'success',

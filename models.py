@@ -3,6 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 import enum
 
+
 db = SQLAlchemy()
 
 class Role(enum.Enum):
@@ -57,3 +58,7 @@ class Client(db.Model):
     vpn_ip = db.Column(db.String(15), nullable=True)
     real_ip = db.Column(db.String(15), nullable=True)
     duration = db.Column(db.String(50), nullable=True)
+
+# def load_user(user_id):
+#     """根据用户 ID 加载用户"""
+#     return db.session.get(User, user_id)

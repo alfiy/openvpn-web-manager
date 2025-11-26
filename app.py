@@ -5,8 +5,9 @@ from flask import Flask, jsonify, redirect, url_for
 from flask_session import Session
 from flask_mail import Mail
 from flask_wtf.csrf import CSRFProtect, generate_csrf, CSRFError
-from flask_login import LoginManager
+from flask_login import LoginManager, current_user
 from models import db, User, Role
+
 
 # 加载环境变量
 load_dotenv()
@@ -147,10 +148,10 @@ def create_app():
     return app
 
 # ---------------- 启动 ----------------
+# 创建应用程序实例（开发模式下）
+app = create_app()
 if __name__ == '__main__':
     
-    # 创建应用程序实例（开发模式下）
-    app = create_app()
     print("Starting Flask in Development Mode...")
     app.run(debug=True, host='0.0.0.0', port=8080, use_reloader=False)
 

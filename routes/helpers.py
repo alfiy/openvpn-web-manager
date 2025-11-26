@@ -4,17 +4,26 @@ from flask_wtf.csrf import validate_csrf
 from flask_login import current_user
 from models import User, Role
 
+# 登录验证装饰器
 def login_required(f):
-    """Decorator: Checks if a user is logged in."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        # 核心改动：使用 Flask-Login 的 is_authenticated 属性
         if not current_user.is_authenticated:
             if request.is_json:
                 return jsonify({'error': 'Not logged in'}), 401
             return redirect(url_for('auth_bp.login'))
         return f(*args, **kwargs)
     return decorated
+
+# 登录验证装饰器
+# def login_required(f):
+#     @wraps(f)
+#     def decorated_function(*args, **kwargs):
+#         if not current_user.is_authenticated:          # ← 用官方代理
+#             return jsonify({'success': False, 'message': '请先登录'}), 401
+#         # 无需再手动 g.current_user = load_user(...)
+#         return f(*args, **kwargs)
+#     return decorated_function
 
 def require_login():
     """Helper function: Checks if a user is logged in for before_request."""
