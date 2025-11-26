@@ -5,8 +5,7 @@ from models import db, User, Role
 from .utils import generate_token, hash_token, utc_now, send_mail
 from werkzeug.exceptions import BadRequest
 from . import auth_bp
-import logging
-from datetime import timedelta
+from datetime import timedelta,timezone
 
 
 # NOTE: web endpoints and API endpoints are separated for clarity.
@@ -132,11 +131,22 @@ def reset_password_page(token):
 
     hashed = hash_token(token)
     user = User.query.filter_by(reset_token=hashed).first()
+
     if not user:
         flash('链接无效或已使用', 'danger')
         return redirect(url_for('auth_bp.login'))
 
-    if not user.reset_expire or user.reset_expire < utc_now():
+    expire = user.reset_expire
+    if expire is None:
+        flash('链接无效或已过期', 'danger')
+        return redirect(url_for('auth_bp.login'))
+
+    # 如果数据库时间是 naive → 设定为 UTC
+    if expire.tzinfo is None:
+        expire = expire.replace(tzinfo=timezone.utc)
+
+    # 比较
+    if expire < utc_now():
         flash('链接已过期', 'danger')
         return redirect(url_for('auth_bp.login'))
 
