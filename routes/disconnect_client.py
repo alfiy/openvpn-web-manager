@@ -3,7 +3,7 @@ import subprocess
 from flask import Blueprint, request, jsonify, json
 import socket
 from utils.openvpn_utils import log_message
-from routes.helpers import login_required, json_csrf_protect
+from routes.helpers import login_required
 
 disconnect_client_bp = Blueprint('disconnect_client', __name__)
 
@@ -32,7 +32,6 @@ def kill_client_via_management(client_name):
 
 @disconnect_client_bp.route('/disconnect_client', methods=['POST'])
 @login_required
-@json_csrf_protect
 def disconnect_client():
     """Disable a client by creating a flag file and force disconnection"""
     try:

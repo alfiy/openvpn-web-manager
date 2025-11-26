@@ -1,14 +1,13 @@
-from flask import Blueprint, json, request, jsonify
+from flask import Blueprint, request, jsonify
 import os
 import subprocess
 from utils.openvpn_utils import log_message
-from routes.helpers import login_required, json_csrf_protect
+from routes.helpers import login_required
 
 enable_client_bp = Blueprint('enable_client', __name__)
 
 @enable_client_bp.route('/enable_client', methods=['POST'])
 @login_required
-@json_csrf_protect
 def enable_client():
     """通过删除文件来重新启用客户端"""
     try:

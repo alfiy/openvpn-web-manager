@@ -2,19 +2,14 @@ from flask import Blueprint, request, jsonify
 import os
 import subprocess
 from datetime import datetime, timedelta
+from routes.helpers import login_required
 
-# 导入通用的装饰器
-from routes.helpers import login_required, json_csrf_protect
-# 假设存在这个工具类
-from utils.openvpn_utils import get_openvpn_port
 
 add_client_bp = Blueprint('add_client', __name__)
 SCRIPT_PATH = './ubuntu-openvpn-install.sh'
 
-
 @add_client_bp.route('/add_client', methods=['POST'])
 @login_required
-@json_csrf_protect
 def add_client():
     """新增 OpenVPN 客户端（JSON 接口）"""
 

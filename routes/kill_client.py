@@ -3,10 +3,8 @@ import subprocess
 import socket
 import time
 from flask import Blueprint, request, jsonify
-from functools import wraps
-import json
 from utils.openvpn_utils import log_message
-from routes.helpers import login_required, json_csrf_protect
+from routes.helpers import login_required
 from models import db,Client
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -124,7 +122,6 @@ def openvpn_client_kill(host, port, client_name, mgmt_password=None, verbose=Fal
 # --- 路由定义 ---
 @kill_client_bp.route('/kill_client', methods=['POST'])
 @login_required
-@json_csrf_protect
 def kill_client():
     """
     通过 API 请求踢出客户端

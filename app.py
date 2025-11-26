@@ -7,6 +7,7 @@ from flask_mail import Mail
 from flask_wtf.csrf import CSRFProtect, generate_csrf, CSRFError
 from flask_login import LoginManager, current_user
 from models import db, User, Role
+from routes.helpers import init_csrf_guard
 
 # 加载环境变量
 load_dotenv()
@@ -123,11 +124,21 @@ def create_app():
             admin.set_password('admin123')
             db.session.add(admin)
             db.session.commit()
+
+    # 列出所有「纯 JSON」蓝图（按需增删）
+    json_blueprints = [
+        auth_bp, install_bp, add_client_bp,
+        revoke_client_bp, uninstall_bp, download_client_bp,
+        modify_client_expiry_bp, enable_client_bp, ip_bp,index_bp,
+        user_bp, add_users_bp, delete_user_bp,
+        kill_client_bp, status_bp, restart_openvpn_bp
+    ]
+    for bp in json_blueprints:
+        init_csrf_guard(bp)      # 给每个蓝图挂 before_request 校验
     
     # ---------------- 注册蓝图 ----------------
     # ✅ 修复：只将需要访问根路由的蓝图注册到 '/'
-    # main_bp 包含了主页 '/'，其他蓝图应有自己的前缀或不设前缀
-    # app.register_blueprint(auth_bp)
+    # main_bp 包含了主页 '/'，其他蓝图应有自己的前缀或不设前缀  
     app.register_blueprint(main_bp, url_prefix='/')
     app.register_blueprint(install_bp)
     app.register_blueprint(add_client_bp)
@@ -145,6 +156,8 @@ def create_app():
     app.register_blueprint(status_bp)
     app.register_blueprint(restart_openvpn_bp)
     app.register_blueprint(auth_bp, url_prefix="/auth")
+
+
 
     return app
 

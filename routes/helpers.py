@@ -45,7 +45,7 @@ def role_required(required_roles):
     return decorator
 
 def json_csrf_protect(f):
-    """Decorator for CSRF validation on JSON POST requests."""
+    """用于对 JSON POST 请求进行 CSRF 验证的装饰器"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         csrf_token = request.headers.get('X-CSRFToken')
@@ -57,3 +57,16 @@ def json_csrf_protect(f):
             return jsonify({'status': 'error', 'message': 'CSRF 令牌验证失败，请刷新页面'}), 403
         return f(*args, **kwargs)
     return decorated_function
+
+def init_csrf_guard(bp):
+    """给某个蓝图的所有写操作统一加 CSRF 校验"""
+    @bp.before_request
+    def _csrf_guard():
+        if request.method in ('POST','PUT','DELETE') and request.is_json:
+            token = request.headers.get('X-CSRFToken') or request.json.get('csrf_token')
+            if not token:
+                return jsonify({'status':'error','message':'缺少 CSRF 令牌'}), 403
+            try:
+                validate_csrf(token)
+            except Exception:
+                return jsonify({'status':'error','message':'CSRF 令牌无效'}), 403

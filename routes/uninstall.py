@@ -9,7 +9,6 @@ uninstall_bp = Blueprint('uninstall', __name__)
 
 @uninstall_bp.route('/uninstall', methods=['POST'])
 @login_required
-@json_csrf_protect
 def uninstall():
     """
     通过运行一系列命令来卸载 OpenVPN 服务器。

@@ -2,8 +2,7 @@ from flask import Blueprint, request, jsonify, render_template
 import os
 import subprocess
 import time
-# 导入通用的装饰器
-from routes.helpers import login_required, json_csrf_protect
+from routes.helpers import login_required
 
 install_bp = Blueprint('install', __name__)
 
@@ -17,7 +16,6 @@ def install_page():
 
 @install_bp.route('/install', methods=['POST'])
 @login_required
-@json_csrf_protect  # 应用CSRF保护装饰器
 def install():
     # 1. 检查脚本是否存在
     if not os.path.exists(SCRIPT_PATH):

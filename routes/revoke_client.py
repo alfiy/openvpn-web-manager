@@ -1,13 +1,12 @@
 from flask import Blueprint, request, jsonify
 import os
 import subprocess
-from routes.helpers import json_csrf_protect, login_required
+from routes.helpers import login_required
 
 revoke_client_bp = Blueprint('revoke_client', __name__)
 
 @revoke_client_bp.route('/revoke_client', methods=['POST'])
 @login_required
-@json_csrf_protect
 def revoke_client():
     """
     精确撤销客户端证书，更新 CRL，并清理相关文件

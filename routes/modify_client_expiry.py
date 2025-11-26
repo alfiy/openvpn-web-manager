@@ -6,7 +6,7 @@ import tempfile
 import shutil
 from datetime import datetime, timedelta
 from utils.openvpn_utils import get_openvpn_port
-from routes.helpers import json_csrf_protect, login_required
+from routes.helpers import login_required
 
 modify_client_expiry_bp = Blueprint('modify_client_expiry', __name__)
 
@@ -75,7 +75,6 @@ def _cleanup_index(index_file: str, client_name: str) -> None:
 # ---------- 主路由 ----------
 @modify_client_expiry_bp.route('/modify_client_expiry', methods=['POST'])
 @login_required # 确保用户已登录
-@json_csrf_protect # 确保请求有CSRF保护
 def modify_client_expiry():
     """
     通过吊销旧证书并重新颁发新证书来修改客户端证书的到期日。
