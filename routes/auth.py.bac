@@ -1,21 +1,12 @@
 # routes/auth.py
-from flask import Blueprint, render_template, request, jsonify, session, url_for, redirect, flash, current_app
+from flask import Blueprint, render_template, request, jsonify, url_for, redirect, flash, current_app
 from flask_wtf.csrf import generate_csrf
-from werkzeug.security import check_password_hash
 from datetime import datetime, timedelta, timezone
 from flask_mail import Message
 import secrets
 from functools import wraps
 import logging
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from itsdangerous import URLSafeTimedSerializer
-import re
-
-# 导入 Flask-Login 相关的函数
 from flask_login import login_user, logout_user, current_user, login_required
-
-# 请确保这些导入语句与你的项目结构相匹配
 from models import db, User, Role
 
 auth_bp = Blueprint('auth_bp', __name__)

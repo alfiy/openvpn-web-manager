@@ -30,9 +30,6 @@ class User(db.Model, UserMixin):
         # ✅ 修复：从正确的字段 password_hash 中获取哈希值进行验证
         return check_password_hash(self.password_hash, raw)
 
-    # Flask-Login 提供的 UserMixin 已经包含了 is_authenticated 等方法，
-    # 除非你有特殊需求，否则无需重写，以避免潜在的错误。
-    # 我已将这些方法移除。
     
     # ✅ 确保 get_id 方法返回字符串类型，UserMixin 已经提供了
     def get_id(self):
@@ -58,7 +55,3 @@ class Client(db.Model):
     vpn_ip = db.Column(db.String(15), nullable=True)
     real_ip = db.Column(db.String(15), nullable=True)
     duration = db.Column(db.String(50), nullable=True)
-
-# def load_user(user_id):
-#     """根据用户 ID 加载用户"""
-#     return db.session.get(User, user_id)

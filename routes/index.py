@@ -1,13 +1,5 @@
 from flask import Blueprint, render_template, session, request, jsonify, g, redirect, url_for
-from werkzeug.security import check_password_hash
-from functools import wraps
-from models import User
-import os
-from flask_wtf.csrf import generate_csrf, CSRFError
-from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField
-from wtforms.validators import DataRequired
-from flask_login import current_user 
+from flask_wtf.csrf import CSRFError
 from routes.helpers import login_required
 
 
@@ -18,57 +10,10 @@ index_bp = Blueprint('index', __name__)
 def handle_csrf_error(e):
     return jsonify({'success': False, 'message': 'CSRF令牌无效'}), 400
 
-
-
-# # 登录验证装饰器
-# def login_required(f):
-#     @wraps(f)
-#     def decorated_function(*args, **kwargs):
-#         if 'user_id' not in session:
-#             return jsonify({'success': False, 'message': '请先登录'}), 401
-#         g.current_user = load_user(session['user_id'])
-#         if not g.current_user:
-#             return jsonify({'success': False, 'message': '用户信息无效'}), 401
-#         return f(*args, **kwargs)
-#     return decorated_function
-
-# @index_bp.route('/login', methods=['GET', 'POST'])
-# def login():
-#     if request.method == 'POST':
-#         try:
-#             username = request.form.get('username')
-#             password = request.form.get('password')
-            
-#             # A debugging line to check what the server receives from the form
-#             print(f"Received login attempt for username: {username}, password: {password}")
-            
-#             # 为了简化，我们只检查super_admin和admin账户
-#             if username == 'super_admin' and password == 'admin123':
-#                 user = User('1', 'super_admin', 'pbkdf2:sha256:260000$5F$46a9a7b973c7344933a3c2676b9d62d2d0b8d5a2c20630b980d0d866a46a9a7b973c7344933a3c2676b9d62d2d0b8d5a2c20630b980d0d866a46a9a7b973c7344933a3c2676b9d62d2d0b8d5a2', '超级管理员') # 密码是 'admin123'
-#                 session['user_id'] = user.id
-#                 session['username'] = user.username
-#                 session['role_name'] = user.role_name
-#                 session['user_role'] = user.role_name
-#                 return jsonify({'success': True})
-            
-#             if username == 'admin' and password == 'admin123':
-#                 user = User('2', 'admin', 'pbkdf2:sha256:260000$5F$46a9a7b973c7344933a3c2676b9d62d2d0b8d5a2c20630b980d0d866a46a9a7b973c7344933a3c2676b9d62d2d0b8d5a2', '管理员')
-#                 session['user_id'] = user.id
-#                 session['username'] = user.username
-#                 session['role_name'] = user.role_name
-#                 session['user_role'] = user.role_name
-#                 return jsonify({'success': True})
-            
-#             return jsonify({'success': False, 'message': '用户名或密码错误'})
-#         except CSRFError:
-#             return jsonify({'success': False, 'message': 'CSRF令牌无效'}), 400
-    
-#     return render_template('login.html', csrf_token=generate_csrf())
-
-@index_bp.route('/logout')
-def logout():
-    session.clear()
-    return jsonify({'success': True, 'message': '已退出登录'})
+# @index_bp.route('/logout')
+# def logout():
+#     session.clear()
+#     return jsonify({'success': True, 'message': '已退出登录'})
 
 @index_bp.route('/')
 def index():

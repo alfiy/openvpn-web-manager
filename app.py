@@ -8,7 +8,6 @@ from flask_wtf.csrf import CSRFProtect, generate_csrf, CSRFError
 from flask_login import LoginManager, current_user
 from models import db, User, Role
 
-
 # 加载环境变量
 load_dotenv()
 
@@ -97,6 +96,7 @@ def create_app():
     @login_manager.unauthorized_handler
     def unauthorized_callback():
         return redirect(url_for('auth_bp.login'))
+        
 
     @app.errorhandler(CSRFError)
     def csrf_error(reason):
@@ -127,7 +127,7 @@ def create_app():
     # ---------------- 注册蓝图 ----------------
     # ✅ 修复：只将需要访问根路由的蓝图注册到 '/'
     # main_bp 包含了主页 '/'，其他蓝图应有自己的前缀或不设前缀
-    app.register_blueprint(auth_bp)
+    # app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp, url_prefix='/')
     app.register_blueprint(install_bp)
     app.register_blueprint(add_client_bp)
@@ -144,6 +144,7 @@ def create_app():
     app.register_blueprint(kill_client_bp)
     app.register_blueprint(status_bp)
     app.register_blueprint(restart_openvpn_bp)
+    app.register_blueprint(auth_bp, url_prefix="/auth")
 
     return app
 

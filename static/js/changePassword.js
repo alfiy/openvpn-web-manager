@@ -21,7 +21,7 @@ function ChangePassword() {
             const oldPwd = qs('[name="old_pwd"]', form).value;
             const newPwd = qs('[name="new_pwd"]', form).value;
 
-            authFetch('/change_password', {
+            authFetch('/auth/api/change-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
