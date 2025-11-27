@@ -63,11 +63,11 @@ export async function authFetch(url, options = {}) {
     const method = options.method ? options.method.toUpperCase() : 'GET';
 
     // 调试日志
-    console.log('=== authFetch 调试信息 ===');
-    console.log('请求 URL:', url);
-    console.log('请求方法:', method);
-    console.log('CSRF Token:', csrfToken);
-    console.log('原始 options:', options);
+    // console.log('=== authFetch 调试信息 ===');
+    // console.log('请求 URL:', url);
+    // console.log('请求方法:', method);
+    // console.log('CSRF Token:', csrfToken);
+    // console.log('原始 options:', options);
     
     // 如果没有 CSRF 令牌，直接抛出错误
     if (!csrfToken) {
@@ -95,15 +95,15 @@ export async function authFetch(url, options = {}) {
     };
 
     // 打印最终的请求头
-    console.log('请求头:');
-    for (let [key, value] of headers.entries()) {
-        console.log(`  ${key}: ${value}`);
-    }
-    console.log('请求体:', options.body);
+    // console.log('请求头:');
+    // for (let [key, value] of headers.entries()) {
+    //     console.log(`  ${key}: ${value}`);
+    // }
+    // console.log('请求体:', options.body);
     
     try {
         const response = await fetch(url, fetchOptions);
-        console.log('响应状态:', response.status, response.statusText);
+        // console.log('响应状态:', response.status, response.statusText);
         
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ 
@@ -121,7 +121,7 @@ export async function authFetch(url, options = {}) {
         }
         
         const data = await response.json();
-        console.log('✅ 响应成功:', data);
+        // console.log('✅ 响应成功:', data);
         return data;
     } catch (error) {
         console.error('❌ authFetch 异常:', error);

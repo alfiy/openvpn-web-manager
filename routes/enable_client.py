@@ -3,6 +3,8 @@ import os
 import subprocess
 from utils.openvpn_utils import log_message
 from routes.helpers import login_required
+from models import db,Client
+from sqlalchemy.exc import SQLAlchemyError
 
 enable_client_bp = Blueprint('enable_client', __name__)
 
@@ -21,7 +23,7 @@ def enable_client():
             log_message("客户端名称不能为空")
             return jsonify({'status': 'error', 'message': '客户端名称不能为空'}), 400
 
-        log_message(f"正在为客户端 {client_name} 启动重新启用流程")
+        # log_message(f"正在为客户端 {client_name} 启动重新启用流程")
 
         ccd_dir = '/etc/openvpn/ccd'
         disable_file_path = os.path.join(ccd_dir, client_name)
@@ -35,14 +37,29 @@ def enable_client():
 
         try:
             cmd = ['sudo', 'rm', '-f', disable_file_path]
-            log_message(f"执行命令：{' '.join(cmd)}")
+            # log_message(f"执行命令：{' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            log_message(f"命令执行成功：{result.stdout}")
+            # log_message(f"命令执行成功：{result.stdout}")
         except subprocess.CalledProcessError as e:
             log_message(f"重新启用过程失败：{e.stderr}")
             return jsonify({'status': 'error', 'message': f'删除文件失败：{e.stderr}'}), 500
+        
 
-        log_message(f"成功重新启用客户端：{client_name}")
+        # 文件删除成功 → 更新数据库 disabled=0
+        try:
+            client = Client.query.filter_by(name=client_name).first()
+            if client:
+                client.disabled = False          # 0
+                db.session.commit()
+                # log_message(f"成功将客户端 {client_name} 的 'disabled' 状态更新为 False。")
+            else:
+                log_message(f"数据库中未找到客户端 {client_name}，跳过状态更新。")
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            log_message(f"数据库更新失败：{e}")
+            return jsonify({'status': 'error', 'message': f'数据库更新失败：{e}'}), 500
+
+        # log_message(f"成功重新启用客户端：{client_name}")
         return jsonify({
             'status': 'success',
             'message': f'客户端 {client_name} 已成功重新启用。'
