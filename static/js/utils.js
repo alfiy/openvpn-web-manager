@@ -61,9 +61,17 @@ document.addEventListener('DOMContentLoaded', () => {
 export async function authFetch(url, options = {}) {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
     const method = options.method ? options.method.toUpperCase() : 'GET';
+
+    // 调试日志
+    console.log('=== authFetch 调试信息 ===');
+    console.log('请求 URL:', url);
+    console.log('请求方法:', method);
+    console.log('CSRF Token:', csrfToken);
+    console.log('原始 options:', options);
     
     // 如果没有 CSRF 令牌，直接抛出错误
     if (!csrfToken) {
+        console.error('❌ CSRF 令牌缺失!');
         throw new Error("缺少 CSRF 令牌");
     }
 
@@ -86,24 +94,39 @@ export async function authFetch(url, options = {}) {
         headers: headers,
     };
 
-    const response = await fetch(url, fetchOptions);
-
-    if (!response.ok) {
-        // 如果响应状态不是 2xx，尝试解析 JSON 错误信息
-        const errorData = await response.json().catch(() => ({ 
-            message: `HTTP错误: ${response.status} ${response.statusText}` 
-        }));
-        const error = new Error(errorData.message || '请求失败');
-        error.status = response.status;
-        error.data = errorData;
+    // 打印最终的请求头
+    console.log('请求头:');
+    for (let [key, value] of headers.entries()) {
+        console.log(`  ${key}: ${value}`);
+    }
+    console.log('请求体:', options.body);
+    
+    try {
+        const response = await fetch(url, fetchOptions);
+        console.log('响应状态:', response.status, response.statusText);
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ 
+                message: `HTTP错误: ${response.status} ${response.statusText}` 
+            }));
+            console.error('❌ 请求失败:', errorData);
+            const error = new Error(errorData.message || '请求失败');
+            error.status = response.status;
+            error.data = errorData;
+            throw error;
+        }
+        
+        if (options.returnRawResponse) {
+            return response;
+        }
+        
+        const data = await response.json();
+        console.log('✅ 响应成功:', data);
+        return data;
+    } catch (error) {
+        console.error('❌ authFetch 异常:', error);
         throw error;
     }
-
-    if (options.returnRawResponse) {
-        return response;
-    }
-
-    return response.json();
 }
 
 /**
@@ -167,31 +190,30 @@ export function showCustomConfirm(message, callback, title = '确认操作') {
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     const body = qs('#confirmModal .modal-body');
     const okBtn = qs('#confirmModal-confirm-btn');
-
-    // **关键改动: 确保确认模态框的 z-index 总是高于其他模态框**
+    
+    // ✅ 添加标志追踪用户是否已经做出选择
+    let userResponded = false;
+    
     modalEl.style.zIndex = 1060; 
-
-    // 确保标题和消息正确显示
+    
     qs('#confirmModal .modal-title').textContent = title;
     body.textContent = message;
     okBtn.classList.remove('d-none');
-
-    // 使用 .onclick 来确保每次只有一个回调函数
+    
     okBtn.onclick = () => {
+        userResponded = true; // ✅ 标记用户已响应
         modal.hide();
         callback(true);
     };
-
-    // 绑定模态框隐藏事件，以处理取消操作和清理
+    
     modalEl.addEventListener('hide.bs.modal', (e) => {
-        // **关键改动: 隐藏后重置 z-index**
         modalEl.style.zIndex = ''; 
-
-        // 如果是点击了关闭按钮，则执行取消回调
-        if (e.relatedTarget && e.relatedTarget.dataset.bsDismiss) {
+        
+        // ✅ 只有在用户未响应时才调用 callback(false)
+        if (!userResponded) {
             callback(false);
         }
-        // 清理按钮事件和显示状态，只执行一次
+        
         okBtn.onclick = null;
         okBtn.classList.add('d-none');
     }, { once: true });

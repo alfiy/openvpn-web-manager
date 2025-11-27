@@ -7,6 +7,7 @@ import shutil
 from datetime import datetime, timedelta
 from utils.openvpn_utils import get_openvpn_port
 from routes.helpers import login_required
+from models import Client,db
 
 modify_client_expiry_bp = Blueprint('modify_client_expiry', __name__)
 
@@ -163,10 +164,19 @@ def modify_client_expiry():
 
         # Step 6: Clean up index.txt
         _cleanup_index(index_file, client_name)
-
+        
         # Calculate new expiry date
         new_expiry_date = datetime.now() + timedelta(days=expiry_days)
         expiry_date_str = new_expiry_date.strftime('%Y-%m-%d')
+
+         # 同步数据库 — 更新 expiry 字段 
+        try:
+            client = Client.query.filter_by(name=client_name).first()
+            if client:
+                client.expiry = new_expiry_date
+                db.session.commit()
+        except Exception as db_err:
+            print(f"[WARN] Failed to update expiry in DB for {client_name}: {db_err}")
 
         return jsonify({
             'status': 'success',

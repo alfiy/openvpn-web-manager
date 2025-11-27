@@ -144,7 +144,7 @@ export function init() {
                 
                 if (!confirmed) return;
                 try {
-                    const data = await authFetch('/change_user_role', {
+                    const data = await authFetch('/auth/admin/change-user-role', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ user_id: uid, new_role: newRole })
@@ -157,32 +157,55 @@ export function init() {
                 }
             });
         } else if (target.classList.contains('reset-pwd')) {
+
+            console.log('🔄 点击了重置密码按钮');
+            console.log('用户ID:', uid);
+
             // 临时隐藏模态框的遮罩层
             if (modalBackdrop) modalBackdrop.classList.add('d-none');
 
             showCustomConfirm('确定要重置该用户的密码吗？', async (confirmed) => {
                 // 恢复模态框的遮罩层
                 if (modalBackdrop) modalBackdrop.classList.remove('d-none');
-                
-                if (!confirmed) return;
+
+                console.log('确认结果:', confirmed);
+
+                if (!confirmed) {
+                    console.log('❌ 用户取消操作');
+                    return;
+                }
+
+                 console.log('✅ 开始重置密码...');
+
                 try {
-                    const data = await authFetch('/reset_user_password', {
+                    const requestBody = { user_id: uid };
+                    console.log('请求体:', JSON.stringify(requestBody));
+
+                    const data = await authFetch('/auth/admin/reset-user-password', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ user_id: uid })
                     });
-                    
+                    console.log('✅ 重置成功,返回数据:', data);
+
                     if (data.status === 'success') {
                         // 如果后端返回了新密码字段，就单独显示它
-                        const message = `密码重置成功！新密码是：**${data.new_password}**`;
+                        const message = `密码重置成功！新密码是：[${data.new_password}]`;
                         // 你可以使用 showCustomMessage 来显示这个消息，可能需要调整 showCustomMessage 支持HTML
                         showCustomMessage(message);
                         fetchUsers();
                     } else {
+                        console.warn('⚠️ 后端返回非成功状态:', data);
                         // 如果失败，显示错误信息
                         showCustomMessage(`重置密码失败: ${data.message}`);
                     }
                 } catch (error) {
+                    console.error('❌ 重置密码捕获异常:', error);
+                    console.error('错误详情:', {
+                        message: error.message,
+                        status: error.status,
+                        data: error.data
+                    });
                     showCustomMessage(`重置密码失败: ${error.message}`);
                 }
             });

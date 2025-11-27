@@ -21,16 +21,30 @@ def hash_token(token: str) -> str:
 
 
 def generate_strong_password(length: int = 16) -> str:
+    """生成强密码,确保包含至少3种字符类型"""
     alphabet = string.ascii_letters + string.digits + string.punctuation
-    # Guarantee at least one of each category if length >= 4
+    
+    # 确保最小长度
     if length < 4:
         length = 4
+    
     while True:
         pwd = ''.join(secrets.choice(alphabet) for _ in range(length))
-        # simple policy: at least 3 classes
-        classes = sum(bool(set(pwd) & set(chars)) for chars in (string.ascii_lowercase, string.ascii_uppercase, string.digits, string.punctuation))
-    if classes >= 3:
-        return pwd
+        
+        # 检查密码强度:至少包含3种字符类型
+        classes = sum(
+            bool(set(pwd) & set(chars)) 
+            for chars in (
+                string.ascii_lowercase, 
+                string.ascii_uppercase, 
+                string.digits, 
+                string.punctuation
+            )
+        )
+        
+        # ✅ 正确的缩进:if 和 return 都在 while 循环内
+        if classes >= 3:
+            return pwd
 
 
 

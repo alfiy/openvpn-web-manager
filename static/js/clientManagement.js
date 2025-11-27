@@ -268,6 +268,19 @@ export function bindModifyExpiry() {
     const btnConfirm = qs('#confirm-modify-expiry');
     if (btnConfirm && !btnConfirm.hasAttribute('data-bound')) {
         btnConfirm.setAttribute('data-bound', 'true');
+
+        btnConfirm.addEventListener('click', async function onceHandler(e) {
+            // 如果已确认过，直接 return，让事件继续走原 async 逻辑
+            if (btnConfirm.dataset.confirmed === 'true') return;
+
+            e.stopImmediatePropagation();          // 阻止本次执行
+            const sure = confirm('修改到期时间后请重新下发证书，确定继续？');
+            if (!sure) return;                     // 用户取消
+
+            btnConfirm.dataset.confirmed = 'true'; // 做标记
+            btnConfirm.click();                    // 再次触发自己，这次会跳过拦截
+        }, { capture: false, once: false });
+
         btnConfirm.addEventListener('click', async () => {
             const name = qs('#modify-client-name').value;
             let days;

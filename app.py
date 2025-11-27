@@ -28,7 +28,6 @@ from routes.download_client import download_client_bp
 from routes.modify_client_expiry import modify_client_expiry_bp
 from routes.enable_client import enable_client_bp
 from routes.get_ip_list import ip_bp
-from routes.index import index_bp
 from routes.get_users import user_bp
 from routes.add_users import add_users_bp
 from routes.delete_user import delete_user_bp
@@ -129,7 +128,7 @@ def create_app():
     json_blueprints = [
         auth_bp, install_bp, add_client_bp,
         revoke_client_bp, uninstall_bp, download_client_bp,
-        modify_client_expiry_bp, enable_client_bp, ip_bp,index_bp,
+        modify_client_expiry_bp, enable_client_bp, ip_bp,
         user_bp, add_users_bp, delete_user_bp,
         kill_client_bp, status_bp, restart_openvpn_bp
     ]
@@ -148,7 +147,7 @@ def create_app():
     app.register_blueprint(modify_client_expiry_bp)
     app.register_blueprint(enable_client_bp)
     app.register_blueprint(ip_bp)
-    app.register_blueprint(index_bp)
+    # app.register_blueprint(index_bp)
     app.register_blueprint(user_bp)
     app.register_blueprint(add_users_bp)
     app.register_blueprint(delete_user_bp)
