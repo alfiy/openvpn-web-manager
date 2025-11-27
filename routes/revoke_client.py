@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 import os
 import subprocess
 from routes.helpers import login_required
+from models import Client,db
 
 revoke_client_bp = Blueprint('revoke_client', __name__)
 
@@ -74,6 +75,16 @@ def revoke_client():
         ]
         for cmd in cleanup_commands:
             subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
+
+        # Step 6.5: 从数据库删除客户端（新增代码）
+        try:
+            client = Client.query.filter_by(name=client_name).first()
+            if client:
+                db.session.delete(client)
+                db.session.commit()
+        except Exception as db_err:
+            # 不中断 revoke 流程，只记录数据库异常
+            print(f"[WARN] Failed to delete client {client_name} from DB:", db_err)
 
         # Step 7: 精确清理 index.txt，只删除该客户端
         with open(index_path, 'r') as f:

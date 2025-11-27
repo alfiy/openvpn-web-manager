@@ -15,11 +15,11 @@ def add_client():
     """新增 OpenVPN 客户端（JSON 接口）"""
 
     # 1. 检查安装脚本是否存在
-    if not os.path.exists(SCRIPT_PATH):
-        return jsonify({
-            'status': 'error',
-            'message': f'OpenVPN 安装脚本不存在: {SCRIPT_PATH}'
-        }), 400
+    # if not os.path.exists(SCRIPT_PATH):
+    #     return jsonify({
+    #         'status': 'error',
+    #         'message': f'OpenVPN 安装脚本不存在: {SCRIPT_PATH}'
+    #     }), 400
 
     # 2. 解析 JSON 请求体
     if not request.is_json:
