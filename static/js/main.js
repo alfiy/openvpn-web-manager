@@ -74,6 +74,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // 检查 body 标签是否有 data-page-type 属性，并且其值为 'auto-refresh'
     const pageType = document.body.dataset.pageType;
     if (pageType === 'dashboard') {
-        startAutoRefresh(10000, userRole);
+        // startAutoRefresh(3000, userRole);
     }
 });

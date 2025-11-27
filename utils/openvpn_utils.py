@@ -62,22 +62,24 @@ def check_openvpn_status():
         return f'error: {str(e)}'
 
 def _parse_connected_since(text: str) -> Optional[datetime]:
-    # 1. 你的 status-version 1/2 新格式
+    # 1. 你的 status-version 1/2 新格式 → 先当本地时间解析
     try:
-        return datetime.strptime(text, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        naive = datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+        # 把本地时间转 UTC（系统默认时区）
+        return naive.astimezone(timezone.utc)
     except ValueError:
         pass
     # 2. 旧英文格式
     try:
-        return datetime.strptime(text, "%a %b %d %H:%M:%S %Y").replace(tzinfo=timezone.utc)
+        naive = datetime.strptime(text, "%a %b %d %H:%M:%S %Y")
+        return naive.astimezone(timezone.utc)
     except ValueError:
         pass
-    # 3. status-version 3 时间戳
+    # 3. 时间戳
     try:
         return datetime.fromtimestamp(float(text), tz=timezone.utc)
     except (ValueError, OSError):
         return None
-
 
 def _human_duration(seconds: int) -> str:
     """>=1 h 输出 1h23m；<1 h 输出 5m12s；<1 min 输出 45s"""
@@ -134,10 +136,16 @@ def get_online_clients(status_file: str = None, cache_ttl: int = 10) -> Dict[str
         if cn == "UNDEF":
             continue
 
+        log_message(f"DEBUG  cn={cn}  conn_since={conn_since}")
+
         conn_dt = _parse_connected_since(conn_since)
+
         if conn_dt is None:
+            log_message(f"DEBUG  → conn_dt is None, skip")
             continue
         duration_sec = int((datetime.now(timezone.utc) - conn_dt).total_seconds())
+        log_message(f"DEBUG  → conn_dt={conn_dt}  duration_sec={duration_sec}")
+
         real_ip = real_addr.split(":")[0] if ":" in real_addr else real_addr
 
         clients[cn] = OnlineClient(
@@ -170,8 +178,8 @@ def get_online_clients(status_file: str = None, cache_ttl: int = 10) -> Dict[str
 
 def get_openvpn_clients() -> List[Dict[str, str]]:
     clients: List[Dict[str, str]] = []
-    # ① 拿在线列表（带缓存，10 s 内不重复读盘）
-    online_clients: Dict[str, OnlineClient] = get_online_clients()
+    # ① 拿在线列表（带缓存，1 s 内不重复读盘）
+    online_clients: Dict[str, OnlineClient] = get_online_clients(cache_ttl=1)
 
     # ② 被禁用（ccd 目录存在同名文件）或被吊销的客户端
     disabled_clients: set[str] = set()
@@ -241,6 +249,10 @@ def get_openvpn_clients() -> List[Dict[str, str]]:
                     "connected_since": oc.connected_since if oc else "",
                 }
             )
+
+        # for c in clients:          # 返回前加一段日志
+        #     log_message(f"DEBUG final  name={c['name']}  online={c['online']}  duration={c['duration']}")
+            
     except Exception as e:
         log_message(f"读取 index.txt 异常：{e}")
 
