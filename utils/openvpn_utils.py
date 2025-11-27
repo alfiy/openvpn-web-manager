@@ -2,6 +2,8 @@ import os
 import subprocess
 import re
 import sys
+from models import db, Client
+from sqlalchemy.exc import SQLAlchemyError
 
 def log_message(message):
     print(f"[SERVER] {message}", flush=True)
@@ -278,3 +280,35 @@ def get_openvpn_port():
     except Exception:
         pass
     return 1194  # 默认兜底
+
+def sync_openvpn_clients_to_db():
+    """
+    同步 OpenVPN 客户端列表到数据库。
+    - 如果客户端不存在于 DB → 自动新增
+    - 如果存在 → 不修改任何字段
+    """
+    try:
+        ovpn_clients = get_openvpn_clients()  # 使用你现有的完整函数
+
+        changed = False
+        for c in ovpn_clients:
+            name = c.get("name")
+            if not name:
+                continue
+
+            # 若数据库中不存在 → 自动新增
+            exists = Client.query.filter_by(name=name).first()
+            if not exists:
+                new_client = Client(name=name, disabled=False)
+                db.session.add(new_client)
+                changed = True
+
+        if changed:
+            db.session.commit()
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        log_message(f"数据库同步失败: {e}")
+
+    except Exception as e:
+        log_message(f"sync_openvpn_clients_to_db() 错误: {e}")

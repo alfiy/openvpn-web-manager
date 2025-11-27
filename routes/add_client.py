@@ -3,6 +3,7 @@ import os
 import subprocess
 from datetime import datetime, timedelta
 from routes.helpers import login_required
+from models import Client,db
 
 
 add_client_bp = Blueprint('add_client', __name__)
@@ -112,7 +113,29 @@ def add_client():
             'message': f'内部错误: {str(e)}'
         }), 500
 
-    # 5. 成功返回
+    # 5. 客户端生成成功，立即写入数据库 
+    try:
+        expiry_dt = datetime.now() + timedelta(days=expiry_days)
+        new_client = Client(
+            name=client_name,
+            expiry=expiry_dt,
+            online=False,
+            disabled=False,
+            vpn_ip="",
+            real_ip="",
+            duration=""
+        )
+        db.session.add(new_client)
+        db.session.commit()
+
+    except Exception as e:
+        # 数据库写入失败不影响证书生成，不回滚 OpenVPN 创建！
+        return jsonify({
+            "status": "error",
+            "message": f"客户端已创建，但数据库写入失败：{str(e)}"
+        }), 500
+    
+    # 6. 成功返回
     expiry_date_str = (datetime.now() + timedelta(days=expiry_days)).strftime('%Y-%m-%d')
     return jsonify({
         'status': 'success',
