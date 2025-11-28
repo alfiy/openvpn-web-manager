@@ -23,6 +23,9 @@ const PER_PAGE = 10;
 // 在文件顶部添加一个检查，确保所有 DOM 元素都存在
 const elementsExist = tbody && paging && pageInfo && noData;
 
+// 全局变量当前页为第1页
+export let currentPage = 1;
+
 /* 统一渲染表格 */
 function render(data) {
     if (!elementsExist) {
@@ -109,11 +112,14 @@ function render(data) {
 }
 
 /* AJAX 拉数据 */
-export function loadClients(page = 1, q = '') {
+export function loadClients(page = currentPage, q = '') {
     // 在这里再次进行检查，确保函数在合适的页面被调用
     if (!elementsExist) {
         return;
     }
+
+    currentPage = page;  // ← 这里非常关键，记住当前页面
+
     authFetch(`/clients/data?page=${page}&q=${encodeURIComponent(q)}`)
         .then(render)
         .catch(console.error);
@@ -342,7 +348,7 @@ export function bindModifyExpiry() {
 
 // 统一的初始化函数，用于在页面加载时调用
 export function init() {
-    loadClients();
+    loadClients(currentPage);
     bindClientEvents();
     bindAddClient();
     bindModifyExpiry();

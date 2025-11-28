@@ -2,7 +2,7 @@
  * 这个模块处理自动刷新逻辑，并依赖于 clientManagement.js 中的 load 函数。
  */
 import { authFetch, qs } from './utils.js';
-import { loadClients } from './clientManagement.js';
+import { currentPage,loadClients } from './clientManagement.js';
 import { bindInstall, bindUninstall } from './installUninstall.js';
 import { bindRestart } from './restart.js';
 
@@ -84,7 +84,7 @@ export function refreshPage(currentUserRole) {
         .catch(error => {
             console.error("刷新OpenVPN状态失败:", error);
         });
-    loadClients(); // 刷新客户端列表
+    loadClients(currentPage); // 刷新客户端列表
 }
 
 /**
