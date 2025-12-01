@@ -8,6 +8,7 @@ from flask_wtf.csrf import CSRFProtect, generate_csrf, CSRFError
 from flask_login import LoginManager, current_user
 from models import db, User, Role
 from routes.helpers import init_csrf_guard
+from utils.api_response import api_error
 
 # 加载环境变量
 load_dotenv()
@@ -34,6 +35,7 @@ from routes.delete_user import delete_user_bp
 from routes.kill_client import kill_client_bp
 from routes.status_bp import status_bp
 from routes.restart_openvpn import restart_openvpn_bp
+from routes.api import api_bp
 
 
 def create_app():
@@ -75,9 +77,26 @@ def create_app():
     app.config['WTF_CSRF_ENABLED'] = True
     app.config['WTF_CSRF_TIME_LIMIT'] = 3600
     app.config['WTF_CSRF_SSL_STRICT'] = False
-    # ✅ 修复：移除对 CSRF 头的显式配置，使用默认值
     app.config['WTF_CSRF_FIELD_NAME'] = 'csrf_token'
     app.config['WTF_CSRF_HEADERS'] = ['X-CSRFToken']
+
+    # 全局 JSON 错误处理（只对 API 请求有效）
+    @app.errorhandler(400)
+    def _handle_400(e):
+        return api_error("Bad request", status=400)
+    @app.errorhandler(401)
+    def _handle_401(e):
+        return api_error("Unauthorized", status=401)
+    @app.errorhandler(403)
+    def _handle_403(e):
+        return api_error("Forbidden", status=403)
+    @app.errorhandler(404)
+    def _handle_404(e):
+        # 如果请求期望 HTML，可以返回模板，这里默认 JSON
+        return api_error("Not found", status=404)
+    @app.errorhandler(500)
+    def _handle_500(e):
+        return api_error("Internal server error", status=500)
 
     # 初始化扩展
     Session(app)
@@ -136,7 +155,6 @@ def create_app():
         init_csrf_guard(bp)      # 给每个蓝图挂 before_request 校验
     
     # ---------------- 注册蓝图 ----------------
-    # ✅ 修复：只将需要访问根路由的蓝图注册到 '/'
     # main_bp 包含了主页 '/'，其他蓝图应有自己的前缀或不设前缀  
     app.register_blueprint(main_bp, url_prefix='/')
     app.register_blueprint(install_bp)
@@ -154,6 +172,7 @@ def create_app():
     app.register_blueprint(status_bp)
     app.register_blueprint(restart_openvpn_bp)
     app.register_blueprint(auth_bp, url_prefix="/auth")
+    app.register_blueprint(api_bp)
 
 
 

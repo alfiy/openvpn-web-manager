@@ -186,6 +186,7 @@ tls-cipher TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256
 client-config-dir /etc/openvpn/ccd
 status /var/log/openvpn/status.log
 verb 3
+management 127.0.0.1 7505
 EOF
 
     # 9. 创建必要的目录
