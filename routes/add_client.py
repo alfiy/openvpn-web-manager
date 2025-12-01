@@ -7,21 +7,14 @@ from models import Client,db
 
 
 add_client_bp = Blueprint('add_client', __name__)
-SCRIPT_PATH = './ubuntu-openvpn-install.sh'
+
 
 @add_client_bp.route('/add_client', methods=['POST'])
 @login_required
 def add_client():
     """新增 OpenVPN 客户端（JSON 接口）"""
 
-    # 1. 检查安装脚本是否存在
-    # if not os.path.exists(SCRIPT_PATH):
-    #     return jsonify({
-    #         'status': 'error',
-    #         'message': f'OpenVPN 安装脚本不存在: {SCRIPT_PATH}'
-    #     }), 400
-
-    # 2. 解析 JSON 请求体
+    # 1. 解析 JSON 请求体
     if not request.is_json:
         return jsonify({'status': 'error', 'message': '请求必须是 JSON 格式'}), 400
 
@@ -30,7 +23,7 @@ def add_client():
     if not client_name:
         return jsonify({'status': 'error', 'message': 'client_name 不能为空'}), 400
 
-    # 3. 有效期（天）
+    # 2. 有效期（天）
     expiry_days = data.get('expiry_days', 3650)
     try:
         expiry_days = int(expiry_days)
@@ -39,7 +32,7 @@ def add_client():
     except (TypeError, ValueError):
         expiry_days = 3650
 
-    # 4. 执行 easy-rsa 命令并生成 .ovpn
+    # 3. 执行 easy-rsa 命令并生成 .ovpn
     try:
         commands = [
             # 生成客户端证书
@@ -113,7 +106,7 @@ def add_client():
             'message': f'内部错误: {str(e)}'
         }), 500
 
-    # 5. 客户端生成成功，立即写入数据库 
+    # 4. 客户端生成成功，立即写入数据库 
     try:
         expiry_dt = datetime.now() + timedelta(days=expiry_days)
         new_client = Client(
@@ -135,7 +128,7 @@ def add_client():
             "message": f"客户端已创建，但数据库写入失败：{str(e)}"
         }), 500
     
-    # 6. 成功返回
+    # 5. 成功返回
     expiry_date_str = (datetime.now() + timedelta(days=expiry_days)).strftime('%Y-%m-%d')
     return jsonify({
         'status': 'success',
