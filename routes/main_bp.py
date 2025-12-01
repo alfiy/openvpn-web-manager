@@ -2,7 +2,8 @@ from flask import Blueprint, request, render_template, jsonify
 from flask_login import login_required
 from utils.openvpn_utils import get_openvpn_clients
 from routes.helpers import json_csrf_protect
-from utils.openvpn_utils import check_openvpn_status
+from utils.openvpn_utils import check_openvpn_status,sync_openvpn_clients_to_db, sync_online_state_to_db
+
 
 # 蓝图名称已从 'main' 更改为 'main_bp' 以避免命名冲突
 main_bp = Blueprint('main_bp', __name__)
@@ -66,6 +67,9 @@ def clients_data():
     """
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '', type=str).strip()
+
+    sync_openvpn_clients_to_db()
+    sync_online_state_to_db()
 
     all_clients = _filter_clients(q)
     total = len(all_clients)

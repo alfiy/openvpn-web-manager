@@ -5,20 +5,20 @@ command_exists() {
     command -v "" >/dev/null 2>&1
 }
 
-APP_USER="vpnwm"
+APP_USER=$USER
 APP_DIR="/opt/vpnwm"
 APP_PORT=8080
 
 
 echo "=== VPN Web Manager 部署脚本 ==="
 
-echo "=== 1. 检查/创建应用用户 ==="
-if id "$APP_USER" >/dev/null 2>&1; then
-    echo "✓ 用户 $APP_USER 已存在"
-else
-    sudo useradd -m -s /bin/bash "$APP_USER"
-    echo "✓ 用户 $APP_USER 创建完成"
-fi
+# echo "=== 1. 检查/创建应用用户 ==="
+# if id "$APP_USER" >/dev/null 2>&1; then
+#     echo "✓ 用户 $APP_USER 已存在"
+# else
+#     sudo useradd -m -s /bin/bash "$APP_USER"
+#     echo "✓ 用户 $APP_USER 创建完成"
+# fi
 
 echo "=== 2. 创建应用目录 ==="
 sudo mkdir -p "$APP_DIR"
@@ -104,12 +104,51 @@ WantedBy=multi-user.target
 EOF
 echo "✓ Flask 服务配置完成"
 
+
+
+echo "=== 7. 配置 OpenVPN 客户端同步服务 ==="
+sudo tee /etc/systemd/system/sync_openvpn_clients.service > /dev/null <<EOF
+[Unit]
+Description=Sync OpenVPN Clients to DB
+After=network.target
+
+[Service]
+Type=oneshot
+User=$APP_USER
+WorkingDirectory=$APP_DIR
+ExecStart=$APP_DIR/venv/bin/python3 sync_clients.py
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+echo "✓ OpenVPN 同步服务配置完成"
+
+echo "=== 8. 配置 OpenVPN 客户端同步定时器 ==="
+sudo tee /etc/systemd/system/sync_openvpn_clients.timer > /dev/null <<EOF
+[Unit]
+Description=Run sync_openvpn_clients.service every 10 seconds
+
+[Timer]
+OnBootSec=10
+OnUnitActiveSec=10
+AccuracySec=1s
+Unit=sync_openvpn_clients.service
+
+[Install]
+WantedBy=timers.target
+EOF
+echo "✓ OpenVPN 同步定时器配置完成"
+
 sudo systemctl daemon-reload
 sudo systemctl enable vpnwm
+sudo systemctl enable sync_openvpn_clients.timer
 sudo systemctl start vpnwm
+sudo systemctl start sync_openvpn_clients.timer
 
 
-echo "=== 7. 检查服务状态 ==="
+echo "=== 9. 检查服务状态 ==="
 echo ""
 echo "--- Flask 应用 ---"
 if sudo systemctl is-active --quiet vpnwm; then
@@ -121,7 +160,17 @@ else
 fi
 
 echo ""
-echo "=== 8. 验证端口监听 ==="
+echo "--- OpenVPN 同步服务 ---"
+if sudo systemctl is-active --quiet sync_openvpn_clients.timer; then
+    echo "✓ sync_openvpn_clients.timer 定时器运行正常"
+    sudo systemctl status sync_openvpn_clients.timer --no-pager -l | head -10
+else
+    echo "✗ sync_openvpn_clients.timer 定时器启动失败"
+    sudo journalctl -u sync_openvpn_clients.timer -n 10 --no-pager
+fi
+
+echo ""
+echo "=== 10. 验证端口监听 ==="
 if sudo lsof -i :$APP_PORT >/dev/null 2>&1; then
     echo "✓ Flask 应用监听端口 $APP_PORT"
 else
@@ -137,3 +186,8 @@ echo ""
 echo "常用命令:"
 echo "  查看 Flask 日志:  sudo journalctl -u vpnwm -f"
 echo "  重启 Flask:      sudo systemctl restart vpnwm"
+echo "  查看同步服务日志:          sudo journalctl -u sync_openvpn_clients.service -f"
+echo "  查看同步定时器状态:        sudo systemctl status sync_openvpn_clients.timer"
+echo "  手动运行同步服务:          sudo systemctl start sync_openvpn_clients.service"
+echo "  停止同步定时器:            sudo systemctl stop sync_openvpn_clients.timer"
+echo "  启动同步定时器:            sudo systemctl start sync_openvpn_clients.timer"

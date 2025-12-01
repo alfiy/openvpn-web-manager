@@ -8,7 +8,7 @@ from typing import List, Dict
 import time
 from datetime import datetime, timezone
 from typing import Dict, NamedTuple, Optional
-
+from sqlalchemy import text
 def log_message(message):
     print(f"[SERVER] {message}", flush=True)
     sys.stdout.flush()
@@ -274,7 +274,7 @@ def sync_openvpn_clients_to_db():
     - 如果存在 → 不修改任何字段
     """
     try:
-        ovpn_clients = get_openvpn_clients()  # 使用你现有的完整函数
+        ovpn_clients = get_openvpn_clients()
 
         changed = False
         for c in ovpn_clients:
@@ -298,3 +298,43 @@ def sync_openvpn_clients_to_db():
 
     except Exception as e:
         log_message(f"sync_openvpn_clients_to_db() 错误: {e}")
+
+def sync_online_state_to_db():
+    try:
+        online = get_online_clients()  # {cn: OnlineClient}
+
+        # STEP1: 全部先标记为离线
+        db.session.execute(text("""
+            UPDATE clients 
+            SET 
+                online = 0, 
+                vpn_ip = NULL, 
+                real_ip = NULL,
+                duration = NULL
+        """))
+
+        # STEP2: 将在线用户写入数据库
+        for name, info in online.items():
+            db.session.execute(text("""
+                UPDATE clients
+                SET 
+                    online = 1,
+                    vpn_ip = :vpn_ip,
+                    real_ip = :real_ip,
+                    duration = :duration
+                WHERE name = :name
+            """), {
+                "name": name,
+                "vpn_ip": info.vpn_ip,
+                "real_ip": info.real_ip,
+                "duration": info.duration_str  # 你已有字段 duration
+            })
+
+        db.session.commit()
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        log_message(f"sync_online_state_to_db() 数据库错误: {e}")
+
+    except Exception as e:
+        log_message(f"sync_online_state_to_db() 未知错误: {e}")

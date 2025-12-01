@@ -33,7 +33,7 @@ MAIL_DEFAULT_SENDER=888888@qq.com
 使用下面的部署脚本进行部署
 
 ```bash
-sudo ./deploy.sh
+./deploy.sh
 
 # 部署成功后，使用下面的命令启动
 # 启动vpnwm

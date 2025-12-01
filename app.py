@@ -58,10 +58,10 @@ def create_app():
     )
 
     # 生产环境数据目录
-    DATA_DIR = "/var/lib/vpnwm"
+    DATA_DIR = "/opt/vpnwm/data"
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    # SQLite 单文件数据库/var/lib/vpnwm/vpn_users.db
+    # SQLite 单文件数据库/opt/vpnwm/data/vpn_users.db
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(DATA_DIR, 'vpn_users.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -147,7 +147,6 @@ def create_app():
     app.register_blueprint(modify_client_expiry_bp)
     app.register_blueprint(enable_client_bp)
     app.register_blueprint(ip_bp)
-    # app.register_blueprint(index_bp)
     app.register_blueprint(user_bp)
     app.register_blueprint(add_users_bp)
     app.register_blueprint(delete_user_bp)
