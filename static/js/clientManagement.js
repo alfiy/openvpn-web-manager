@@ -125,8 +125,9 @@ export function loadClients(page = currentPage, q = '') {
         .catch(console.error);
 }
 
-/* 绑定事件 */
-function bindClientEvents() {
+
+/* 绑定撤销客户端操作事件 */
+export function bindClientEvents() {
     if (input) {
         input.addEventListener('keydown', e => {
             if (e.key === 'Enter') {
@@ -146,6 +147,8 @@ function bindClientEvents() {
         });
     }
 
+    const msgDiv = qs('#client-revoke-msg'); // ✅ 固定消息容器
+
     document.body.addEventListener('click', async e => {
         const targetBtn = e.target.closest('.revoke-btn, .disconnect-btn, .enable-btn');
         if (!targetBtn) return;
@@ -155,35 +158,47 @@ function bindClientEvents() {
         let confirmMessage = '';
 
         if (targetBtn.classList.contains('revoke-btn')) {
-            url = '/revoke_client';
+            url = '/api/clients/revoke';
             confirmMessage = `确定撤销客户端 “${clientName}” 的证书吗？此操作不可恢复！`;
         } else if (targetBtn.classList.contains('disconnect-btn')) {
-            url = '/kill_client';
+            url = '/api/clients/disable';
             confirmMessage = `确认要禁用客户端 “${clientName}” 吗？`;
         } else if (targetBtn.classList.contains('enable-btn')) {
-            url = '/enable_client';
+            url = '/api/clients/enable';
             confirmMessage = `确认要重新启用客户端 “${clientName}” 吗？`;
         }
-        
+
         showCustomConfirm(confirmMessage, async (confirmed) => {
             if (!confirmed) return;
+
+            msgDiv.innerHTML = ''; // 清空之前的消息
+
             try {
                 const data = await authFetch(url, {
                     method: 'POST',
-                    // headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
                     body: JSON.stringify({ client_name: clientName })
                 });
-                
-                showCustomMessage(data.message);
-                if (data.status === 'success') {
-                    loadClients();
-                }
+
+                const success = data.code === 0;
+                const message = (data.data && data.data.message) || data.msg || '操作完成';
+                const cls = success ? 'alert-success' : 'alert-danger';
+
+                msgDiv.innerHTML = `<div class="alert ${cls}">${message}</div>`;
+
+                // 提示消失时间
+                setTimeout(() => { msgDiv.innerHTML = ''; }, success ? 2000 : 3000);
+
+                if (success) loadClients?.();
+
             } catch (err) {
-                showCustomMessage(err.message);
+                msgDiv.innerHTML = `<div class="alert alert-danger">请求失败：${err}</div>`;
+                setTimeout(() => { msgDiv.innerHTML = ''; }, 3000);
             }
         });
     });
 }
+
 
 // 绑定添加客户端事件
 export function bindAddClient() {
@@ -207,49 +222,73 @@ export function bindAddClient() {
         const loader = qs('#add-client-loader');
         const msgDiv = qs('#add-client-message');
         const nameVal = qs('#client_name').value.trim();
-        if (!nameVal) { msgDiv.innerHTML = '<div class="alert alert-danger">请输入客户端名称</div>'; return; }
+        if (!nameVal) {
+            msgDiv.innerHTML = '<div class="alert alert-danger">请输入客户端名称</div>';
+            setTimeout(() => msgDiv.innerHTML = '', 4000);
+            return;
+        }
 
         loader.style.display = 'block';
+        msgDiv.innerHTML = '';
 
         let expiryDays;
         const choice = qs('input[name="expiry_choice"]:checked').value;
         if (choice === 'custom') {
             const d = qs('#expiry_date').value;
-            if (!d) { msgDiv.innerHTML = '<div class="alert alert-danger">请选择到期日期</div>'; loader.style.display = 'none'; return; }
+            if (!d) {
+                msgDiv.innerHTML = '<div class="alert alert-danger">请选择到期日期</div>';
+                loader.style.display = 'none';
+                setTimeout(() => msgDiv.innerHTML = '', 4000);
+                return;
+            }
             const diff = Math.ceil((new Date(d) - new Date()) / 86400000);
-            if (diff <= 0) { msgDiv.innerHTML = '<div class="alert alert-danger">到期日期必须是将来的日期</div>'; loader.style.display = 'none'; return; }
+            if (diff <= 0) {
+                msgDiv.innerHTML = '<div class="alert alert-danger">到期日期必须是将来的日期</div>';
+                loader.style.display = 'none';
+                setTimeout(() => msgDiv.innerHTML = '', 4000);
+                return;
+            }
             expiryDays = diff.toString();
         } else {
             expiryDays = choice;
         }
 
         try {
-            const data = await authFetch('/add_client', {
+            const data = await authFetch('/api/clients/add', {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': csrfToken
-                 },
+                },
                 body: JSON.stringify({ client_name: nameVal, expiry_days: expiryDays })
             });
-            
-            
+
             loader.style.display = 'none';
-            const cls = data.status === 'success' ? 'alert-success' : 'alert-danger';
-            msgDiv.innerHTML = `<div class="alert ${cls}">${data.message}</div>`;
-            if (data.status === 'success') {
+
+            // ✅ 获取统一 API 消息
+            const success = data.code === 0;
+            const message = (data.data && data.data.message) || data.msg || '操作完成';
+            const cls = success ? 'alert-success' : 'alert-danger';
+
+            msgDiv.innerHTML = `<div class="alert ${cls}">${message}</div>`;
+
+            if (success) {
                 form.reset();
                 toggleCustomDate('expiry');
-                setTimeout(() => msgDiv.innerHTML = '', 2000);
-                loadClients();
+                loadClients?.();
+                setTimeout(() => msgDiv.innerHTML = '', 2000); // 成功提示 2 秒消失
+            } else {
+                setTimeout(() => msgDiv.innerHTML = '', 4000); // 错误提示 4 秒消失
             }
-        } catch(err) {
+
+        } catch (err) {
             loader.style.display = 'none';
-            msgDiv.innerHTML = `<div class="alert alert-danger">${err}</div>`;
-            setTimeout(() => msgDiv.innerHTML = '', 2000);
+            msgDiv.innerHTML = `<div class="alert alert-danger">请求失败：${err}</div>`;
+            setTimeout(() => msgDiv.innerHTML = '', 4000);
         }
     });
 }
+
 
 // 绑定修改到期时间事件
 export function bindModifyExpiry() {

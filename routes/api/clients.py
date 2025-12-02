@@ -3,7 +3,7 @@ import os
 import subprocess
 import socket
 import time
-from flask import request
+from flask import jsonify, request
 from flask_login import login_required
 from . import api_bp
 from utils.api_response import api_success, api_error
@@ -137,7 +137,7 @@ def openvpn_client_kill(host, port, client_name, mgmt_password=None):
         return False, f"踢出客户端时发生错误: {e}"
 
 
-# ---------------- API 接口 ----------------
+# ---------------- API 禁用客户端接口 ----------------
 @api_bp.route('/clients/disable', methods=['POST'])
 @login_required
 def api_disable_client():
@@ -149,45 +149,52 @@ def api_disable_client():
     if not client_name:
         return api_error("缺少 client_name", 400)
 
+    # ---------- 1. 创建禁用文件 ----------
     try:
-        # 1. 创建禁用文件
         ccd_dir = '/etc/openvpn/ccd'
         disable_file_path = os.path.join(ccd_dir, client_name)
         os.makedirs(ccd_dir, exist_ok=True)
+
         cmd = ['sudo', 'sh', '-c', f'echo "disable" > {disable_file_path}']
         log_message(f"执行命令以禁用客户端：{' '.join(cmd)}")
         subprocess.run(cmd, capture_output=True, text=True, check=True)
+
         os.system(f"sudo chown root:root {disable_file_path}")
         os.system(f"sudo chmod 644 {disable_file_path}")
         log_message(f"禁用文件创建成功：{disable_file_path}")
-    except subprocess.CalledProcessError as e:
-        log_message(f"创建禁用文件失败：{e.stderr}")
-        return api_error(f"创建禁用文件失败：{e.stderr}", 500)
-    except Exception as e:
-        log_message(f"创建禁用文件异常：{e}")
-        return api_error(f"创建禁用文件异常：{e}", 500)
 
-    # 2. 调用管理接口踢出客户端
+    except subprocess.CalledProcessError as e:
+        return api_error(f"创建禁用文件失败：{e.stderr}")
+    except Exception as e:
+        return api_error(f"创建禁用文件异常：{e}")
+
+    # ---------- 2. 调用管理接口踢出客户端 ----------
     host = os.environ.get('OPENVPN_MGMT_HOST', '127.0.0.1')
     port = int(os.environ.get('OPENVPN_MGMT_PORT', 7505))
     password = os.environ.get('OPENVPN_MGMT_PASSWORD')
 
-    success, message = openvpn_client_kill(host, port, client_name, mgmt_password=password)
+    success, kill_msg = openvpn_client_kill(host, port, client_name, mgmt_password=password)
 
-    # 3. 更新数据库
+    # ---------- 3. 更新数据库 ----------
+    try:
+        client = Client.query.filter_by(name=client_name).first()
+        if client:
+            client.disabled = True
+            db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return api_error(f"数据库更新失败：{e}")
+
+    # ---------- 4. 统一格式化响应 ----------
     if success:
-        try:
-            client = Client.query.filter_by(name=client_name).first()
-            if client:
-                client.disabled = True
-                db.session.commit()
-                log_message(f"客户端 {client_name} 数据库状态更新为 disabled=True")
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            log_message(f"数据库更新失败：{e}")
-            return api_error(f"数据库更新失败：{e}", 500)
-
-        return api_success({"client_name": client_name}, f"客户端 {client_name} 已成功禁用并断开连接。")
+        return api_success(
+            message=f"客户端 {client_name} 已成功禁用",
+            data={
+                "client_name": client_name,
+                "kill_response": kill_msg
+            }
+        )
     else:
-        log_message(f"踢出客户端失败: {message}")
-        return api_error(f"客户端已禁用，但踢出失败: {message}", 500)
+        return api_error(
+            message=f"客户端已禁用，但踢出失败：{kill_msg}"
+        )
