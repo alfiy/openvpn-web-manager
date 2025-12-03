@@ -307,7 +307,7 @@ ignore-unknown-option block-outside-dns
 setenv opt block-outside-dns
 verb 3
 EOF
-    
+
     echo "🎉 OpenVPN installation completed successfully!"
 }
 

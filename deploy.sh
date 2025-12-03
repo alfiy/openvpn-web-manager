@@ -2,7 +2,7 @@
 set -e
 
 command_exists() {
-    command -v "" >/dev/null 2>&1
+    command -v "$1" >/dev/null 2>&1
 }
 
 APP_USER=$USER
@@ -36,43 +36,15 @@ echo "=== 3.1 设置 /opt/vpnwm/data 权限（新增） ==="
 sudo chmod -R 750 "$DATA_DIR"
 echo "✓ data 目录权限设置完成"
 
-
-# --------------------------------------------------------------------
-# openvpn 组与权限处理
-# --------------------------------------------------------------------
-echo "=== 3.2 配置 openvpn 文件访问权限 ==="
-
-# 创建 openvpn 组
-if ! getent group openvpn >/dev/null; then
-    echo "[INFO] openvpn 组不存在，正在创建..."
-    sudo groupadd openvpn
+echo "=== 3.2 初始化数据库文件（确保属主正确） ==="
+DB_FILE="$DATA_DIR/vpn_users.db"
+if [ ! -f "$DB_FILE" ]; then
+    sudo -u "$APP_USER" touch "$DB_FILE"
+    echo "✓ 数据库文件已创建：$DB_FILE"
 else
-    echo "[INFO] openvpn 组已存在"
+    echo "✓ 数据库文件已存在：$DB_FILE"
 fi
 
-# 将 APP_USER 加入 openvpn 组
-echo "[INFO] 将 $APP_USER 加入 openvpn 组..."
-sudo usermod -aG openvpn "$APP_USER"
-
-# 为 OpenVPN 目录设置组读权限
-OPENVPN_LOG="/var/log/openvpn"
-OPENVPN_ETC="/etc/openvpn"
-EASYRSA_PKI="/etc/openvpn/easy-rsa/pki"
-
-if [ -d "$OPENVPN_LOG" ]; then
-    sudo chgrp -R openvpn "$OPENVPN_LOG"
-    sudo chmod -R g+r "$OPENVPN_LOG"
-fi
-
-if [ -d "$OPENVPN_ETC" ]; then
-    sudo chgrp -R openvpn "$OPENVPN_ETC"
-    sudo chmod -R g+r "$OPENVPN_ETC"
-fi
-
-if [ -d "$EASYRSA_PKI" ]; then
-    sudo chgrp -R openvpn "$EASYRSA_PKI"
-    sudo chmod -R g+r "$EASYRSA_PKI"
-fi
 
 echo "✓ OpenVPN 组权限设置完成"
 # --------------------------------------------------------------------
@@ -128,7 +100,6 @@ After=network.target
 [Service]
 Type=simple
 User=root
-Group=root
 WorkingDirectory=$APP_DIR
 Environment="FLASK_ENV=production"
 Environment="PYTHONUNBUFFERED=1"
@@ -151,7 +122,7 @@ PartOf=openvpn@server.service
 
 [Service]
 Type=oneshot
-User=$APP_USER
+User=root
 Group=openvpn
 WorkingDirectory=$APP_DIR
 
