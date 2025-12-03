@@ -9,7 +9,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 # ------------------- 配置 -------------------
 DATA_DIR = "/opt/vpnwm/data"
-os.makedirs(DATA_DIR, exist_ok=True)
+# 目录应该由部署脚本创建，不允许 root 自动生成
+if not os.path.isdir(DATA_DIR):
+    raise RuntimeError(f"DATA_DIR 未找到：{DATA_DIR}，请检查部署脚本是否创建了该目录")
 DB_PATH = os.path.join(DATA_DIR, "vpn_users.db")
 
 OPENVPN_STATUS_FILE = "/var/log/openvpn/status.log"

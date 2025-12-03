@@ -28,7 +28,7 @@ from routes.install import install_bp
 from routes.api.add_client import add_client_bp
 from routes.api.revoke_client import revoke_client_bp
 from routes.uninstall import uninstall_bp
-from routes.download_client import download_client_bp
+from routes.api.download_client import download_client_bp
 from routes.modify_client_expiry import modify_client_expiry_bp
 from routes.api.enable_client import enable_client_bp
 from routes.get_ip_list import ip_bp

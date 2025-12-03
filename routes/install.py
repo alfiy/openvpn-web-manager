@@ -8,11 +8,6 @@ install_bp = Blueprint('install', __name__)
 
 SCRIPT_PATH = './ubuntu-openvpn-install.sh'
 
-@install_bp.route('/install', methods=['GET'])
-@login_required
-def install_page():
-    # 渲染安装页面
-    return render_template('install.html')
 
 @install_bp.route('/install', methods=['POST'])
 @login_required

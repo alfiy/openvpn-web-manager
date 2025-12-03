@@ -9,21 +9,12 @@ APP_USER=$USER
 APP_DIR="/opt/vpnwm"
 APP_PORT=8080
 
-
 echo "=== VPN Web Manager 部署脚本 ==="
 
-# echo "=== 1. 检查/创建应用用户 ==="
-# if id "$APP_USER" >/dev/null 2>&1; then
-#     echo "✓ 用户 $APP_USER 已存在"
-# else
-#     sudo useradd -m -s /bin/bash "$APP_USER"
-#     echo "✓ 用户 $APP_USER 创建完成"
-# fi
-
-echo "=== 2. 创建应用目录 ==="
+echo "=== 1. 创建应用目录 ==="
 sudo mkdir -p "$APP_DIR"
 
-echo "=== 3. 同步项目文件到 $APP_DIR ==="
+echo "=== 2. 同步项目文件到 $APP_DIR ==="
 sudo rsync -av \
     --exclude 'venv' \
     --exclude '__pycache__' \
@@ -33,8 +24,59 @@ sudo rsync -av \
     ./ "$APP_DIR/"
 echo "✓ 文件同步完成"
 
+echo "=== 3.创建数据库目录和文件 ==="
+DATA_DIR="$APP_DIR/data"
+echo "创建数据目录：$DATA_DIR"
+sudo -u "$APP_USER" mkdir -p "$DATA_DIR"
+
 sudo chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 echo "✓ 目录所有权已设置"
+
+echo "=== 3.1 设置 /opt/vpnwm/data 权限（新增） ==="
+sudo chmod -R 750 "$DATA_DIR"
+echo "✓ data 目录权限设置完成"
+
+
+# --------------------------------------------------------------------
+# openvpn 组与权限处理
+# --------------------------------------------------------------------
+echo "=== 3.2 配置 openvpn 文件访问权限 ==="
+
+# 创建 openvpn 组
+if ! getent group openvpn >/dev/null; then
+    echo "[INFO] openvpn 组不存在，正在创建..."
+    sudo groupadd openvpn
+else
+    echo "[INFO] openvpn 组已存在"
+fi
+
+# 将 APP_USER 加入 openvpn 组
+echo "[INFO] 将 $APP_USER 加入 openvpn 组..."
+sudo usermod -aG openvpn "$APP_USER"
+
+# 为 OpenVPN 目录设置组读权限
+OPENVPN_LOG="/var/log/openvpn"
+OPENVPN_ETC="/etc/openvpn"
+EASYRSA_PKI="/etc/openvpn/easy-rsa/pki"
+
+if [ -d "$OPENVPN_LOG" ]; then
+    sudo chgrp -R openvpn "$OPENVPN_LOG"
+    sudo chmod -R g+r "$OPENVPN_LOG"
+fi
+
+if [ -d "$OPENVPN_ETC" ]; then
+    sudo chgrp -R openvpn "$OPENVPN_ETC"
+    sudo chmod -R g+r "$OPENVPN_ETC"
+fi
+
+if [ -d "$EASYRSA_PKI" ]; then
+    sudo chgrp -R openvpn "$EASYRSA_PKI"
+    sudo chmod -R g+r "$EASYRSA_PKI"
+fi
+
+echo "✓ OpenVPN 组权限设置完成"
+# --------------------------------------------------------------------
+
 
 echo "=== 4. 创建虚拟环境 ==="
 
@@ -50,18 +92,15 @@ else
     echo "Python is already installed."
 fi
 
-# 检测 Python 版本
 PYTHON_VERSION=$(python3 --version | cut -d ' ' -f 2 | cut -d '.' -f 1-2)
 echo "Detected Python version: $PYTHON_VERSION"
 
-# 检查 venv 模块
 if ! python3 -m venv --help >/dev/null 2>&1; then
     echo "python3-venv not installed. Installing..."
     sudo apt update && sudo apt install -y $PYTHON_VERSION-venv
 else
     echo "python3-venv is already installed."
 fi
-
 
 if [ ! -d "$APP_DIR/venv" ]; then
     sudo -u "$APP_USER" python3 -m venv "$APP_DIR/venv"
@@ -75,7 +114,6 @@ sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip setuptools whe
 
 if [ -f "$APP_DIR/requirements.txt" ]; then
     sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt" -i https://pypi.tuna.tsinghua.edu.cn/simple
-
     echo "✓ 依赖安装完成"
 else
     echo "⚠ 警告: requirements.txt 不存在"
@@ -98,24 +136,31 @@ ExecStart=$APP_DIR/venv/bin/gunicorn --timeout 600 -w 1 -b 0.0.0.0:$APP_PORT --a
 Restart=always
 RestartSec=10
 
-
 [Install]
 WantedBy=multi-user.target
 EOF
 echo "✓ Flask 服务配置完成"
 
-
-
 echo "=== 7. 配置 OpenVPN 客户端同步服务 ==="
 sudo tee /etc/systemd/system/sync_openvpn_clients.service > /dev/null <<EOF
 [Unit]
-Description=Sync OpenVPN Clients to DB
-After=network.target
+Description=Sync OpenVPN Clients to DB after OpenVPN is ready
+Requires=openvpn@server.service
+After=openvpn@server.service
+PartOf=openvpn@server.service
 
 [Service]
 Type=oneshot
 User=$APP_USER
+Group=openvpn
 WorkingDirectory=$APP_DIR
+
+Environment="VPNWM_APP_DIR=$APP_DIR"
+Environment="VPNWM_DATA_DIR=$APP_DIR/data"
+Environment="OPENVPN_STATUS_FILE=/var/log/openvpn/status.log"
+Environment="OPENVPN_CCD_DIR=/etc/openvpn/ccd"
+Environment="OPENVPN_INDEX_TXT=/etc/openvpn/easy-rsa/pki/index.txt"
+
 ExecStart=$APP_DIR/venv/bin/python3 sync_clients.py
 StandardOutput=journal
 StandardError=journal
@@ -147,7 +192,6 @@ sudo systemctl enable sync_openvpn_clients.timer
 sudo systemctl start vpnwm
 sudo systemctl start sync_openvpn_clients.timer
 
-
 echo "=== 9. 检查服务状态 ==="
 echo ""
 echo "--- Flask 应用 ---"
@@ -176,7 +220,6 @@ if sudo lsof -i :$APP_PORT >/dev/null 2>&1; then
 else
     echo "✗ Flask 应用未监听端口 $APP_PORT"
 fi
-
 
 echo ""
 echo "=== 部署完成！==="

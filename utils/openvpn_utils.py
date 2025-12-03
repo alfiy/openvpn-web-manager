@@ -198,7 +198,7 @@ def get_openvpn_clients() -> List[Dict[str, str]]:
             capture_output=True, text=True, timeout=5
         )
         if result.returncode != 0:
-            log_message(f"无法读取 index.txt：{result.stderr}")
+            log_message(f"openvpn-utils 无法读取 index.txt：{result.stderr}")
             return clients
 
         for line in result.stdout.splitlines():

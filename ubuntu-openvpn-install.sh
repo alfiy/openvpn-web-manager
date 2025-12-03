@@ -237,7 +237,6 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
-    # --- 新增的代码块开始 ---
     # 13. 创建 openvpn@.service 服务单元
     # OpenVPN 在编译安装后不会自动创建这个服务文件
     echo "📁 创建 openvpn@.service 服务文件..."
@@ -254,6 +253,8 @@ Documentation=https://community.openvpn.net/openvpn/wiki/HOWTO
 
 [Service]
 Type=forking
+RuntimeDirectory=openvpn
+RuntimeDirectoryMode=0755
 PrivateTmp=true
 WorkingDirectory=/etc/openvpn
 ExecStart=/usr/sbin/openvpn --daemon ovpn-%i \
@@ -276,7 +277,6 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-    # --- 新增的代码块结束 ---
     
     # 14. 启动和启用服务
     systemctl daemon-reload
