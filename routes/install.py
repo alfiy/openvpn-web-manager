@@ -59,25 +59,13 @@ def install():
     try:
         process = subprocess.Popen(
             ['sudo', 'bash', SCRIPT_PATH, str(port), server_ip],
-            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
         )
 
-        # 安装脚本交互输入
-        inputs = [
-            '1\n',         # UDP
-            '1\n',         # DNS
-            '\n',          # 默认客户端名
-            '1\n'          # 无密码
-        ]
-        for cmd in inputs:
-            process.stdin.write(cmd)
-            process.stdin.flush()
-            time.sleep(0.5)
-
         stdout, stderr = process.communicate(timeout=300)
+        
         if process.returncode == 0:
             return jsonify({
                 'status': 'success',
