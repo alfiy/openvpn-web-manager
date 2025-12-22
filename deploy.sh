@@ -45,10 +45,7 @@ else
     echo "✓ 数据库文件已存在：$DB_FILE"
 fi
 
-
 echo "✓ OpenVPN 组权限设置完成"
-# --------------------------------------------------------------------
-
 
 echo "=== 4. 创建虚拟环境 ==="
 
@@ -69,7 +66,7 @@ echo "Detected Python version: $PYTHON_VERSION"
 
 if ! python3 -m venv --help >/dev/null 2>&1; then
     echo "python3-venv not installed. Installing..."
-    sudo apt update && sudo apt install -y $PYTHON_VERSION-venv
+    sudo apt update && sudo apt install -y python3-venv
 else
     echo "python3-venv is already installed."
 fi
@@ -81,12 +78,80 @@ else
     echo "✓ 虚拟环境已存在"
 fi
 
-echo "=== 5. 安装 Python 依赖 ==="
-sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip setuptools wheel -i https://pypi.tuna.tsinghua.edu.cn/simple
+echo "=== 5. 安装 Python 依赖（多镜像源容错） ==="
 
+# 定义镜像源列表
+PIP_MIRRORS=(
+    "https://mirrors.aliyun.com/pypi/simple/"
+    "https://pypi.tuna.tsinghua.edu.cn/simple"
+    "https://mirrors.ustc.edu.cn/pypi/web/simple"
+    "https://pypi.mirrors.ustc.edu.cn/simple/"
+    "https://pypi.org/simple"
+)
+
+# 配置 pip 信任所有主机（避免 SSL 证书问题）
+PIP_CONFIG_DIR="/home/$APP_USER/.config/pip"
+sudo -u "$APP_USER" mkdir -p "$PIP_CONFIG_DIR"
+sudo -u "$APP_USER" tee "$PIP_CONFIG_DIR/pip.conf" > /dev/null <<EOF
+[global]
+trusted-host = pypi.tuna.tsinghua.edu.cn
+               mirrors.aliyun.com
+               mirrors.ustc.edu.cn
+               pypi.mirrors.ustc.edu.cn
+               pypi.org
+               files.pythonhosted.org
+EOF
+echo "✓ pip 配置已设置"
+
+# 尝试升级 pip
+PIP_UPGRADED=false
+for mirror in "${PIP_MIRRORS[@]}"; do
+    echo "📦 尝试镜像: $mirror"
+    if sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip setuptools wheel -i "$mirror" --timeout 30; then
+        PIP_UPGRADED=true
+        echo "✅ pip 升级成功（使用镜像: $mirror）"
+        WORKING_MIRROR="$mirror"
+        break
+    else
+        echo "❌ 该镜像失败，尝试下一个..."
+    fi
+done
+
+if [ "$PIP_UPGRADED" = false ]; then
+    echo "⚠️  警告: 所有镜像升级 pip 均失败，使用现有版本继续"
+    WORKING_MIRROR="${PIP_MIRRORS[0]}"
+fi
+
+# 安装项目依赖
 if [ -f "$APP_DIR/requirements.txt" ]; then
-    sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt" -i https://pypi.tuna.tsinghua.edu.cn/simple
-    echo "✓ 依赖安装完成"
+    echo "📦 安装项目依赖（使用镜像: $WORKING_MIRROR）"
+    
+    # 尝试使用成功的镜像安装
+    if sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt" -i "$WORKING_MIRROR" --timeout 60; then
+        echo "✓ 依赖安装完成"
+    else
+        echo "❌ 使用 $WORKING_MIRROR 安装失败，尝试其他镜像..."
+        
+        # 如果失败，遍历所有镜像尝试
+        DEPS_INSTALLED=false
+        for mirror in "${PIP_MIRRORS[@]}"; do
+            if [ "$mirror" = "$WORKING_MIRROR" ]; then
+                continue
+            fi
+            
+            echo "🔄 尝试镜像: $mirror"
+            if sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt" -i "$mirror" --timeout 60; then
+                DEPS_INSTALLED=true
+                echo "✅ 依赖安装成功（使用镜像: $mirror）"
+                break
+            fi
+        done
+        
+        if [ "$DEPS_INSTALLED" = false ]; then
+            echo "❌ 错误: 所有镜像源均安装失败"
+            exit 1
+        fi
+    fi
 else
     echo "⚠ 警告: requirements.txt 不存在"
 fi
