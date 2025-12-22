@@ -223,6 +223,7 @@ echo "✓ OpenVPN 同步定时器配置完成"
 
 sudo systemctl daemon-reload
 sudo systemctl enable vpnwm
+sudo systemctl enable sync_openvpn_clients.service
 sudo systemctl enable sync_openvpn_clients.timer
 sudo systemctl start vpnwm
 sudo systemctl start sync_openvpn_clients.timer
