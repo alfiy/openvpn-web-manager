@@ -188,7 +188,6 @@ PartOf=openvpn@server.service
 [Service]
 Type=oneshot
 User=root
-Group=openvpn
 WorkingDirectory=$APP_DIR
 
 Environment="VPNWM_APP_DIR=$APP_DIR"
