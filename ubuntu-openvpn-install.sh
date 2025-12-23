@@ -67,12 +67,29 @@ function resolvePublicIP() {
     fi
 }
 
-# 接收端口号参数，默认为1194
-OPENVPN_PORT=${1:-1194}
-SERVER_IP=$(resolvePublicIP)
-if [[ $? -ne 0 ]]; then
-    exit 1
+# ========================================
+# 接收参数：端口 + IP
+# ========================================
+OPENVPN_PORT=${1:-1194}     # 第一个参数：端口，默认1194
+SERVER_IP=${2}               # 第二个参数：用户选择的IP
+
+# 如果没有传入IP，使用自动检测（兜底）
+if [[ -z "$SERVER_IP" ]]; then
+    echo "⚠️  未传入服务器IP，尝试自动检测..."
+    SERVER_IP=$(resolvePublicIP)
+    if [[ $? -ne 0 ]]; then
+        echo "❌ 无法获取服务器IP"
+        exit 1
+    fi
+    echo "✅ 自动检测到IP: $SERVER_IP"
+else
+    echo "✅ 使用用户指定的IP: $SERVER_IP"
 fi
+
+echo "📌 安装配置："
+echo "   端口: $OPENVPN_PORT"
+echo "   IP: $SERVER_IP"
+echo ""
 
 # 新增函数：从源码安装OpenVPN
 function installOpenVPNFromSource() {
