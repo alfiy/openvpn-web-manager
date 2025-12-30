@@ -3,8 +3,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 import enum
 import logging
-import string
-import secrets
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +18,7 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    # 将字段名改为 password_hash，以便更好地表示存储的是哈希值
+    # 将字段名改为 password_hash,以便更好地表示存储的是哈希值
     password_hash = db.Column(db.String(128), nullable=False)
     role = db.Column(db.Enum(Role), default=Role.NORMAL, nullable=False)
     reset_token = db.Column(db.String(128))
@@ -43,7 +41,7 @@ class User(db.Model, UserMixin):
         return check_password_hash(self.password_hash, raw)
 
     
-    # ✅ 确保 get_id 方法返回字符串类型，UserMixin 已经提供了
+    # ✅ 确保 get_id 方法返回字符串类型,UserMixin 已经提供了
     def get_id(self):
         return str(self.id)
 
@@ -61,7 +59,8 @@ class Client(db.Model):
     __tablename__ = 'clients'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
-    expiry = db.Column(db.DateTime, nullable=True)
+    expiry = db.Column(db.DateTime, nullable=True)  # 证书真实到期时间(现在固定为10年)
+    logical_expiry = db.Column(db.DateTime, nullable=True)  # 逻辑到期时间(用于禁用登录)
     online = db.Column(db.Boolean, default=False)
     disabled = db.Column(db.Boolean, default=False)
     vpn_ip = db.Column(db.String(15), nullable=True)

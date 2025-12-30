@@ -17,11 +17,11 @@ class OnlineClient(NamedTuple):
     vpn_ip: str
     real_ip: str
     duration_str: str          # 人类可读
-    duration_sec: int          # 秒数，方便排序
+    duration_sec: int          # 秒数,方便排序
     connected_since: str       # 原始字符串
 
 
-# 缓存 10 s，避免并发刷爆 IO
+# 缓存 10 s,避免并发刷爆 IO
 _last_check: float = 0
 _cache: Dict[str, OnlineClient] = {}
 def check_openvpn_status():
@@ -33,7 +33,7 @@ def check_openvpn_status():
     config_path = '/etc/openvpn/server.conf'
 
     try:
-        # --- 1. 检查运行状态：使用 systemctl is-active 的返回码 ---
+        # --- 1. 检查运行状态:使用 systemctl is-active 的返回码 ---
         result_active = subprocess.run(
             ['sudo', 'systemctl', 'is-active', '--quiet', service_name],
             check=False  # 不抛出异常
@@ -41,10 +41,10 @@ def check_openvpn_status():
         if result_active.returncode == 0:
             return 'running'
 
-        # --- 2. 检查安装状态：直接检查配置文件是否存在 ---
-        # 使用 os.path.exists() 是最安全、最简洁的方法，且不依赖外部命令。
-        # 但如果必须使用 sudo，subprocess.run + test -e 也是可行的。
-        # 这里为了保持和原来风格一致，仍使用subprocess.run。
+        # --- 2. 检查安装状态:直接检查配置文件是否存在 ---
+        # 使用 os.path.exists() 是最安全、最简洁的方法,且不依赖外部命令。
+        # 但如果必须使用 sudo,subprocess.run + test -e 也是可行的。
+        # 这里为了保持和原来风格一致,仍使用subprocess.run。
         result_config = subprocess.run(
             ['sudo', 'test', '-e', config_path],
             check=False
@@ -65,7 +65,7 @@ def _parse_connected_since(text: str) -> Optional[datetime]:
     # 1. 你的 status-version 1/2 新格式 → 先当本地时间解析
     try:
         naive = datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
-        # 把本地时间转 UTC（系统默认时区）
+        # 把本地时间转 UTC(系统默认时区)
         return naive.astimezone(timezone.utc)
     except ValueError:
         pass
@@ -82,7 +82,7 @@ def _parse_connected_since(text: str) -> Optional[datetime]:
         return None
 
 def _human_duration(seconds: int) -> str:
-    """>=1 h 输出 1h23m；<1 h 输出 5m12s；<1 min 输出 45s"""
+    """>=1 h 输出 1h23m;<1 h 输出 5m12s;<1 min 输出 45s"""
     if seconds < 0:
         return "00:00"
     h, rem = divmod(seconds, 3600)
@@ -104,10 +104,10 @@ def get_online_clients(status_file: str = None, cache_ttl: int = 10) -> Dict[str
         status_file = "/var/log/openvpn/status.log" 
 
     try:
-        with open(status_file, "rb") as f:        # 二进制读，防止中文 locale 异常
+        with open(status_file, "rb") as f:        # 二进制读,防止中文 locale 异常
             data = f.read().decode("utf-8", errors="ignore")
     except OSError as e:
-        # 权限、磁盘故障等，记录日志后返回空
+        # 权限、磁盘故障等,记录日志后返回空
         import logging
         logging.getLogger(__name__).warning("read status %s failed: %s", status_file, e)
         return {}
@@ -156,7 +156,7 @@ def get_online_clients(status_file: str = None, cache_ttl: int = 10) -> Dict[str
             connected_since=conn_since
         )
 
-    # 二次扫描：补 vpn_ip（ROUTING TABLE 段）
+    # 二次扫描:补 vpn_ip(ROUTING TABLE 段)
     routing_section = False
     for line in data.splitlines():
         line = line.strip()
@@ -178,10 +178,10 @@ def get_online_clients(status_file: str = None, cache_ttl: int = 10) -> Dict[str
 
 def get_openvpn_clients() -> List[Dict[str, str]]:
     clients: List[Dict[str, str]] = []
-    # ① 拿在线列表（带缓存，1 s 内不重复读盘）
+    # ① 拿在线列表(带缓存,1 s 内不重复读盘)
     online_clients: Dict[str, OnlineClient] = get_online_clients(cache_ttl=1)
 
-    # ② 被禁用（ccd 目录存在同名文件）或被吊销的客户端
+    # ② 被禁用(ccd 目录存在同名文件)或被吊销的客户端
     disabled_clients: set[str] = set()
     disabled_dir = "/etc/openvpn/ccd"
     if os.path.isdir(disabled_dir):
@@ -189,7 +189,7 @@ def get_openvpn_clients() -> List[Dict[str, str]]:
             disabled_clients = {f.lower() for f in os.listdir(disabled_dir)
                                if os.path.isfile(os.path.join(disabled_dir, f))}
         except Exception as e:
-            log_message(f"枚举禁用客户端失败：{e}")
+            log_message(f"枚举禁用客户端失败:{e}")
 
     # ③ 读取 easy-rsa 索引
     try:
@@ -198,7 +198,7 @@ def get_openvpn_clients() -> List[Dict[str, str]]:
             capture_output=True, text=True, timeout=5
         )
         if result.returncode != 0:
-            log_message(f"openvpn-utils 无法读取 index.txt：{result.stderr}")
+            log_message(f"openvpn-utils 无法读取 index.txt:{result.stderr}")
             return clients
 
         for line in result.stdout.splitlines():
@@ -218,7 +218,7 @@ def get_openvpn_clients() -> List[Dict[str, str]]:
             if client_name == "server":
                 continue
 
-            # 过期日期解析（easy-rsa 3.x 输出格式固定：yymmddHHMMSSZ）
+            # 过期日期解析(easy-rsa 3.x 输出格式固定:yymmddHHMMSSZ)
             try:
                 if len(expiry_date) == 13 and expiry_date.endswith("Z"):
                     y = 2000 + int(expiry_date[0:2])
@@ -232,17 +232,40 @@ def get_openvpn_clients() -> List[Dict[str, str]]:
 
             is_revoked = line.startswith("R")
             is_disabled = client_name in disabled_clients
-            # 只有“未被禁用且未被吊销”才判断在线
-            is_online = not (is_disabled or is_revoked) and client_name in online_clients
+            
+            # 检查逻辑到期时间
+            is_logically_expired = False
+            try:
+                db_client = Client.query.filter_by(name=client_name).first()
+                if db_client and db_client.logical_expiry:
+                    if datetime.now() > db_client.logical_expiry:
+                        is_logically_expired = True
+                        # 自动禁用逻辑过期的客户端
+                        if not db_client.disabled:
+                            db_client.disabled = True
+                            db.session.commit()
+                            # 创建 CCD 禁用文件
+                            disable_file_path = os.path.join(disabled_dir, client_name)
+                            try:
+                                os.makedirs(disabled_dir, exist_ok=True)
+                                subprocess.run(['sudo', 'sh', '-c', f'echo "disable" > {disable_file_path}'],
+                                             capture_output=True, text=True, check=True)
+                            except Exception as e:
+                                log_message(f"自动禁用客户端 {client_name} 失败: {e}")
+            except Exception as e:
+                log_message(f"检查逻辑到期时间失败: {e}")
+            
+            # 只有"未被禁用且未被吊销且未逻辑过期"才判断在线
+            is_online = not (is_disabled or is_revoked or is_logically_expired) and client_name in online_clients
 
-            # 取在线信息（可能不存在）
+            # 取在线信息(可能不存在)
             oc: OnlineClient = online_clients.get(client_name)  # type: ignore
             clients.append(
                 {
                     "name": client_name,
                     "expiry": expiry_readable,
                     "online": is_online,
-                    "disabled": is_disabled or is_revoked,
+                    "disabled": is_disabled or is_revoked or is_logically_expired,
                     "vpn_ip": oc.vpn_ip if oc else "",
                     "real_ip": oc.real_ip if oc else "",
                     "duration": oc.duration_str if oc else "",
@@ -254,9 +277,10 @@ def get_openvpn_clients() -> List[Dict[str, str]]:
         #     log_message(f"DEBUG final  name={c['name']}  online={c['online']}  duration={c['duration']}")
             
     except Exception as e:
-        log_message(f"读取 index.txt 异常：{e}")
+        log_message(f"读取 index.txt 异常:{e}")
 
     return clients
+
 def get_openvpn_port():
     try:
         with open('/etc/openvpn/server.conf') as f:

@@ -1,187 +1,105 @@
 from flask import Blueprint, request, jsonify
-import subprocess
-import os
-import re
-import tempfile
-import shutil
 from datetime import datetime, timedelta
-from utils.openvpn_utils import get_openvpn_port
 from routes.helpers import login_required
-from models import Client,db
+from models import Client, db
+import os
+import subprocess
 
 modify_client_expiry_bp = Blueprint('modify_client_expiry', __name__)
 
-# ---------- 正则提取 CN ----------
-_CN_RE = re.compile(r'/CN=([^/]+)')
 
-def _extract_cn(subject: str) -> str:
-    """
-    从证书主题字符串中提取通用名称（CN）。
-    """
-    m = _CN_RE.search(subject)
-    return m.group(1) if m else ""
-
-# ---------- 原子化清理 index.txt ----------
-def _cleanup_index(index_file: str, client_name: str) -> None:
-    """
-    删除指定客户端且已吊销(R)的重复记录，其余行按 serial+CN 去重后写回。
-    任何异常仅打印 warning，不抛出。
-    """
-    if not os.path.isfile(index_file):
-        return
-
-    cleaned_lines = []
-    seen = set()  # (serial, cn)
-
-    try:
-        with open(index_file, "r", encoding="utf-8") as f:
-            for raw_line in f:
-                raw_line = raw_line.rstrip("\n")
-                if not raw_line:
-                    continue
-                parts = raw_line.split("\t")
-                if len(parts) < 6:
-                    cleaned_lines.append(raw_line)
-                    continue
-
-                status, serial, subject = parts[0], parts[3], parts[5]
-                cn = _extract_cn(subject)
-
-                # 跳过「指定客户端且已吊销」的记录
-                if status == "R" and cn == client_name:
-                    continue
-
-                key = (serial, cn)
-                if key not in seen:
-                    cleaned_lines.append(raw_line)
-                    seen.add(key)
-
-        # 原子写回
-        tmp_fd, tmp_path = tempfile.mkstemp(
-            dir=os.path.dirname(index_file),
-            prefix="index_tmp_"
-        )
-        try:
-            with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:
-                tmp_f.write("\n".join(cleaned_lines))
-                if cleaned_lines:
-                    tmp_f.write("\n")
-            shutil.move(tmp_path, index_file)
-        except Exception:
-            os.unlink(tmp_path)
-            raise
-    except Exception as cleanup_err:
-        print(f"Warning: failed to cleanup index.txt -> {cleanup_err}", flush=True)
-
-# ---------- 主路由 ----------
 @modify_client_expiry_bp.route('/modify_client_expiry', methods=['POST'])
-@login_required # 确保用户已登录
+@login_required
 def modify_client_expiry():
     """
-    通过吊销旧证书并重新颁发新证书来修改客户端证书的到期日。
+    修改客户端逻辑到期时间(不再吊销/重新颁发证书)
+    - 只更新数据库的 expiry 或 logical_expiry 字段
+    - 如果客户端当前被禁用,则启用它
+    - 新的到期时间到达后,由定时任务自动禁用
     """
     data = request.get_json()
     client_name = data.get('client_name')
     expiry_days = data.get('expiry_days')
-    
-    port = get_openvpn_port()
 
     if not client_name or not expiry_days:
-        return jsonify({'status': 'error', 'message': 'Client name and expiry days are required'})
+        return jsonify({
+            'status': 'error',
+            'message': 'Client name and expiry days are required'
+        })
 
     client_name = client_name.strip()
     if not client_name:
-        return jsonify({'status': 'error', 'message': 'Client name is required'})
+        return jsonify({
+            'status': 'error',
+            'message': 'Client name is required'
+        })
 
     try:
         expiry_days = int(expiry_days)
         if expiry_days <= 0:
-            return jsonify({'status': 'error', 'message': 'Expiry days must be positive'})
+            return jsonify({
+                'status': 'error',
+                'message': 'Expiry days must be positive'
+            })
     except ValueError:
-        return jsonify({'status': 'error', 'message': 'Invalid expiry days format'})
-
-    easy_rsa_dir = "/etc/openvpn/easy-rsa"
-    index_file = os.path.join(easy_rsa_dir, "pki/index.txt")
+        return jsonify({
+            'status': 'error',
+            'message': 'Invalid expiry days format'
+        })
 
     try:
-        # Step 1: Revoke old certificate
-        revoke_cmd = [
-            'sudo', 'bash', '-c',
-            f'cd {easy_rsa_dir} && echo "yes" | ./easyrsa revoke "{client_name}"'
-        ]
-        result = subprocess.run(revoke_cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            return jsonify({'status': 'error', 'message': f'Failed to revoke old cert: {result.stderr or result.stdout}'})
+        # 查找客户端
+        client = Client.query.filter_by(name=client_name).first()
+        if not client:
+            return jsonify({
+                'status': 'error',
+                'message': f'客户端 {client_name} 不存在'
+            })
 
-        # Step 2: Update CRL
-        subprocess.run([
-            'sudo', 'bash', '-c',
-            f'cd {easy_rsa_dir} && ./easyrsa gen-crl && cp pki/crl.pem /etc/openvpn/'
-        ], capture_output=True, text=True)
-
-        # Step 3: Reissue new certificate with updated expiry
-        build_cmd = [
-            'sudo', 'bash', '-c',
-            f'cd {easy_rsa_dir} && EASYRSA_CERT_EXPIRE={expiry_days} ./easyrsa --batch build-client-full "{client_name}" nopass'
-        ]
-        result = subprocess.run(build_cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            return jsonify({'status': 'error', 'message': f'Failed to reissue cert: {result.stderr or result.stdout}'})
-
-        # Step 4: Regenerate client configuration file
-        config_cmd = [
-            'sudo', 'bash', '-c', f'''
-            cp /etc/openvpn/client-template.txt /etc/openvpn/client/{client_name}.ovpn
-            {{
-                echo ""
-                echo "<ca>"
-                cat {easy_rsa_dir}/pki/ca.crt
-                echo "</ca>"
-                echo ""
-                echo "<cert>"
-                awk "/BEGIN/,/END CERTIFICATE/" {easy_rsa_dir}/pki/issued/{client_name}.crt
-                echo "</cert>"
-                echo ""
-                echo "<key>"
-                cat {easy_rsa_dir}/pki/private/{client_name}.key
-                echo "</key>"
-                echo ""
-                echo "<tls-crypt>"
-                cat /etc/openvpn/tls-crypt.key
-                echo "</tls-crypt>"
-            }} >> /etc/openvpn/client/{client_name}.ovpn
-            chmod 644 /etc/openvpn/client/{client_name}.ovpn
-            '''
-        ]
-        result = subprocess.run(config_cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            return jsonify({'status': 'error', 'message': f'Failed to generate client config: {result.stderr or result.stdout}'})
-
-        # Step 5: Reload OpenVPN to pick up new CRL
-        subprocess.run([
-            'sudo', 'systemctl', 'reload', 'openvpn@server'
-        ], capture_output=True, text=True)
-
-        # Step 6: Clean up index.txt
-        _cleanup_index(index_file, client_name)
-        
-        # Calculate new expiry date
+        # 计算新的到期时间
         new_expiry_date = datetime.now() + timedelta(days=expiry_days)
         expiry_date_str = new_expiry_date.strftime('%Y-%m-%d')
 
-         # 同步数据库 — 更新 expiry 字段 
-        try:
-            client = Client.query.filter_by(name=client_name).first()
-            if client:
-                client.expiry = new_expiry_date
-                db.session.commit()
-        except Exception as db_err:
-            print(f"[WARN] Failed to update expiry in DB for {client_name}: {db_err}")
+        # 更新数据库(使用 logical_expiry 如果存在,否则使用 expiry)
+        if hasattr(client, 'logical_expiry'):
+            client.logical_expiry = new_expiry_date
+        else:
+            client.expiry = new_expiry_date
+        
+        # 如果客户端当前被禁用,则启用它
+        was_disabled = client.disabled
+        if client.disabled:
+            client.disabled = False
+            
+            # 删除 CCD 禁用文件
+            ccd_dir = '/etc/openvpn/ccd'
+            disable_file_path = os.path.join(ccd_dir, client_name)
+            if os.path.exists(disable_file_path):
+                try:
+                    subprocess.run(
+                        ['sudo', 'rm', '-f', disable_file_path],
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                except subprocess.CalledProcessError as e:
+                    print(f"[WARN] 删除禁用文件失败: {e.stderr}")
+
+        db.session.commit()
+
+        message = f'客户端 {client_name} 的到期时间已更新为 {expiry_days} 天(到期日:{expiry_date_str})'
+        if was_disabled:
+            message += ',客户端已重新启用'
+        message += '。证书本身保持10年有效期不变,无需重新下发证书。'
 
         return jsonify({
             'status': 'success',
-            'message': f'Client {client_name} expiry modified successfully to {expiry_days} days (expires: {expiry_date_str}). Old cert revoked, new cert issued and index.txt cleaned.'
+            'message': message
         })
 
     except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Failed to modify client expiry: {str(e)}'})
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': f'修改到期时间失败: {str(e)}'
+        })

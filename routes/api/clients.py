@@ -20,6 +20,7 @@ def client_to_dict(c):
         "id": c.id,
         "name": c.name,
         "expiry": c.expiry.isoformat() if c.expiry else None,
+        "logical_expiry": c.logical_expiry.isoformat() if c.logical_expiry else None,
         "online": bool(c.online),
         "disabled": bool(c.disabled),
         "vpn_ip": c.vpn_ip,
@@ -142,7 +143,7 @@ def openvpn_client_kill(host, port, client_name, mgmt_password=None):
 @login_required
 def api_disable_client():
     """
-    禁用客户端（创建 ccd disable 文件 + 断开客户端 + 数据库标志位）
+    禁用客户端(创建 ccd disable 文件 + 断开客户端 + 数据库标志位)
     """
     data = request.get_json()
     client_name = data.get('client_name', '').strip()
@@ -156,17 +157,17 @@ def api_disable_client():
         os.makedirs(ccd_dir, exist_ok=True)
 
         cmd = ['sudo', 'sh', '-c', f'echo "disable" > {disable_file_path}']
-        log_message(f"执行命令以禁用客户端：{' '.join(cmd)}")
+        log_message(f"执行命令以禁用客户端:{' '.join(cmd)}")
         subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         os.system(f"sudo chown root:root {disable_file_path}")
         os.system(f"sudo chmod 644 {disable_file_path}")
-        log_message(f"禁用文件创建成功：{disable_file_path}")
+        log_message(f"禁用文件创建成功:{disable_file_path}")
 
     except subprocess.CalledProcessError as e:
-        return api_error(f"创建禁用文件失败：{e.stderr}")
+        return api_error(f"创建禁用文件失败:{e.stderr}")
     except Exception as e:
-        return api_error(f"创建禁用文件异常：{e}")
+        return api_error(f"创建禁用文件异常:{e}")
 
     # ---------- 2. 调用管理接口踢出客户端 ----------
     host = os.environ.get('OPENVPN_MGMT_HOST', '127.0.0.1')
@@ -183,7 +184,7 @@ def api_disable_client():
             db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
-        return api_error(f"数据库更新失败：{e}")
+        return api_error(f"数据库更新失败:{e}")
 
     # ---------- 4. 统一格式化响应 ----------
     if success:
@@ -196,5 +197,5 @@ def api_disable_client():
         )
     else:
         return api_error(
-            message=f"客户端已禁用，但踢出失败：{kill_msg}"
+            message=f"客户端已禁用,但踢出失败:{kill_msg}"
         )

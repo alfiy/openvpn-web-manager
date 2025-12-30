@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import sys
 import re
 from datetime import datetime, timezone
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
@@ -9,9 +8,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 # ------------------- 配置 -------------------
 DATA_DIR = "/opt/vpnwm/data"
-# 目录应该由部署脚本创建，不允许 root 自动生成
+# 目录应该由部署脚本创建,不允许 root 自动生成
 if not os.path.isdir(DATA_DIR):
-    raise RuntimeError(f"DATA_DIR 未找到：{DATA_DIR}，请检查部署脚本是否创建了该目录")
+    raise RuntimeError(f"DATA_DIR 未找到:{DATA_DIR},请检查部署脚本是否创建了该目录")
 DB_PATH = os.path.join(DATA_DIR, "vpn_users.db")
 
 OPENVPN_STATUS_FILE = "/var/log/openvpn/status.log"
@@ -20,26 +19,26 @@ INDEX_TXT = "/etc/openvpn/easy-rsa/pki/index.txt"
 
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
 
-# ------------------- 数据库模型（与 models.py 保持一致）-------------------
+# ------------------- 数据库模型(与 models.py 保持一致)-------------------
 Base = declarative_base()
 
 class Client(Base):
     __tablename__ = 'clients'
     id = Column(Integer, primary_key=True)
     name = Column(String(100), unique=True, nullable=False)
-    expiry = Column(DateTime, nullable=True)  # 修改为 DateTime 类型，与 models.py 一致
+    expiry = Column(DateTime, nullable=True)  # 证书真实到期时间
+    logical_expiry = Column(DateTime, nullable=True)  # 逻辑到期时间
     online = Column(Boolean, default=False)
     disabled = Column(Boolean, default=False)
     vpn_ip = Column(String(15), nullable=True)
     real_ip = Column(String(15), nullable=True)
     duration = Column(String(50), nullable=True)
-    # 注意：models.py 中没有 connected_since 字段，所以我们不在这里添加
 
 # ------------------- 数据库初始化 -------------------
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine)
 
-# 不要创建表，因为表已经由 Flask 应用创建
+# 不要创建表,因为表已经由 Flask 应用创建
 # Base.metadata.create_all(engine)
 
 # ------------------- 工具函数 -------------------
@@ -176,13 +175,12 @@ def get_openvpn_clients():
         oc = online_clients.get(name)
         clients_list.append({
             "name": name,
-            "expiry": expiry_date,  # 现在是 datetime 对象
+            "expiry": expiry_date,  # 证书真实到期时间
             "online": is_online,
             "disabled": is_disabled,
             "vpn_ip": oc["vpn_ip"] if oc else "",
             "real_ip": oc["real_ip"] if oc else "",
             "duration": oc["duration"] if oc else ""
-            # 移除 connected_since，因为 models.py 中没有这个字段
         })
     return clients_list
 
@@ -202,14 +200,14 @@ def sync_clients_to_db():
                 db_c = Client(name=c['name'])
                 session.add(db_c)
             
-            # 更新字段，确保类型匹配
-            db_c.expiry = c['expiry']  # datetime 对象
+            # 更新字段,确保类型匹配
+            db_c.expiry = c['expiry']  # 证书真实到期时间
+            # logical_expiry 不在这里更新,由 Web 界面管理
             db_c.disabled = c['disabled']
             db_c.online = c['online']
             db_c.vpn_ip = c['vpn_ip']
             db_c.real_ip = c['real_ip']
             db_c.duration = c['duration']
-            # 不设置 connected_since，因为 models.py 中没有这个字段
 
         session.commit()
         log_message(f"同步完成 ✅ 客户端总数: {len(clients)}")

@@ -20,7 +20,7 @@ const pageInfo = document.getElementById('page-info');
 const noData = document.getElementById('no-data');
 const PER_PAGE = 10;
 
-// 在文件顶部添加一个检查，确保所有 DOM 元素都存在
+// 在文件顶部添加一个检查,确保所有 DOM 元素都存在
 const elementsExist = tbody && paging && pageInfo && noData;
 
 // 全局变量当前页为第1页
@@ -29,7 +29,7 @@ export let currentPage = 1;
 /* 统一渲染表格 */
 function render(data) {
     if (!elementsExist) {
-        console.warn("客户端管理DOM元素不存在，停止渲染。");
+        console.warn("客户端管理DOM元素不存在,停止渲染。");
         return;
     }
 
@@ -43,12 +43,12 @@ function render(data) {
         tbody.innerHTML = '';
         paging.innerHTML = '';
         noData.style.display = 'block';
-        noData.textContent = data.q ? `未找到与 “${data.q}” 相关的客户端。` : '没有客户端证书。';
+        noData.textContent = data.q ? `未找到与 "${data.q}" 相关的客户端。` : '没有客户端证书。';
         pageInfo.textContent = '';
         return;
     }
     noData.style.display = 'none';
-    pageInfo.textContent = data.total_pages > 1 ? `第 ${data.page} 页，共 ${data.total_pages} 页` : '';
+    pageInfo.textContent = data.total_pages > 1 ? `第 ${data.page} 页,共 ${data.total_pages} 页` : '';
 
     tbody.innerHTML = clientsToRender.map((c, idx) => {
         const rowIdx = (data.page - 1) * PER_PAGE + idx + 1;
@@ -57,10 +57,10 @@ function render(data) {
 
         // 新增的业务逻辑判断
         if (c.disabled) {
-            // 如果客户端被禁用，只显示“重新启用”按钮
+            // 如果客户端被禁用,只显示"重新启用"按钮
             actionButtons.push(`<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">重新启用</button>`);
         } else {
-            // 如果客户端未被禁用，则显示所有按钮（根据角色权限）
+            // 如果客户端未被禁用,则显示所有按钮(根据角色权限)
             actionButtons.push(`<a href="/download_client/${c.name}" class="btn btn-sm btn-primary">下载配置</a>`);
 
             if (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') {
@@ -113,12 +113,12 @@ function render(data) {
 
 /* AJAX 拉数据 */
 export function loadClients(page = currentPage, q = '') {
-    // 在这里再次进行检查，确保函数在合适的页面被调用
+    // 在这里再次进行检查,确保函数在合适的页面被调用
     if (!elementsExist) {
         return;
     }
 
-    currentPage = page;  // ← 这里非常关键，记住当前页面
+    currentPage = page;  // ← 这里非常关键,记住当前页面
 
     authFetch(`/clients/data?page=${page}&q=${encodeURIComponent(q)}`)
         .then(render)
@@ -159,13 +159,13 @@ export function bindClientEvents() {
 
         if (targetBtn.classList.contains('revoke-btn')) {
             url = '/api/clients/revoke';
-            confirmMessage = `确定撤销客户端 “${clientName}” 的证书吗？此操作不可恢复！`;
+            confirmMessage = `确定撤销客户端 "${clientName}" 的证书吗?此操作不可恢复!`;
         } else if (targetBtn.classList.contains('disconnect-btn')) {
             url = '/api/clients/disable';
-            confirmMessage = `确认要禁用客户端 “${clientName}” 吗？`;
+            confirmMessage = `确认要禁用客户端 "${clientName}" 吗?`;
         } else if (targetBtn.classList.contains('enable-btn')) {
             url = '/api/clients/enable';
-            confirmMessage = `确认要重新启用客户端 “${clientName}” 吗？`;
+            confirmMessage = `确认要重新启用客户端 "${clientName}" 吗?`;
         }
 
         showCustomConfirm(confirmMessage, async (confirmed) => {
@@ -192,7 +192,7 @@ export function bindClientEvents() {
                 if (success) loadClients?.();
 
             } catch (err) {
-                msgDiv.innerHTML = `<div class="alert alert-danger">请求失败：${err}</div>`;
+                msgDiv.innerHTML = `<div class="alert alert-danger">请求失败:${err}</div>`;
                 setTimeout(() => { msgDiv.innerHTML = ''; }, 3000);
             }
         });
@@ -283,7 +283,7 @@ export function bindAddClient() {
 
         } catch (err) {
             loader.style.display = 'none';
-            msgDiv.innerHTML = `<div class="alert alert-danger">请求失败：${err}</div>`;
+            msgDiv.innerHTML = `<div class="alert alert-danger">请求失败:${err}</div>`;
             setTimeout(() => msgDiv.innerHTML = '', 4000);
         }
     });
@@ -314,18 +314,7 @@ export function bindModifyExpiry() {
     if (btnConfirm && !btnConfirm.hasAttribute('data-bound')) {
         btnConfirm.setAttribute('data-bound', 'true');
 
-        btnConfirm.addEventListener('click', async function onceHandler(e) {
-            // 如果已确认过，直接 return，让事件继续走原 async 逻辑
-            if (btnConfirm.dataset.confirmed === 'true') return;
-
-            e.stopImmediatePropagation();          // 阻止本次执行
-            const sure = confirm('修改到期时间后请重新下发证书，确定继续？');
-            if (!sure) return;                     // 用户取消
-
-            btnConfirm.dataset.confirmed = 'true'; // 做标记
-            btnConfirm.click();                    // 再次触发自己，这次会跳过拦截
-        }, { capture: false, once: false });
-
+        // ✅ 移除误导性的确认对话框,直接执行修改
         btnConfirm.addEventListener('click', async () => {
             const name = qs('#modify-client-name').value;
             let days;
@@ -365,7 +354,7 @@ export function bindModifyExpiry() {
                     setTimeout(() => {
                         modalIns.hide();
                         loadClients();
-                    }, 500);
+                    }, 1500);
                 }
             } catch (err) {
                 loader.style.display = 'none';
@@ -385,7 +374,7 @@ export function bindModifyExpiry() {
     });
 }
 
-// 统一的初始化函数，用于在页面加载时调用
+// 统一的初始化函数,用于在页面加载时调用
 export function init() {
     loadClients(currentPage);
     bindClientEvents();
