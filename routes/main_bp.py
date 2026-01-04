@@ -1,69 +1,46 @@
 from flask import Blueprint, request, render_template, jsonify
 from flask_login import login_required
-from utils.openvpn_utils import get_openvpn_clients
-from routes.helpers import json_csrf_protect
-from utils.openvpn_utils import check_openvpn_status,sync_openvpn_clients_to_db, sync_online_state_to_db
+from models import Client  # ORM 模型
+from utils.openvpn_utils import (
+    get_openvpn_clients,
+    check_openvpn_status,
+    sync_openvpn_clients_to_db,
+    sync_online_state_to_db
+)
 
-
-# 蓝图名称已从 'main' 更改为 'main_bp' 以避免命名冲突
 main_bp = Blueprint('main_bp', __name__)
-
 PER_PAGE = 10
 
 # ---------- 工具函数 ----------
-def _filter_clients(q: str):
-    """
-    根据查询字符串过滤客户端列表。
-    """
-    all_clients = get_openvpn_clients()
-    if q:
-        all_clients = [c for c in all_clients if q.lower() in c['name'].lower()]
-    return all_clients
+def serialize_client(c: Client):
+    """将 Client ORM 对象序列化为前端需要的字典"""
+    return {
+        "name": c.name,
+        "online": c.online,
+        "disabled": c.disabled,
+        "vpn_ip": c.vpn_ip,
+        "real_ip": c.real_ip,
+        "duration": c.duration,
+        # 前端显示 expiry = logical_expiry
+        "expiry": c.logical_expiry.strftime('%Y-%m-%d %H:%M:%S') if c.logical_expiry else None
+    }
 
-# ---------- 路由 ----------
+# ---------- 首页路由 ----------
 @main_bp.route('/')
 @login_required
 def index():
-    # ✅ 调用工具函数获取OpenVPN状态
+    """首页，显示 OpenVPN 状态"""
     openvpn_status = check_openvpn_status()
-    
-    # 打印日志以供调试
     print(f"DEBUG: OpenVPN status is: {openvpn_status}")
-    
-    # ✅ 将状态变量传递给模板
     return render_template('index.html', status=openvpn_status)
 
+# ---------- 网页客户端列表路由 ----------
 @main_bp.route('/clients')
-@login_required # 确保用户已登录
+@login_required
 def clients():
     """
-    处理客户端列表页面。
-    这是一个传统的网页路由，用于直接渲染 HTML 模板。
-    """
-    page = request.args.get('page', 1, type=int)
-    q = request.args.get('q', '', type=str).strip()
-
-    all_clients = _filter_clients(q)
-    total = len(all_clients)
-    total_pages = max((total + PER_PAGE - 1) // PER_PAGE, 1)
-    offset = (page - 1) * PER_PAGE
-    clients_page = all_clients[offset: offset + PER_PAGE]
-
-    return render_template(
-        'clients.html',
-        clients=clients_page,
-        page=page,
-        total_pages=total_pages,
-        q=q
-    )
-
-# ---------- AJAX 接口 ----------
-@main_bp.route('/clients/data')
-@login_required # 确保用户已登录
-def clients_data():
-    """
-    供 AJAX 使用的 GET 接口，返回 JSON 格式的客户端数据。
-    由于是 GET 请求，它不需要 CSRF 验证。
+    客户端列表页面，直接渲染 HTML 模板
+    使用 ORM 查询分页并支持搜索
     """
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '', type=str).strip()
@@ -71,15 +48,64 @@ def clients_data():
     sync_openvpn_clients_to_db()
     sync_online_state_to_db()
 
-    all_clients = _filter_clients(q)
-    total = len(all_clients)
+    query = Client.query
+    if q:
+        query = query.filter(Client.name.ilike(f"%{q}%"))
+
+    total = query.count()
     total_pages = max((total + PER_PAGE - 1) // PER_PAGE, 1)
-    offset = (page - 1) * PER_PAGE
-    clients_page = all_clients[offset: offset + PER_PAGE]
+
+    clients_page = (
+        query
+        .order_by(Client.id.desc())
+        .offset((page - 1) * PER_PAGE)
+        .limit(PER_PAGE)
+        .all()
+    )
+
+    return render_template(
+        'clients.html',
+        clients=clients_page,          # ORM 对象列表，可在模板中访问 c.logical_expiry
+        page=page,
+        total_pages=total_pages,
+        q=q
+    )
+
+# ---------- AJAX 接口 ----------
+@main_bp.route('/clients/data')
+@login_required
+def clients_data():
+    """
+    AJAX GET 接口，返回 JSON 格式客户端数据
+    前端显示的 expiry = logical_expiry
+    """
+    page = request.args.get('page', 1, type=int)
+    q = request.args.get('q', '', type=str).strip()
+
+    # 同步 OpenVPN 客户端状态
+    sync_openvpn_clients_to_db()
+    sync_online_state_to_db()
+
+    query = Client.query
+    if q:
+        query = query.filter(Client.name.ilike(f"%{q}%"))
+
+    total = query.count()
+    total_pages = max((total + PER_PAGE - 1) // PER_PAGE, 1)
+
+    clients_page = (
+        query
+        .order_by(Client.id.desc())
+        .offset((page - 1) * PER_PAGE)
+        .limit(PER_PAGE)
+        .all()
+    )
+
+    clients_serialized = [serialize_client(c) for c in clients_page]
 
     return jsonify({
-        'clients': clients_page,
-        'page': page,
-        'total_pages': total_pages,
-        'q': q
+        "clients": clients_serialized,
+        "page": page,
+        "total_pages": total_pages,
+        "q": q
     })
