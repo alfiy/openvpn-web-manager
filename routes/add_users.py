@@ -2,6 +2,8 @@
 from flask import Blueprint, request, jsonify
 from routes.helpers import login_required, role_required
 from models import db, User, Role
+from utils.password_validator import PasswordValidator
+
 
 add_users_bp = Blueprint('add_users', __name__)
 
@@ -13,15 +15,22 @@ def add_users():
     新增用户接口（JSON）
     """
     data = request.get_json(silent=True) or {}
+    if not data:
+        return jsonify({'status': 'error', 'message': '请求需要是JSON'}), 400
+    
     username = (data.get('username') or '').strip()
     email = (data.get('email') or '').strip()
     password = (data.get('password') or '').strip()
-    
     # 原始的字符串角色名
     role_str = (data.get('role') or 'NORMAL').strip()
 
     if not username or not email or not password:
         return jsonify({'status': 'error', 'message': '用户名、邮箱和密码不能为空'}), 400
+    
+    # 验证密码强度（前端已验证一致性）
+    is_valid, error_msg = PasswordValidator.validate_strength(password)
+    if not is_valid:
+        return jsonify({'status': 'error', 'message': error_msg}), 400
 
     # ✅ 修复：将字符串转换为 Role 枚举成员
     try:

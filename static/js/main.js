@@ -1,4 +1,5 @@
 /**
+ * satic/js/main.js
  * 这个文件负责将所有模块组合在一起，并控制页面的初始化流程
  */
 import { qs, qsa } from './utils.js';

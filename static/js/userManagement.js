@@ -1,7 +1,9 @@
 /**
+ * static/js/userManagement.js
  * 这个模块包含了用户管理的所有功能
  */
 import { qs, showCustomMessage, showCustomConfirm, authFetch } from './utils.js';
+import PasswordConfirm from './password-confirm.js';
 
 // 获取模态框本身，这是我们事件绑定的目标
 const userManagementModal = document.getElementById('userManagementModal');
@@ -27,10 +29,19 @@ export function init() {
     // 当模态框被打开时，我们才去获取用户数据
     userManagementModal.addEventListener('shown.bs.modal', fetchUsers);
 
+    // 初始化密码验证组件
+    let passwordValidator = null;
+    if (form) {
+        passwordValidator = new PasswordConfirm(form, {
+            passwordSel: '[name="password"]',
+            confirmSel: '[name="confirmPassword"]'
+        });
+    }
     // 绑定添加用户表单
     if (form) {
         form.addEventListener('submit', async e => {
             e.preventDefault();
+
             const usernameInput = qs('input[name="username"]', form);
             const emailInput = qs('input[name="email"]', form);
             const passwordInput = qs('input[name="password"]', form);
@@ -40,6 +51,13 @@ export function init() {
             const email = emailInput.value.trim();
             const password = passwordInput.value;
             const role = roleInput.value;
+
+            // 先进行前端验证
+            if (passwordValidator && !passwordValidator.validate()) {
+                messageDiv.innerHTML = '<div class="alert alert-danger">请检查密码格式和一致性</div>';
+                setTimeout(() => messageDiv.innerHTML = '', 3000);
+                return;
+            }
 
             if (!username || !email || !password) {
                 messageDiv.innerHTML = '<div class="alert alert-danger">用户名、邮箱和密码不能为空</div>';

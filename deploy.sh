@@ -21,6 +21,8 @@ sudo rsync -av \
     --exclude '*.pyc' \
     --exclude '.git' \
     --exclude '.env' \
+    --exclude 'deploy.sh' \
+    --exclude '*.md' \
     ./ "$APP_DIR/"
 echo "✓ 文件同步完成"
 

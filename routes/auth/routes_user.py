@@ -7,6 +7,8 @@ from models import db, User, Role
 from . import auth_bp
 from .utils import generate_token, hash_token, utc_now, send_mail
 from flask_wtf.csrf import generate_csrf
+from utils.password_validator import PasswordValidator
+
 
 # 使用项目统一的 CSRF
 from extensions import csrf
@@ -37,8 +39,10 @@ def register():
     if not username or not email or not password:
         return jsonify({'status': 'error', 'message': '缺少字段'}), 400
 
-    if len(password) < 6:
-        return jsonify({'status': 'error', 'message': '密码至少需要6个字符'}), 400
+    # 使用统一的密码验证（替换原来的 len(password) < 6）
+    is_valid, error_msg = PasswordValidator.validate_strength(password)
+    if not is_valid:
+        return jsonify({'status': 'error', 'message': error_msg}), 400
 
     from sqlalchemy.exc import IntegrityError
     try:
@@ -148,11 +152,17 @@ def reset_password_page(token):
     if request.method == 'GET':
         return render_template('reset_password.html', token=token)
 
-    password = request.form.get('password', '')
-    if len(password) < 6:
-        flash("密码至少需要6个字符", "danger")
+    # 获取表单数据
+    password = request.form.get('password', '').strip()
+    confirm_password = request.form.get('confirmPassword', '').strip()
+
+    # 统一验证密码
+    is_valid, error_msg = PasswordValidator.validate_full(password, confirm_password)
+    if not is_valid:
+        flash(error_msg, "danger")
         return redirect(url_for('auth_bp.reset_password_page', token=token))
 
+    # 验证 token
     hashed = hash_token(token)
     user = User.query.filter_by(reset_token=hashed).first()
 
@@ -160,6 +170,7 @@ def reset_password_page(token):
         flash('链接无效或已使用', 'danger')
         return redirect(url_for('auth_bp.login'))
 
+    # 验证过期时间
     expire = user.reset_expire
     if expire is None:
         flash("链接无效或已过期", "danger")
@@ -172,6 +183,7 @@ def reset_password_page(token):
         flash("链接已过期", "danger")
         return redirect(url_for('auth_bp.login'))
 
+    # 更新密码并清除重置令牌
     user.set_password(password)
     user.reset_token = None
     user.reset_expire = None
@@ -191,15 +203,20 @@ def api_change_password():
     if not data:
         return jsonify({'status': 'error', 'message': '请求需要是JSON'}), 400
 
-    old_pwd = data.get('old_pwd', '')
-    new_pwd = data.get('new_pwd', '')
+    old_pwd = data.get('old_pwd', '').strip()
+    new_pwd = data.get('new_pwd', '').strip()
+    confirm_pwd = data.get('confirm_pwd', '').strip()
 
-    if len(new_pwd) < 6:
-        return jsonify({'status': 'error', 'message': '密码至少需要6个字符'}), 400
-
+    # 验证旧密码
     if not current_user.check_password(old_pwd):
         return jsonify({'status': 'error', 'message': '旧密码无效'}), 400
 
+    # 统一验证新密码
+    is_valid, error_msg = PasswordValidator.validate_full(new_pwd, confirm_pwd)
+    if not is_valid:
+        return jsonify({'status': 'error', 'message': error_msg}), 400
+
+    # 更新密码
     current_user.set_password(new_pwd)
     db.session.commit()
 

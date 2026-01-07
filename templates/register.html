@@ -39,13 +39,31 @@
                         <input type="email" class="form-control" name="email" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">密码</label>
-                        <input type="password" class="form-control" name="password" minlength="6" required>
+                        <label for="password" class="form-label">密码</label>
+                        <input type="password" 
+                            class="form-control" 
+                            id="password"
+                            name="password" 
+                            required
+                            autocomplete="new-password"
+                            placeholder="至少8位，包含大小写字母、数字和特殊字符">
+                        <div class="invalid-feedback">
+                            密码需包含大小写字母、数字和特殊字符(@!%?&)，至少8位
+                        </div>
                     </div>
+
                     <div class="mb-3">
-                        <label class="form-label">确认密码</label>
-                        <input type="password" class="form-control" name="confirmPassword" minlength="6" required>
-                        <!-- 组件会自动生成 .invalid-feedback 提示，这里可留空或删除 -->
+                        <label for="confirmPassword" class="form-label">确认密码</label>
+                        <input type="password" 
+                            class="form-control" 
+                            id="confirmPassword"
+                            name="confirmPassword" 
+                            required
+                            autocomplete="new-password"
+                            placeholder="再次输入密码">
+                        <div class="invalid-feedback">
+                            两次输入的密码不一致
+                        </div>
                     </div>
 
                     <button type="submit" class="btn btn-primary w-100 mb-2">立即注册</button>
@@ -72,11 +90,17 @@
     <footer class="container-fluid fixed-bottom-footer">
         <p class="text-center text-muted small">本系统仅面向《计算机信息网络国际联网管理暂行规定》所允许的内部办公自用场景，请勿用于未经批准的跨境联网活动。</p>
     </footer>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // 3. 只剩注册逻辑，密码一致性由组件负责
+    <script src="{{ url_for('static', filename='bootstrap/bootstrap.bundle.min.js') }}"></script>
+    <script type="module">
+        import { init } from '/static/js/password-confirm.js';
+        
+        // 初始化密码验证
+        init();
+        
+        // 注册表单提交处理
         document.getElementById('registerForm').addEventListener('submit', async e => {
-            e.preventDefault();   // 组件已保证密码一致
+            e.preventDefault();
+            
             const form = new FormData(e.target);
             const res = await fetch('{{ url_for("auth_bp.register") }}', {
                 method: 'POST',
@@ -92,7 +116,6 @@
             }
         });
     </script>
-    <script type="module" src="{{ url_for('static', filename='js/main.js') }}" defer></script>
     <!-- <script type="module" src="../static/js/password-confirm.js"></script> -->
 </body>
 </html>
