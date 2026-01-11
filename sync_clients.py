@@ -193,18 +193,24 @@ def sync_clients_to_db():
             log_message("没有客户端数据可同步")
             return
 
-        # 使用一次事务处理新增和更新
+        # 🔴 关键修复 1：先全部置为离线
+        session.query(Client).update({Client.online: False})
+
         for c in clients:
             db_c = session.query(Client).filter_by(name=c['name']).first()
             if not db_c:
                 db_c = Client(name=c['name'])
                 session.add(db_c)
-            
-            # 更新字段,确保类型匹配
-            db_c.expiry = c['expiry']  # 证书真实到期时间
-            # logical_expiry 不在这里更新,由 Web 界面管理
+
+            db_c.expiry = c['expiry']
             db_c.disabled = c['disabled']
-            db_c.online = c['online']
+
+            # 🔴 关键修复 2：disabled / revoked 永远不能 online
+            if not c['disabled']:
+                db_c.online = c['online']
+            else:
+                db_c.online = False
+
             db_c.vpn_ip = c['vpn_ip']
             db_c.real_ip = c['real_ip']
             db_c.duration = c['duration']
@@ -220,6 +226,7 @@ def sync_clients_to_db():
         log_message(f"未知错误: {e}")
     finally:
         session.close()
+
 
 if __name__ == "__main__":
     sync_clients_to_db()

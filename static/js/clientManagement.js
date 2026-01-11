@@ -416,7 +416,7 @@ export function bindClientEvents() {
                 const data = await authFetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                    body: JSON.stringify({ client_name: clientName })
+                    body: JSON.stringify({ client_name: clientName, confirm: true })
                 });
 
                 const success = data.code === 0;
