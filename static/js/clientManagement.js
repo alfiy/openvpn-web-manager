@@ -307,7 +307,7 @@ async function submitForceExpiryUpdate() {
 
     try {
         // 1. 先调用修改到期时间接口
-        const modifyData = await authFetch('/modify_client_expiry', {
+        const modifyData = await authFetch('/api/clients/modify-expiry', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
             body: JSON.stringify({ client_name: clientName, expiry_days: expiryDays })
@@ -574,7 +574,7 @@ export function bindModifyExpiry() {
             btnConfirm.blur();
 
             try {
-                const data = await authFetch('/modify_client_expiry', {
+                const data = await authFetch('/api/clients/modify-expiry', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ client_name: name, expiry_days: days })

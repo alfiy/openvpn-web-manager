@@ -8,7 +8,7 @@ import subprocess
 modify_client_expiry_bp = Blueprint('modify_client_expiry', __name__)
 
 
-@modify_client_expiry_bp.route('/modify_client_expiry', methods=['POST'])
+@modify_client_expiry_bp.route('/api/clients/modify_expiry', methods=['POST'])
 @login_required
 def modify_client_expiry():
     """

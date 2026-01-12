@@ -168,7 +168,6 @@ def create_app():
     app.register_blueprint(user_bp)
     app.register_blueprint(add_users_bp)
     app.register_blueprint(delete_user_bp)
-    # app.register_blueprint(kill_client_bp)
     app.register_blueprint(status_bp)
     app.register_blueprint(restart_openvpn_bp)
     app.register_blueprint(auth_bp, url_prefix="/auth")

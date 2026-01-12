@@ -216,7 +216,7 @@ def sync_clients_to_db():
             db_c.duration = c['duration']
 
         session.commit()
-        log_message(f"同步完成 ✅ 客户端总数: {len(clients)}")
+        # log_message(f"同步完成 ✅ 客户端总数: {len(clients)}")
 
     except SQLAlchemyError as e:
         session.rollback()
