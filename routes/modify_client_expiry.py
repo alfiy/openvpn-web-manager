@@ -104,7 +104,7 @@ modify_client_expiry_bp = Blueprint('modify_client_expiry', __name__)
 #             'message': f'修改到期时间失败: {str(e)}'
 #         })
 
-@modify_client_expiry_bp.route('/api/clients/modify-expiry', methods=['POST'])
+@modify_client_expiry_bp.route('/api/clients/modify_expiry', methods=['POST'])
 @login_required
 def modify_client_expiry():
     """
