@@ -107,7 +107,7 @@ def get_online_clients(status_file=OPENVPN_STATUS_FILE):
         if not dt:
             continue
         duration_sec = int((datetime.now(timezone.utc) - dt).total_seconds())
-        clients[cn.lower()] = {
+        clients[cn] = {
             "real_ip": real_addr.split(":")[0],
             "duration": human_duration(duration_sec),
             "connected_since": conn_since,
@@ -126,7 +126,7 @@ def get_online_clients(status_file=OPENVPN_STATUS_FILE):
         if not routing or not line.count(","):
             continue
         vpn_ip, cn = line.split(",")[:2]
-        cn = cn.lower()
+        
         if cn in clients:
             clients[cn]["vpn_ip"] = vpn_ip
 
@@ -138,7 +138,7 @@ def get_openvpn_clients():
     disabled_clients = set()
     if os.path.isdir(CCD_DIR):
         try:
-            disabled_clients = {f.lower() for f in os.listdir(CCD_DIR)}
+            disabled_clients = set(os.listdir(CCD_DIR))
         except:
             pass
 
@@ -161,7 +161,7 @@ def get_openvpn_clients():
         match = re.search(r"CN=([^/]+)", cn_field)
         if not match:
             continue
-        name = match.group(1).lower()
+        name = match.group(1)
         if name == "server":
             continue
 
@@ -193,7 +193,7 @@ def sync_clients_to_db():
             log_message("没有客户端数据可同步")
             return
 
-        # 🔴 关键修复 1：先全部置为离线
+        # 先全部置为离线
         session.query(Client).update({Client.online: False})
 
         for c in clients:
@@ -204,13 +204,8 @@ def sync_clients_to_db():
 
             db_c.expiry = c['expiry']
             db_c.disabled = c['disabled']
-
-            # 🔴 关键修复 2：disabled / revoked 永远不能 online
-            if not c['disabled']:
-                db_c.online = c['online']
-            else:
-                db_c.online = False
-
+            # disabled / revoked 永远不能 online
+            db_c.online = c['online'] if not c['disabled'] else False
             db_c.vpn_ip = c['vpn_ip']
             db_c.real_ip = c['real_ip']
             db_c.duration = c['duration']
