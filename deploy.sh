@@ -199,8 +199,10 @@ Environment="OPENVPN_CCD_DIR=/etc/openvpn/ccd"
 Environment="OPENVPN_INDEX_TXT=/etc/openvpn/easy-rsa/pki/index.txt"
 
 ExecStart=$APP_DIR/venv/bin/python3 sync_clients.py
-StandardOutput=journal
-StandardError=journal
+
+#  调试时将null 改为journal
+StandardOutput=null
+StandardError=null
 
 [Install]
 WantedBy=multi-user.target
