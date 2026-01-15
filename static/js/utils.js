@@ -61,28 +61,21 @@ document.addEventListener('DOMContentLoaded', () => {
 export async function authFetch(url, options = {}) {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
     const method = options.method ? options.method.toUpperCase() : 'GET';
-
-    // 调试日志
-    // console.log('=== authFetch 调试信息 ===');
-    // console.log('请求 URL:', url);
-    // console.log('请求方法:', method);
-    // console.log('CSRF Token:', csrfToken);
-    // console.log('原始 options:', options);
     
     // 如果没有 CSRF 令牌，直接抛出错误
     if (!csrfToken) {
         console.error('❌ CSRF 令牌缺失!');
         throw new Error("缺少 CSRF 令牌");
     }
-
+    
     // 创建一个新的 Headers 对象，以避免直接修改原始 options
     const headers = new Headers(options.headers || {});
-
+    
     // 确保设置正确的 Content-Type（如果存在请求体）
     if (method !== 'GET' && !headers.has('Content-Type') && options.body) {
         headers.set('Content-Type', 'application/json');
     }
-
+    
     // 无论请求方法是什么，都添加 CSRF 令牌
     if (!headers.has('X-CSRFToken')) {
         headers.set('X-CSRFToken', csrfToken);
@@ -93,26 +86,37 @@ export async function authFetch(url, options = {}) {
         ...options,
         headers: headers,
     };
-
-    // 打印最终的请求头
-    // console.log('请求头:');
-    // for (let [key, value] of headers.entries()) {
-    //     console.log(`  ${key}: ${value}`);
-    // }
-    // console.log('请求体:', options.body);
     
     try {
         const response = await fetch(url, fetchOptions);
-        // console.log('响应状态:', response.status, response.statusText);
         
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ 
-                message: `HTTP错误: ${response.status} ${response.statusText}` 
-            }));
-            console.error('❌ 请求失败:', errorData);
-            const error = new Error(errorData.message || '请求失败');
+        // ⭐ 关键修改：先尝试解析 JSON，再判断错误
+        let data;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            // 如果 JSON 解析失败，说明不是标准的 API 响应
+            if (!response.ok) {
+                const error = new Error(`HTTP错误: ${response.status} ${response.statusText}`);
+                error.status = response.status;
+                throw error;
+            }
+            throw jsonError;
+        }
+        
+        // ⭐ 检查后端返回的 code 字段或 HTTP 状态码
+        // 优先使用 data.code，因为后端可能返回 HTTP 400 但在 JSON 中有详细错误信息
+        if (!response.ok || (data.code !== undefined && data.code !== 0)) {
+            console.error('❌ 请求失败:', data);
+            // ⭐ 从 data.data.error 或其他字段提取错误消息
+            const errorMessage = data?.data?.error || 
+                                data?.error || 
+                                data?.message || 
+                                data?.msg || 
+                                `HTTP错误: ${response.status}`;
+            const error = new Error(errorMessage);
             error.status = response.status;
-            error.data = errorData;
+            error.data = data; // ⭐ 保留完整的响应数据
             throw error;
         }
         
@@ -120,8 +124,6 @@ export async function authFetch(url, options = {}) {
             return response;
         }
         
-        const data = await response.json();
-        // console.log('✅ 响应成功:', data);
         return data;
     } catch (error) {
         console.error('❌ authFetch 异常:', error);

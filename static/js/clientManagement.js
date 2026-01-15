@@ -444,9 +444,11 @@ export function bindAddClient() {
     if (!form || form.hasAttribute('data-bound')) return;
     form.setAttribute('data-bound', 'true');
 
+    // 绑定到期选择变化事件
     qsa('input[name="expiry_choice"]').forEach(r => r.addEventListener('change', () => toggleCustomDate('expiry')));
     toggleCustomDate('expiry');
 
+    // 重置按钮
     const resetButton = qs('#reset-btn');
     if (resetButton) {
         resetButton.addEventListener('click', () => {
@@ -469,20 +471,21 @@ export function bindAddClient() {
         loader.style.display = 'block';
         msgDiv.innerHTML = '';
 
+        // 计算到期天数
         let expiryDays;
         const choice = qs('input[name="expiry_choice"]:checked').value;
         if (choice === 'custom') {
             const d = qs('#expiry_date').value;
             if (!d) {
-                msgDiv.innerHTML = '<div class="alert alert-danger">请选择到期日期</div>';
                 loader.style.display = 'none';
+                msgDiv.innerHTML = '<div class="alert alert-danger">请选择到期日期</div>';
                 setTimeout(() => msgDiv.innerHTML = '', 4000);
                 return;
             }
             const diff = Math.ceil((new Date(d) - new Date()) / 86400000);
             if (diff <= 0) {
-                msgDiv.innerHTML = '<div class="alert alert-danger">到期日期必须是将来的日期</div>';
                 loader.style.display = 'none';
+                msgDiv.innerHTML = '<div class="alert alert-danger">到期日期必须是将来的日期</div>';
                 setTimeout(() => msgDiv.innerHTML = '', 4000);
                 return;
             }
@@ -503,10 +506,30 @@ export function bindAddClient() {
 
             loader.style.display = 'none';
 
-            const success = data.code === 0;
-            const message = (data.data && data.data.message) || data.msg || '操作完成';
-            const cls = success ? 'alert-success' : 'alert-danger';
+            // ⭐ 添加调试日志
+            console.log('API 响应数据:', data);
 
+            const success = data.code === 0;
+            
+            // ⭐ 修改消息提取逻辑，支持多层嵌套
+            let message = '操作完成';
+            
+            if (!success) {
+                // 尝试多种可能的错误信息路径
+                message = data?.data?.error ||      // 你的后端格式
+                         data?.error ||             
+                         data?.message ||           
+                         data?.msg ||               
+                         data?.data?.message ||
+                         '操作失败';
+            } else {
+                message = data?.data?.message || 
+                         data?.message || 
+                         data?.msg || 
+                         '操作完成';
+            }
+
+            const cls = success ? 'alert-success' : 'alert-danger';
             msgDiv.innerHTML = `<div class="alert ${cls}">${message}</div>`;
 
             if (success) {
@@ -520,12 +543,18 @@ export function bindAddClient() {
 
         } catch (err) {
             loader.style.display = 'none';
-            msgDiv.innerHTML = `<div class="alert alert-danger">请求失败:${err}</div>`;
+
+            // ⭐ 添加调试日志
+            console.log('捕获到错误:', err);
+
+            // ⭐ 直接使用 err.message，因为 authFetch 已经提取了正确的错误信息
+            let msg = err.message || '请求失败，请稍后重试';
+
+            msgDiv.innerHTML = `<div class="alert alert-danger">${msg}</div>`;
             setTimeout(() => msgDiv.innerHTML = '', 4000);
         }
     });
 }
-
 
 // 绑定修改到期时间事件
 export function bindModifyExpiry() {
