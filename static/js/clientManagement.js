@@ -1,8 +1,8 @@
 /**
  * 这个模块包含了所有客户端相关的逻辑
  */
-import { qs, qsa, showCustomMessage, showCustomConfirm, authFetch, toggleCustomDate } from './utils.js';
-import { setCurrentSearchQuery } from './refresh.js';
+import { qs, qsa, showCustomConfirm, authFetch, toggleCustomDate } from './utils.js';
+import { setCurrentSearchQuery,markUserActive } from './refresh.js';
 
 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
@@ -386,6 +386,11 @@ async function submitForceExpiryUpdate() {
 
 /* 绑定撤销客户端操作事件 */
 export function bindClientEvents() {
+   
+    document.addEventListener('mousedown', markUserActive);
+    document.addEventListener('keydown', markUserActive);
+    document.addEventListener('scroll', markUserActive);
+
     if (input) {
         input.addEventListener('keydown', e => {
             if (e.key === 'Enter') {
