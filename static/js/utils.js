@@ -107,7 +107,7 @@ export async function authFetch(url, options = {}) {
         // ⭐ 检查后端返回的 code 字段或 HTTP 状态码
         // 优先使用 data.code，因为后端可能返回 HTTP 400 但在 JSON 中有详细错误信息
         if (!response.ok || (data.code !== undefined && data.code !== 0)) {
-            console.error('❌ 请求失败:', data);
+            // console.error('❌ 请求失败:', data);
             // ⭐ 从 data.data.error 或其他字段提取错误消息
             const errorMessage = data?.data?.error || 
                                 data?.error || 
@@ -126,7 +126,7 @@ export async function authFetch(url, options = {}) {
         
         return data;
     } catch (error) {
-        console.error('❌ authFetch 异常:', error);
+        // console.error('❌ authFetch 异常:', error);
         throw error;
     }
 }

@@ -6,8 +6,16 @@ import { currentPage,loadClients } from './clientManagement.js';
 import { bindInstall, bindUninstall } from './installUninstall.js';
 import { bindRestart } from './restart.js';
 
+
 let autoRefreshInterval = null;
 
+// 全局保存当前搜索关键字
+let currentSearchQuery = '';
+
+// 提供方法给外部更新搜索关键字
+export function setCurrentSearchQuery(q) {
+    currentSearchQuery = (typeof q === 'string') ? q : '';
+}
 
 /**
  * 更新 OpenVPN 状态卡片和按钮。
@@ -84,7 +92,7 @@ export function refreshPage(currentUserRole) {
         .catch(error => {
             console.error("刷新OpenVPN状态失败:", error);
         });
-    loadClients(currentPage); // 刷新客户端列表
+    loadClients(currentPage,currentSearchQuery || ''); // 刷新客户端列表
 }
 
 /**

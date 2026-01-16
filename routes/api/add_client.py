@@ -28,6 +28,11 @@ def add_client():
 
     if not client_name:
         return api_error(data={"error": "client_name 不能为空"}, code=400)
+    
+    description = (data.get("description") or "").strip()
+
+    if not description:
+        description = client_name 
 
     # ------------------------------------------------------------------
     # 2. 逻辑有效期（天）
@@ -139,6 +144,7 @@ def add_client():
 
         new_client = Client(
             name=client_name,
+            description=description,
             expiry=cert_expiry_dt,
             logical_expiry=logical_expiry_dt,
             online=False,

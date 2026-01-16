@@ -81,8 +81,13 @@
                             <h6 class="fw-bold mb-2">客户端名称</h6>
                             <div class="mb-3">
                                 <input type="text" class="form-control" id="client_name" name="client_name"
-                                        required pattern="^[A-Za-z0-9_\-]+$" title="仅允许字母、数字、下划线和破折号">
-                                <div class="form-text text-muted">仅允许字母、数字、下划线和破折号</div>
+                                        required pattern="^[A-Za-z0-9_\-]+$" title="仅允许字母、数字、下划线和破折号，不区分大小写">
+                                <div class="form-text text-muted">仅允许字母、数字、下划线和破折号，不区分大小写</div>
+                            </div>
+                            <h6 class="fw-bold mb-2">客户端描述（可选）</h6>
+                            <div class="mb-3">
+                                <input type="text" class="form-control" id="client_description" name="client_description"
+                                    placeholder="对客户端的简单描述（可留空）">
                             </div>
 
                             <h6 class="fw-bold mb-2">证书有效期</h6>
@@ -129,7 +134,7 @@
                         <div class="mb-3">
                             <input type="text" id="client-search"
                                    class="form-control form-control-sm"
-                                   placeholder="搜索客户端名称后回车...">
+                                   placeholder="搜索客户端名称或描述信息后回车...">
                         </div>
                         
                         <div class="table-responsive">

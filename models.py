@@ -74,6 +74,7 @@ class Client(db.Model):
         unique=True
     )
 
+    description = db.Column(db.String(255), nullable=True)
     expiry = db.Column(db.DateTime, nullable=True)          # 证书真实到期时间
     logical_expiry = db.Column(db.DateTime, nullable=True)  # 逻辑到期时间
     online = db.Column(db.Boolean, default=False)

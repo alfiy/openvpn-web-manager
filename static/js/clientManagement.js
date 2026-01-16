@@ -2,6 +2,7 @@
  * 这个模块包含了所有客户端相关的逻辑
  */
 import { qs, qsa, showCustomMessage, showCustomConfirm, authFetch, toggleCustomDate } from './utils.js';
+import { setCurrentSearchQuery } from './refresh.js';
 
 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
@@ -37,9 +38,8 @@ function render(data) {
     if (userRole === 'USER') {
         clientsToRender = data.clients.filter(c => c.user_id === userId);
     }
-    
+
     if (!clientsToRender.length) {
-        
         tbody.innerHTML = '';
         paging.innerHTML = '';
         noData.style.display = 'block';
@@ -47,19 +47,17 @@ function render(data) {
         pageInfo.textContent = '';
         return;
     }
+
     noData.style.display = 'none';
-    pageInfo.textContent = data.total_pages > 1 ? `第 ${data.page} 页,共 ${data.total_pages} 页` : '';
+    pageInfo.textContent = data.total_pages > 1 ? `第 ${data.page} 页, 共 ${data.total_pages} 页` : '';
 
     tbody.innerHTML = clientsToRender.map((c, idx) => {
         const rowIdx = (data.page - 1) * PER_PAGE + idx + 1;
         const actionButtons = [];
 
-        // 新增的业务逻辑判断
         if (c.disabled) {
-            // 如果客户端被禁用,只显示"重新启用"按钮
             actionButtons.push(`<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">重新启用</button>`);
         } else {
-            // 如果客户端未被禁用,则显示所有按钮(根据角色权限)
             actionButtons.push(`<a href="/download_client/${c.name}" class="btn btn-sm btn-primary">下载配置</a>`);
 
             if (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') {
@@ -67,17 +65,19 @@ function render(data) {
                                             data-client="${c.name}"
                                             data-bs-toggle="modal"
                                             data-bs-target="#modifyExpiryModal">修改到期</button>`);
-                                            
                 actionButtons.push(`<button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">禁用</button>`);
                 actionButtons.push(`<button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">撤销</button>`);
             }
         }
-    
+
         return `
             <tr>
-                <td>${rowIdx}</td>
-                <td>${c.name}</td>
-                <td>
+                <td class="align-middle">${rowIdx}</td>
+                <td class="align-middle">
+                    <div><strong>${c.name}</strong></div>
+                    ${c.description ? `<div class="text-muted small">${c.description}</div>` : ''}
+                </td>
+                <td class="align-middle">
                     ${c.online
                         ? `<span class="badge bg-success"><i class="fa fa-circle"></i> 在线</span>
                            ${c.vpn_ip ? `<br><small class="text-success">VPN: ${c.vpn_ip}</small>` : ''}
@@ -86,29 +86,42 @@ function render(data) {
                         : `<span class="badge bg-secondary"><i class="fa fa-circle"></i> 离线</span>`
                     }
                 </td>
-                <td><small class="text-muted">${c.expiry || '未知'}</small></td>
-                <td class="d-flex flex-wrap gap-1">${actionButtons.join('')}</td>
+                <td class="align-middle"><small class="text-muted">${c.expiry || '未知'}</small></td>
+                <td class="align-middle">
+                    <div class="btn-group" role="group">
+                        ${actionButtons.join('')}
+                    </div>
+                </td>
             </tr>`;
     }).join('');
 
+    // ---------- 分页 ----------
     paging.innerHTML = '';
     if (data.total_pages <= 1) return;
 
-    const make = (page, text, disabled = false, active = false) =>
+    const makePageItem = (page, text, disabled = false, active = false) =>
         `<li class="page-item ${disabled ? 'disabled' : ''} ${active ? 'active' : ''}">
             <a class="page-link" href="#" data-page="${page}">${text}</a>
         </li>`;
 
-    paging.innerHTML += make(data.page - 1, '«', data.page <= 1);
+    // 上一页
+    paging.innerHTML += makePageItem(data.page - 1, '«', data.page <= 1);
+
     const start = Math.max(1, data.page - 2);
     const end = Math.min(data.total_pages, data.page + 2);
-    if (start > 1) paging.innerHTML += make(1, 1);
+
+    if (start > 1) paging.innerHTML += makePageItem(1, 1);
     if (start > 2) paging.innerHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-    for (let p = start; p <= end; p++) paging.innerHTML += make(p, p, false, p === data.page);
+
+    for (let p = start; p <= end; p++) paging.innerHTML += makePageItem(p, p, false, p === data.page);
+
     if (end < data.total_pages - 1) paging.innerHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-    if (end < data.total_pages) paging.innerHTML += make(data.total_pages, data.total_pages);
-    paging.innerHTML += make(data.page + 1, '»', data.page >= data.total_pages);
+    if (end < data.total_pages) paging.innerHTML += makePageItem(data.total_pages, data.total_pages);
+
+    // 下一页
+    paging.innerHTML += makePageItem(data.page + 1, '»', data.page >= data.total_pages);
 }
+
 
 /* AJAX 拉数据 */
 export function loadClients(page = currentPage, q = '') {
@@ -117,9 +130,22 @@ export function loadClients(page = currentPage, q = '') {
         return;
     }
 
-    currentPage = page;  // ← 这里非常关键,记住当前页面
+    // ⭐ 仅在 q 是 null/undefined 时重置，而不是用 typeof 判断
+    if (q == null) {   // null 或 undefined 时
+        q = '';
+    }
 
-    authFetch(`/clients/data?page=${page}&q=${encodeURIComponent(q)}`)
+    // ⭐ 保留搜索功能
+    if (typeof q === 'string') {
+        q = q.trim();
+    } else {
+        // 作为兜底（很罕见）
+        q = String(q).trim();
+    }
+
+    currentPage = Number(page) || 1;
+
+    authFetch(`/clients/data?page=${currentPage}&q=${encodeURIComponent(q)}`)
         .then(render)
         .catch(console.error);
 }
@@ -307,7 +333,7 @@ async function submitForceExpiryUpdate() {
 
     try {
         // 1. 先调用修改到期时间接口
-        const modifyData = await authFetch('/api/clients/modify-expiry', {
+        const modifyData = await authFetch('/api/clients/modify_expiry', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
             body: JSON.stringify({ client_name: clientName, expiry_days: expiryDays })
@@ -364,7 +390,10 @@ export function bindClientEvents() {
         input.addEventListener('keydown', e => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                loadClients(1, input.value.trim());
+                const q = input.value.trim();
+                currentPage = 1; // 搜索从第一页
+                setCurrentSearchQuery(q); // 通知 refresh.js
+                loadClients(1, q);
             }
         });
     }
@@ -468,6 +497,8 @@ export function bindAddClient() {
             return;
         }
 
+        const descVal = qs('#client_description')?.value.trim() || "";
+
         loader.style.display = 'block';
         msgDiv.innerHTML = '';
 
@@ -501,13 +532,17 @@ export function bindAddClient() {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': csrfToken
                 },
-                body: JSON.stringify({ client_name: nameVal, expiry_days: expiryDays })
+                body: JSON.stringify({
+                    client_name: nameVal,
+                    description: descVal,   // ⭐ 已新增
+                    expiry_days: expiryDays
+                })
             });
 
             loader.style.display = 'none';
 
             // ⭐ 添加调试日志
-            console.log('API 响应数据:', data);
+            // console.log('API 响应数据:', data);
 
             const success = data.code === 0;
             
@@ -545,7 +580,7 @@ export function bindAddClient() {
             loader.style.display = 'none';
 
             // ⭐ 添加调试日志
-            console.log('捕获到错误:', err);
+            // console.log('捕获到错误:', err);
 
             // ⭐ 直接使用 err.message，因为 authFetch 已经提取了正确的错误信息
             let msg = err.message || '请求失败，请稍后重试';
@@ -603,7 +638,7 @@ export function bindModifyExpiry() {
             btnConfirm.blur();
 
             try {
-                const data = await authFetch('/api/clients/modify-expiry', {
+                const data = await authFetch('/api/clients/modify_expiry', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ client_name: name, expiry_days: days })

@@ -26,6 +26,7 @@ class Client(Base):
     __tablename__ = 'clients'
     id = Column(Integer, primary_key=True)
     name = Column(String(100), unique=True, nullable=False)
+    description = Column(String(255), nullable=True)
     expiry = Column(DateTime, nullable=True)  # 证书真实到期时间
     logical_expiry = Column(DateTime, nullable=True)  # 逻辑到期时间
     online = Column(Boolean, default=False)

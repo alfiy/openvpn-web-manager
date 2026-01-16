@@ -16,6 +16,7 @@ def serialize_client(c: Client):
     """将 Client ORM 对象序列化为前端需要的字典"""
     return {
         "name": c.name,
+        "description": c.description, 
         "online": c.online,
         "disabled": c.disabled,
         "vpn_ip": c.vpn_ip,
@@ -88,7 +89,10 @@ def clients_data():
 
     query = Client.query
     if q:
-        query = query.filter(Client.name.ilike(f"%{q}%"))
+        query = query.filter(
+            (Client.name.ilike(f"%{q}%")) |
+            (Client.description.ilike(f"%{q}%"))
+        )
 
     total = query.count()
     total_pages = max((total + PER_PAGE - 1) // PER_PAGE, 1)
