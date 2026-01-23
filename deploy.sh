@@ -182,7 +182,7 @@ echo "✓ Flask 服务配置完成"
 echo "=== 7. 配置 OpenVPN 客户端同步服务 ==="
 sudo tee /etc/systemd/system/sync_openvpn_clients.service > /dev/null <<EOF
 [Unit]
-Description=Sync OpenVPN Clients to DB after OpenVPN is ready
+# Description=Sync OpenVPN Clients to DB after OpenVPN is ready
 Requires=openvpn@server.service
 After=openvpn@server.service
 PartOf=openvpn@server.service
@@ -199,6 +199,8 @@ Environment="OPENVPN_CCD_DIR=/etc/openvpn/ccd"
 Environment="OPENVPN_INDEX_TXT=/etc/openvpn/easy-rsa/pki/index.txt"
 
 ExecStart=$APP_DIR/venv/bin/python3 sync_clients.py
+
+LogLevelMax=notice          # 只记录 notice/warning/err/crit
 
 #  调试时将null 改为journal
 StandardOutput=null
