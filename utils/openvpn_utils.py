@@ -9,11 +9,15 @@ import time
 from datetime import datetime, timezone
 from typing import Dict, NamedTuple, Optional
 from sqlalchemy import text
+import logging
 def log_message(message):
     print(f"[SERVER] {message}", flush=True)
     sys.stdout.flush()
 
+logger = logging.getLogger(__name__)
+
 class OnlineClient(NamedTuple):
+
     vpn_ip: str
     real_ip: str
     duration_str: str          # 人类可读
@@ -24,42 +28,143 @@ class OnlineClient(NamedTuple):
 # 缓存 10 s,避免并发刷爆 IO
 _last_check: float = 0
 _cache: Dict[str, OnlineClient] = {}
+
+# def check_openvpn_status():
+#     """
+#     检查 OpenVPN 服务状态并返回 'running', 'installed', 或 'not_installed'。
+#     此函数会使用 sudo 确保在普通用户环境下也能正常工作。
+#     """
+#     service_name = 'openvpn@server.service'
+#     config_path = '/etc/openvpn/server.conf'
+
+#     try:
+#         # --- 1. 检查运行状态:使用 systemctl is-active 的返回码 ---
+#         result_active = subprocess.run(
+#             ['sudo', 'systemctl', 'is-active', '--quiet', service_name],
+#             check=False  # 不抛出异常
+#         )
+#         if result_active.returncode == 0:
+#             return 'running'
+
+#         # --- 2. 检查安装状态:直接检查配置文件是否存在 ---
+#         # 使用 os.path.exists() 是最安全、最简洁的方法,且不依赖外部命令。
+#         # 但如果必须使用 sudo,subprocess.run + test -e 也是可行的。
+#         # 这里为了保持和原来风格一致,仍使用subprocess.run。
+#         result_config = subprocess.run(
+#             ['sudo', 'test', '-e', config_path],
+#             check=False
+#         )
+#         if result_config.returncode == 0:
+#             return 'installed'
+
+#         # --- 3. 未找到任何状态 ---
+#         return 'not_installed'
+    
+#     except FileNotFoundError:
+#         # 捕获当 'sudo' 或 'systemctl' 命令本身不存在时的情况
+#         return 'error: required command not found'
+#     except Exception as e:
+#         return f'error: {str(e)}'
+
 def check_openvpn_status():
     """
     检查 OpenVPN 服务状态并返回 'running', 'installed', 或 'not_installed'。
     此函数会使用 sudo 确保在普通用户环境下也能正常工作。
+    
+    返回值:
+        - 'running': OpenVPN 服务正在运行
+        - 'installed': OpenVPN 已安装但未运行
+        - 'not_installed': OpenVPN 未安装
+    
+    注意: 此函数不会抛出异常,所有错误都会被捕获并返回 'not_installed'
     """
     service_name = 'openvpn@server.service'
     config_path = '/etc/openvpn/server.conf'
 
     try:
         # --- 1. 检查运行状态:使用 systemctl is-active 的返回码 ---
+        # logger.debug(f"检查服务运行状态: {service_name}")
         result_active = subprocess.run(
             ['sudo', 'systemctl', 'is-active', '--quiet', service_name],
-            check=False  # 不抛出异常
+            check=False,  # 不抛出异常
+            timeout=5,    # 添加超时保护
+            capture_output=True
         )
+        
         if result_active.returncode == 0:
+            # logger.info("✅ OpenVPN 正在运行")
             return 'running'
+        
+        logger.debug(f"服务未运行,返回码: {result_active.returncode}")
 
         # --- 2. 检查安装状态:直接检查配置文件是否存在 ---
-        # 使用 os.path.exists() 是最安全、最简洁的方法,且不依赖外部命令。
-        # 但如果必须使用 sudo,subprocess.run + test -e 也是可行的。
-        # 这里为了保持和原来风格一致,仍使用subprocess.run。
+        logger.debug(f"检查配置文件: {config_path}")
+        
+        # 方法1: 使用 Python 原生方法 (推荐,不需要 sudo)
+        if os.path.exists(config_path) and os.path.isfile(config_path):
+            logger.info("✅ OpenVPN 已安装但未运行")
+            return 'installed'
+        
+        # 方法2: 如果文件权限问题导致 os.path.exists 失败,尝试使用 sudo
+        logger.debug("使用 sudo 检查配置文件")
         result_config = subprocess.run(
             ['sudo', 'test', '-e', config_path],
-            check=False
+            check=False,
+            timeout=5,
+            capture_output=True
         )
+        
         if result_config.returncode == 0:
+            logger.info("✅ OpenVPN 已安装但未运行 (通过 sudo 检测)")
             return 'installed'
 
-        # --- 3. 未找到任何状态 ---
+        # --- 3. 额外检查: 检查 openvpn 可执行文件 ---
+        logger.debug("检查 openvpn 可执行文件")
+        try:
+            result_which = subprocess.run(
+                ['which', 'openvpn'],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False
+            )
+            
+            if result_which.returncode == 0:
+                openvpn_path = result_which.stdout.strip()
+                logger.info(f"✅ 找到 openvpn 可执行文件: {openvpn_path},但配置文件缺失")
+                # 即使找到可执行文件,如果配置文件不存在,也视为未安装
+                return 'not_installed'
+        except Exception as e:
+            logger.debug(f"检查可执行文件失败: {e}")
+
+        # --- 4. 未找到任何状态 ---
+        logger.info("❌ OpenVPN 未安装")
         return 'not_installed'
     
-    except FileNotFoundError:
+    except subprocess.TimeoutExpired as e:
+        # 命令执行超时
+        logger.error(f"❌ 检查 OpenVPN 状态超时: {e}")
+        log_message(f"check_openvpn_status() 超时: {e}")
+        return 'not_installed'  # 超时时假设未安装
+    
+    except FileNotFoundError as e:
         # 捕获当 'sudo' 或 'systemctl' 命令本身不存在时的情况
-        return 'error: required command not found'
+        logger.error(f"❌ 必需的命令不存在: {e}")
+        log_message(f"check_openvpn_status() 命令未找到: {e}")
+        return 'not_installed'
+    
+    except PermissionError as e:
+        # 权限不足
+        logger.error(f"❌ 权限不足: {e}")
+        log_message(f"check_openvpn_status() 权限错误: {e}")
+        return 'not_installed'
+    
     except Exception as e:
-        return f'error: {str(e)}'
+        # 捕获所有其他异常
+        logger.error(f"❌ 检查 OpenVPN 状态时发生未知错误: {e}", exc_info=True)
+        log_message(f"check_openvpn_status() 未知错误: {e}")
+        return 'not_installed'  # 出错时假设未安装
+
 
 def _parse_connected_since(text: str) -> Optional[datetime]:
     # 1. 你的 status-version 1/2 新格式 → 先当本地时间解析

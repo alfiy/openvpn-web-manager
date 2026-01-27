@@ -9,6 +9,8 @@ import { refreshPage, startAutoRefresh } from './refresh.js';
 import { init as initClientManagement } from './clientManagement.js';
 // 从 userManagement.js 模块中导入统一的初始化函数
 import { init as initUserManagement } from './userManagement.js';
+// 从 clientGroupsManagement.js 模块中导入用户组管理函数
+import {init as initClientGroups} from './clientGroupsManagement.js';
 // 从 installUninstall.js 模块中导入统一的初始化函数
 import { init as initInstallUninstall } from './installUninstall.js';
 // 可以根据需要，为其他模块创建并导入 init 函数
@@ -22,13 +24,17 @@ import { init as ChangePassword } from './changePassword.js';
 function bindAll() {
     const role = document.body.dataset.role;
     if (role) {
-        // 如果 role 存在，执行依赖角色的初始化逻辑
+        // 如果 role 存在,执行依赖角色的初始化逻辑
         const upperCaseRole = role.toUpperCase();
         if (upperCaseRole === 'SUPER_ADMIN') {
             initInstallUninstall();
             initUserManagement();
             initClientManagement();
-        } else if (upperCaseRole === 'ADMIN' || upperCaseRole === 'NORMAL') {
+            initClientGroups(); // 超级管理员初始化用户组管理
+        } else if (upperCaseRole === 'ADMIN') {
+            initClientManagement();
+            initClientGroups(); // 管理员也可以管理用户组
+        } else if (upperCaseRole === 'NORMAL') {
             initClientManagement();
         }
     }
@@ -44,9 +50,22 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshPage(userRole);
     // 根据角色显示/隐藏功能
     const roleMap = {
-        'SUPER_ADMIN': ['install-btn', 'uninstall-btn', 'add-client-card', 'clients-card', 'user-management-card'],
-        'ADMIN': ['add-client-card', 'clients-card'],
-        'USER': ['clients-card'],
+        'SUPER_ADMIN': [
+            'install-btn', 
+            'uninstall-btn', 
+            'add-client-card', 
+            'clients-card', 
+            'user-management-card',
+            'client-groups-card' // 用户组管理卡片
+        ],
+        'ADMIN': [
+            'add-client-card', 
+            'clients-card',
+            'client-groups-card' // 管理员也可以管理用户组
+        ],
+        'NORMAL': [
+            'clients-card'
+        ],
     };
 
     // 默认隐藏所有功能卡片
@@ -67,10 +86,18 @@ document.addEventListener('DOMContentLoaded', () => {
         tomorrow.setDate(tomorrow.getDate() + 1);
         dateInput.min = tomorrow.toISOString().split('T')[0];
     }
+
+    // 为修改到期时间的日期输入框也设置最小值
+    const modifyDateInput = qs('#modify-expiry-date');
+    if (modifyDateInput) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        modifyDateInput.min = tomorrow.toISOString().split('T')[0];
+    }
     
     // 调用统一的绑定函数，启动整个应用
     bindAll();
-    // startAutoRefresh();
+
     // 启动自动刷新，只在需要它的页面上调用
     // 检查 body 标签是否有 data-page-type 属性，并且其值为 'auto-refresh'
     const pageType = document.body.dataset.pageType;

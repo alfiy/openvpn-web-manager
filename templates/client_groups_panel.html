@@ -1,0 +1,207 @@
+<!-- 🆕 客户端用户组管理面板 -->
+<!-- 这个模板块将被包含在 index.html 的客户端列表区域 -->
+
+<!-- 🆕 客户端用户组管理面板 -->
+<div class="card h-100" id="client-groups-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="fa fa-folder"></i> 客户端用户组管理
+        </h5>
+        {% if current_user and current_user.role_name in ['管理员', '超级管理员'] %}
+        <button class="btn btn-sm btn-primary" id="addGroupBtn">
+            <i class="fa fa-plus"></i> 添加用户组
+        </button>
+        {% endif %}
+    </div>
+
+    <div class="card-body">
+        <!-- 客户端用户组列表容器 -->
+        <div id="groupsContainer" class="row g-3">
+            <div class="col-12 text-center text-muted" id="noGroupsPlaceholder">
+                <p>还没有用户组，请添加一个开始使用</p>
+            </div>
+        </div>
+        
+        <!-- 分页导航 -->
+        <nav aria-label="用户组分页" class="mt-3" id="groupsPagination" style="display: none;">
+            <ul class="pagination pagination-sm justify-content-center mb-0">
+                <li class="page-item" id="prevPageBtn">
+                    <a class="page-link" href="#" aria-label="上一页">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link" id="pageInfo">1 / 1</span>
+                </li>
+                <li class="page-item" id="nextPageBtn">
+                    <a class="page-link" href="#" aria-label="下一页">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+</div>
+
+<!-- 🆕 添加/编辑用户组模态框 -->
+<div class="modal fade" id="groupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="groupModalTitle">添加用户组</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="groupForm">
+                    <input type="hidden" id="groupId" value="">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">用户组名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="groupName" placeholder="例如：VIP、普通用户" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" id="groupDesc" rows="2" placeholder="用户组说明"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-6">
+                            <label class="form-label">上行速率 <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="uploadRate" placeholder="5" required>
+                                <span class="input-group-text">Mbit</span>
+                            </div>
+                            <small class="form-text text-muted">支持: Kbit, Mbit, Gbit</small>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">下行速率 <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="downloadRate" placeholder="10" required>
+                                <span class="input-group-text">Mbit</span>
+                            </div>
+                            <small class="form-text text-muted">支持: Kbit, Mbit, Gbit</small>
+                        </div>
+                    </div>
+                    
+                    <div id="groupFormMessage" class="mt-3"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveGroupBtn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 🆕 用户组详情/编辑模态框 -->
+<div class="modal fade" id="groupDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="groupDetailsTitle">用户组详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <h6>用户组信息</h6>
+                        <dl class="row">
+                            <dt class="col-sm-4">名称：</dt>
+                            <dd class="col-sm-8" id="detailsName"></dd>
+                            
+                            <dt class="col-sm-4">描述：</dt>
+                            <dd class="col-sm-8" id="detailsDesc"></dd>
+                            
+                            <dt class="col-sm-4">上行速率：</dt>
+                            <dd class="col-sm-8" id="detailsUpload"></dd>
+                            
+                            <dt class="col-sm-4">下行速率：</dt>
+                            <dd class="col-sm-8" id="detailsDownload"></dd>
+                            
+                            <dt class="col-sm-4">成员数：</dt>
+                            <dd class="col-sm-8" id="detailsMemberCount"></dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>修改限速参数</h6>
+                        <form id="groupDetailsForm">
+                            <input type="hidden" id="detailsGroupId" value="">
+                            
+                            <div class="mb-3">
+                                <label class="form-label">上行速率</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" id="detailsUploadRate" placeholder="5">
+                                    <span class="input-group-text">Mbit</span>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">下行速率</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" id="detailsDownloadRate" placeholder="10">
+                                    <span class="input-group-text">Mbit</span>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-sm btn-primary w-100">
+                                <i class="fa fa-save"></i> 保存限速设置
+                            </button>
+                        </form>
+                        <div id="groupDetailsMessage" class="mt-2"></div>
+                    </div>
+                </div>
+                
+                <!-- 成员列表 -->
+                <div class="card mt-3">
+                    <div class="card-header d-flex justify-content-between">
+                        <h6 class="mb-0">组内成员（客户端）</h6>
+                        <button type="button" class="btn btn-sm btn-success" id="addMemberBtn">
+                            <i class="fa fa-plus"></i> 添加成员
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="membersList" style="max-height: 300px; overflow-y: auto;">
+                            <div class="text-center text-muted p-3">加载中...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" id="deleteGroupBtn">
+                    <i class="fa fa-trash"></i> 删除用户组
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 🆕 添加成员到用户组模态框 -->
+<div class="modal fade" id="addMemberModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">添加成员到用户组</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addMemberForm">
+                    <div class="mb-3">
+                        <label class="form-label">选择客户端 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="clientSelect" required>
+                            <option value="">-- 选择客户端 --</option>
+                        </select>
+                        <small class="form-text text-muted">只显示未分组的客户端</small>
+                    </div>
+                    <div id="addMemberMessage"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmAddMemberBtn">添加</button>
+            </div>
+        </div>
+    </div>
+</div>
