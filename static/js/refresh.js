@@ -99,6 +99,35 @@ async function refreshOpenVPNStatus(currentUserRole) {
     }
 }
 
+// async function refreshOpenVPNStatus(currentUserRole) {
+//     try {
+//         const statusData = await authFetch('/api/status', { returnRawResponse: false });
+//         const statusBody = qs('#openvpn-status-body');
+//         const actionsContainer = qs('#openvpn-status-actions');
+//         if (actionsContainer) actionsContainer.innerHTML = '';
+
+//         const status = statusData.status;
+//         let statusText = '';
+//         if (status === 'running') statusText = '<span class="status-indicator status-running"></span> OpenVPN正在运行';
+//         else if (status === 'installed') statusText = '<span class="status-indicator status-installed"></span> OpenVPN已安装但未运行';
+//         else statusText = '<span class="status-indicator status-not-installed"></span> OpenVPN未安装';
+
+//         if (statusBody) statusBody.innerHTML = `<p>${statusText}</p>`;
+
+//         if (currentUserRole === 'SUPER_ADMIN' && actionsContainer) {
+//             if (status === 'not_installed') actionsContainer.innerHTML += `<button id="install-btn" class="btn btn-primary">安装OpenVPN</button>`;
+//             if (status === 'running') actionsContainer.innerHTML += `<button id="restart-btn" class="btn btn-warning me-2">重启OpenVPN</button>`;
+//             if (status === 'running' || status === 'installed') actionsContainer.innerHTML += `<button id="uninstall-btn" class="btn btn-danger">卸载OpenVPN</button>`;
+//         }
+//     } catch (err) {
+//         console.error("无法获取OpenVPN状态:", err);
+//         // 输出错误的详细信息
+//         if (err.response) {
+//             console.error("Error Response:", err.response);
+//         }
+//     }
+// }
+
 // ---------------- 页面局部刷新 ----------------
 export function refreshPage(currentUserRole) {
     // 刷新 OpenVPN 状态
