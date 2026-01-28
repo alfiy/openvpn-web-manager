@@ -90,7 +90,7 @@ async function refreshOpenVPNStatus(currentUserRole) {
 
         // 根据角色显示按钮
         if (currentUserRole === 'SUPER_ADMIN' && actionsContainer) {
-            if (status === 'not_installed') actionsContainer.innerHTML += `<button id="install-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#installModal">安装OpenVPN</button>`;
+            if (status === 'not_installed') actionsContainer.innerHTML += `<button id="install-btn" class="btn btn-primary">安装OpenVPN</button>`;
             if (status === 'running') actionsContainer.innerHTML += `<button id="restart-btn" class="btn btn-warning me-2">重启OpenVPN</button>`;
             if (status === 'running' || status === 'installed') actionsContainer.innerHTML += `<button id="uninstall-btn" class="btn btn-danger">卸载OpenVPN</button>`;
         }

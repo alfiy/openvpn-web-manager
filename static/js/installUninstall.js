@@ -4,91 +4,136 @@
 import { qs, showCustomMessage, showCustomConfirm, authFetch, isValidIP } from './utils.js';
 import { stopAutoRefresh, startAutoRefresh } from './refresh.js';
 
+
 export function bindInstall() {
-    const btn = qs('#install-btn');
-    // 移除 'data-bound' 检查，因为按钮在每次刷新时都会被重新创建
-    if (!btn) return;
+    const actionsContainer = qs('#openvpn-status-actions');
+    if (!actionsContainer) return;
 
-    const modalEl = qs('#installModal');
-    const modal = modalEl ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
+    // 使用事件委托，绑定到容器而不是按钮
+    // 先移除旧的事件监听器（防止重复绑定）
+    const newContainer = actionsContainer.cloneNode(true);
+    actionsContainer.parentNode.replaceChild(newContainer, actionsContainer);
 
-    btn.addEventListener('click', async () => {
-        if (!modal) return;
+    // 绑定点击事件委托
+    newContainer.addEventListener('click', async (e) => {
+        // 检查点击的是否是安装按钮
+        const btn = e.target.closest('#install-btn');
+        if (!btn) return;
+
+        // 阻止默认行为
+        e.preventDefault();
+        e.stopPropagation();
+
+        const modalEl = qs('#installModal');
+        const modal = modalEl ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
+        if (!modal) {
+            console.error('找不到 installModal');
+            return;
+        }
+
+        // 以下逻辑保持不变...
         const sel = qs('#install-ip-select');
         const wrap = qs('#manual-ip-wrapper');
-        sel.innerHTML = '<option disabled selected>正在获取…</option>';
-        wrap && (wrap.style.display = 'none');
+        if (sel) sel.innerHTML = '<option disabled selected>正在获取…</option>';
+        if (wrap) wrap.style.display = 'none';
 
         try {
-            // authFetch 直接返回 JSON 数据，无需再调用 .json()
             const list = await authFetch('/get_ip_list');
-            sel.innerHTML = '';
-            list.forEach(ip => sel.appendChild(new Option(ip, ip)));
-            sel.appendChild(new Option('手动输入…', ''));
+            if (sel) {
+                sel.innerHTML = '';
+                list.forEach(ip => sel.appendChild(new Option(ip, ip)));
+                sel.appendChild(new Option('手动输入…', ''));
+            }
         } catch {
-            sel.innerHTML = '<option value="">手动输入…</option>';
-            wrap && (wrap.style.display = 'block');
+            if (sel) sel.innerHTML = '<option value="">手动输入…</option>';
+            if (wrap) wrap.style.display = 'block';
         }
         modal.show();
     });
 
-    qs('#install-ip-select')?.addEventListener('change', function () {
-        const wrap = qs('#manual-ip-wrapper');
-        wrap && (wrap.style.display = this.value ? 'none' : 'block');
-    });
+    // 绑定其他相关事件（这些元素不在 actionsContainer 内，不需要委托）
+    bindInstallModalEvents();
+}
 
-    qs('#confirm-install')?.addEventListener('click', async () => {
-        const port = Number(qs('#install-port').value);
-        const sel = qs('#install-ip-select');
-        const ip = sel.value || qs('#install-ip-input').value.trim();
+// 分离 Modal 内部事件绑定（这些元素不会被频繁重建）
+function bindInstallModalEvents() {
+    const modalEl = qs('#installModal');
+    if (!modalEl) return;
 
-        if (!Number.isInteger(port) || port < 1025 || port > 65534) {
-            return showCustomMessage('端口号必须在 1025-65534 之间');
-        }
-        if (!ip) return showCustomMessage('请选择或输入服务器 IP');
-        if (!sel.value && !isValidIP(ip)) return showCustomMessage('IP 格式不正确');
+    // IP 选择变化事件
+    const ipSelect = qs('#install-ip-select');
+    if (ipSelect && !ipSelect.dataset.bound) {
+        ipSelect.dataset.bound = 'true';
+        ipSelect.addEventListener('change', function () {
+            const wrap = qs('#manual-ip-wrapper');
+            if (wrap) wrap.style.display = this.value ? 'none' : 'block';
+        });
+    }
 
-        modal?.hide();
-        const loader = qs('#install-loader');
-        const msg = qs('#status-message');
+    // 确认安装按钮事件
+    const confirmBtn = qs('#confirm-install');
+    if (confirmBtn && !confirmBtn.dataset.bound) {
+        confirmBtn.dataset.bound = 'true';
+        confirmBtn.addEventListener('click', async () => {
+            const modal = bootstrap.Modal.getInstance(qs('#installModal'));
+            
+            const port = Number(qs('#install-port')?.value);
+            const sel = qs('#install-ip-select');
+            const ip = sel?.value || qs('#install-ip-input')?.value?.trim();
 
-        // 在开始安装时停止自动刷新
-        stopAutoRefresh();
+            if (!Number.isInteger(port) || port < 1025 || port > 65534) {
+                return showCustomMessage('端口号必须在 1025-65534 之间');
+            }
+            if (!ip) return showCustomMessage('请选择或输入服务器 IP');
+            if (!sel?.value && !isValidIP(ip)) return showCustomMessage('IP 格式不正确');
 
-        loader && (loader.style.display = 'block');
-        msg && (msg.className = 'alert alert-info', msg.textContent = '正在安装 OpenVPN...', msg.classList.remove('d-none'));
+            modal?.hide();
+            const loader = qs('#install-loader');
+            const msg = qs('#status-message');
 
-        try {
-            // authFetch 直接返回 JSON 数据
-            const data = await authFetch('/install', {
-                method: 'POST',
-                body: JSON.stringify({ port, ip })
-            });
+            stopAutoRefresh();
 
-            loader && (loader.style.display = 'none');
+            if (loader) loader.style.display = 'block';
             if (msg) {
-                msg.textContent = data.message;
-                msg.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
+                msg.className = 'alert alert-info';
+                msg.textContent = '正在安装 OpenVPN...';
+                msg.classList.remove('d-none');
             }
-            if (data.status === 'success') {
-                // 在安装成功后也恢复自动刷新
-                // startAutoRefresh(10000, window.currentUserRole); 
-                setTimeout(() => location.href = (data.redirect || '/'), 1000);
-            }
-        } catch (err) {
-            loader && (loader.style.display = 'none');
-            if (msg) { 
-                msg.textContent = '安装失败: ' + err; 
-                msg.className = 'alert alert-danger'; 
-                
-            }
-        } finally{
-            // 无论成功或失败，都在安装流程结束时恢复自动刷新
-            startAutoRefresh(10000, window.currentUserRole);
-        }
-    });
 
-    modalEl?.addEventListener('hide.bs.modal', () => qs('#manual-ip-wrapper') && (qs('#manual-ip-wrapper').style.display = 'none'));
+            try {
+                const data = await authFetch('/install', {
+                    method: 'POST',
+                    body: JSON.stringify({ port, ip })
+                });
+
+                if (loader) loader.style.display = 'none';
+                if (msg) {
+                    msg.textContent = data.message;
+                    msg.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
+                }
+                if (data.status === 'success') {
+                    setTimeout(() => location.href = (data.redirect || '/'), 1000);
+                }
+            } catch (err) {
+                if (loader) loader.style.display = 'none';
+                if (msg) {
+                    msg.textContent = '安装失败: ' + err;
+                    msg.className = 'alert alert-danger';
+                }
+            } finally {
+                startAutoRefresh(10000, window.currentUserRole);
+            }
+        });
+    }
+
+    // Modal 隐藏事件
+    if (!modalEl.dataset.bound) {
+        modalEl.dataset.bound = 'true';
+        modalEl.addEventListener('hide.bs.modal', () => {
+            const wrap = qs('#manual-ip-wrapper');
+            if (wrap) wrap.style.display = 'none';
+        });
+    }
 }
 
 export function bindUninstall() {
