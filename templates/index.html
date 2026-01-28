@@ -7,9 +7,9 @@
     <meta name="csrf-token" content="{{ csrf_token }}">
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
-    <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"> -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/font-awesome.min.css') }}">
-    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet"
+        href="{{ url_for('static', filename='vendor/fontawesome-6.5.1/css/all.min.css') }}">
 
     <style>
         .status-indicator {
@@ -54,17 +54,18 @@
 <body data-role="{{ current_user.role.name }}" data-user-id="{{ current_user.id }}" data-page-type="dashboard">
     <div class="container py-4">
         <header class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="mb-0">OpenVPN 管理界面</h1>
+            <h1 class="mb-0"><i class="fa-solid fa-shield-halved text-secondary me-2"></i>管理界面</h1>
             <div class="dropdown">
                 <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fa-solid fa-user-gear me-1"></i>
                     {{ current_user.username }} ({{ current_user.role_name }})
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#changePwdModal">修改密码</a></li>
+                    <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#changePwdModal"><i class="fa-solid fa-key me-2"></i>修改密码</a></li>
                     {% if current_user and current_user.role_name == '超级管理员' %}
-                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#userManagementModal">用户管理</a></li>
+                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#userManagementModal"><i class="fa-solid fa-users-gear me-2"></i>用户管理</a></li>
                     {% endif %}
-                    <li><a class="dropdown-item" href="{{ url_for('auth_bp.logout') }}">退出登录</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('auth_bp.logout') }}"><i class="fa-solid fa-right-from-bracket me-2"></i>退出登录</a></li>
                 </ul>
             </div>
         </header>
@@ -73,10 +74,13 @@
             <div class="col-12">
                 <div class="card">
                     <header class="card-header">
-                        <h5 class="mb-0">OpenVPN状态</h5>
+                        <h5 class="mb-0">
+                            <i class="fa-solid fa-signal me-2 text-success"></i>
+                            OpenVPN 状态
+                        </h5>
                     </header>
                     <div class="card-body">
-                        <p id="openvpn-status-body">正在加载OpenVPN状态...</p>
+                        <p id="openvpn-status-body"> <i class="fa-solid fa-spinner fa-spin me-2"></i>正在加载OpenVPN状态...</p>
                         <div id="openvpn-status-actions"></div>
                         <p><div id="status-message" class="alert alert-info d-none" role="alert"></div></p>
                     </div>
@@ -95,7 +99,7 @@
                             <form id="add-client-form">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-                                <h6 class="fw-bold mb-2">客户端名称</h6>
+                                <h6 class="fw-bold mb-2"><i class="fa-solid fa-id-card me-1 text-secondary"></i>客户端名称</h6>
                                 <div class="mb-3">
                                     <input type="text" class="form-control" id="client_name" name="client_name"
                                             required pattern="^[A-Za-z0-9_\-]+$" title="仅允许字母、数字、下划线和破折号，不区分大小写">
@@ -107,7 +111,7 @@
                                         placeholder="对客户端的简单描述（可留空）">
                                 </div>
 
-                                <h6 class="fw-bold mb-2">证书有效期</h6>
+                                <h6 class="fw-bold mb-2"><i class="fa-solid fa-calendar-days me-1 text-secondary"></i>证书有效期</h6>
                                 <div class="btn-group btn-group-sm mb-2" role="group" aria-label="证书有效期选择">
                                     <input type="radio" class="btn-check" name="expiry_choice" id="expiry30" value="30" checked>
                                     <label class="btn btn-outline-primary" for="expiry30">30 天</label>
@@ -145,23 +149,28 @@
                 </div>
             {% endif %}
         </section>
-
         <!-- 客户端管理 -->
         <section class="row mb-4">
             <div class="col-12">
                 <div class="card h-100">
                     <header class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">客户端管理</h5>
+                        <h5 class="mb-0">
+                            <i class="fa-solid fa-users me-2"></i>
+                            客户端管理
+                        </h5>
                         <small id="page-info" class="text-muted"></small>
                     </header>
                     <div class="card-body">
                         <div class="mb-3">
-                            <input type="text" id="client-search"
-                                class="form-control form-control-sm"
-                                placeholder="搜索客户端名称或描述信息后回车..."
-                                onfocus="this.value=''">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                </span>
+                                <input type="text" id="client-search" class="form-control" placeholder="搜索客户端名称或描述信息后回车..."
+                                    onfocus="this.value=''">
+                            </div>
                         </div>
-                        
+
                         <div class="table-responsive">
                             <table class="table table-hover" id="client-table">
                                 <thead>
@@ -171,7 +180,7 @@
                                         <th>在线状态</th>
                                         <th>到期时间</th>
                                         {% if current_user and current_user.role_name in ['管理员', '超级管理员'] %}
-                                            <th>操作</th>
+                                        <th>操作</th>
                                         {% endif %}
                                     </tr>
                                 </thead>
@@ -199,7 +208,7 @@
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="confirmModalLabel">确认操作</h5>
+                        <h5 class="modal-title" id="confirmModalLabel"><i class="fa-solid fa-triangle-exclamation text-warning me-2"></i>确认操作</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
@@ -216,7 +225,7 @@
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="modifyExpiryModalLabel">修改客户端到期时间</h5>
+                        <h5 class="modal-title" id="modifyExpiryModalLabel"><i class="fa-solid fa-calendar-pen me-2"></i>修改客户端到期时间</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
@@ -334,7 +343,7 @@
             <div class="modal-dialog modal-xl">
                 <div class="modal-content" id="confirm-modify-expiry">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="userManagementModalLabel">用户管理</h5>
+                        <h5 class="modal-title" id="userManagementModalLabel"><i class="fa-solid fa-users-cog me-2"></i>用户管理</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
