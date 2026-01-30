@@ -11,7 +11,6 @@ from sqlalchemy import event, Engine
 from models import db, User, Role
 from routes.helpers import init_csrf_guard
 from utils.api_response import api_error
-from openvpn_monitor import openvpn_bp
 from extensions import limiter
 
 # 加载环境变量
@@ -41,8 +40,9 @@ from routes.delete_user import delete_user_bp
 from routes.status_bp import status_bp
 from routes.restart_openvpn import restart_openvpn_bp
 from routes.api import api_bp
-from routes.api.client_groups import client_groups_bp  # 新增用户组路由
+from routes.api.client_groups import client_groups_bp
 from flask_wtf.csrf import generate_csrf
+from routes.dashboard import dashboard_bp
 
 # 新增导入
 from utils.tc_config_exporter import export_tc_config
@@ -234,7 +234,7 @@ def create_app():
     app.register_blueprint(restart_openvpn_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(client_groups_bp)
-    app.register_blueprint(openvpn_bp)
+    app.register_blueprint(dashboard_bp)
 
     return app
 

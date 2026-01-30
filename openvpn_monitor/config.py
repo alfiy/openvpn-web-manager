@@ -14,7 +14,7 @@ class Config:
     OPENVPN_SERVICE_NAME = 'openvpn@server'  # 修改为带实例名的服务名
     
     # 网络接口
-    VPN_INTERFACE = 'tun0'
+    VPN_INTERFACE = 'ens33'
     
     # 带宽限制范围 (Mbps)
     MIN_BANDWIDTH_MBPS = 1.0

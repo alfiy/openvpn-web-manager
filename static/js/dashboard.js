@@ -55,7 +55,7 @@ function formatGB(value) {
 
 async function refreshSystemMetrics() {
     try {
-        const resp = await dashboardFetch('/openvpn/api/dashboard');
+        const resp = await dashboardFetch('/api/dashboard');
         if (!resp.ok) {
             console.error('[dashboard] API 返回失败:', resp.status);
             return;
@@ -104,6 +104,31 @@ async function refreshSystemMetrics() {
                     'disk-detail',
                     `${formatGB(disk.used)} / ${formatGB(disk.total)}`
                 );
+            }
+        }
+
+        /* -------- Network -------- */
+        if (data.system.network) {
+            const net = data.system.network;
+            
+            // 下载速度
+            if (net.download_speed_str !== undefined) {
+                setText('net-download', net.download_speed_str);
+            }
+            
+            // 上传速度
+            if (net.upload_speed_str !== undefined) {
+                setText('net-upload', net.upload_speed_str);
+            }
+            
+            // 总下载
+            if (net.download_total !== undefined) {
+                setText('net-total-down', net.download_total.toFixed(1) + ' MB');
+            }
+            
+            // 总上传
+            if (net.upload_total !== undefined) {
+                setText('net-total-up', net.upload_total.toFixed(1) + ' MB');
             }
         }
 

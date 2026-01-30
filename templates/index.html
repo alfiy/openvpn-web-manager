@@ -8,91 +8,8 @@
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fontawesome-6.5.1/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}"></link>
 
-    <style>
-        .status-indicator {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 8px;
-        }
-        .status-running { background-color: #28a745; }
-        .status-installed { background-color: #ffc107; }
-        .status-not-installed { background-color: #dc3545; }
-        .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 2s linear infinite;
-        }
-        .group-card .text-success, .group-card .text-info {
-            max-width: 100%;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .modal-content {
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-
-        /* 状态指示器样式 */
-        .status-indicator {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 6px;
-        }
-
-        .status-running {
-            background-color: #28a745;
-            box-shadow: 0 0 4px #28a745;
-        }
-
-        .status-installed {
-            background-color: #ffc107;
-            box-shadow: 0 0 4px #ffc107;
-        }
-
-        .status-not-installed {
-            background-color: #6c757d;
-        }
-
-        .status-unknown {
-            background-color: #dc3545;
-        }
-
-        /* 系统监控卡片统一样式 */
-        #status-card-section .card.shadow-sm {
-            border: 1px solid rgba(0,0,0,0.08);
-            transition: box-shadow 0.2s;
-        }
-
-        #status-card-section .card.shadow-sm:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
-        }
-
-        /* 进度条样式 */
-        .progress {
-            background-color: #e9ecef;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-
-        .progress-bar {
-            transition: width 0.6s ease;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-    </style>
 </head>
 <body data-role="{{ current_user.role.name }}" data-user-id="{{ current_user.id }}" data-page-type="dashboard">
     <div class="container py-4">
@@ -126,9 +43,9 @@
                     </header>
                     
                     <div class="card-body">
-                        <div class="row">
+                        <div class="row g-3">
                             <!-- OpenVPN 状态卡片（恢复原来的样式） -->
-                            <div class="col-md-3">
+                            <div class="col">
                                 <div class="card shadow-sm h-100">
                                     <div class="card-body">
                                         <h6 class="text-muted mb-3">
@@ -150,7 +67,7 @@
                             </div>
 
                             <!-- CPU 使用率卡片 -->
-                            <div class="col-md-3">
+                            <div class="col">
                                 <div class="card shadow-sm h-100">
                                     <div class="card-body">
 
@@ -175,7 +92,7 @@
 
 
                             <!-- 内存使用率卡片 -->
-                            <div class="col-md-3">
+                            <div class="col">
                                 <div class="card shadow-sm h-100">
                                     <div class="card-body">
 
@@ -203,7 +120,7 @@
                             </div>
 
                             <!-- 磁盘使用率卡片 -->
-                            <div class="col-md-3">
+                            <div class="col">
                                 <div class="card shadow-sm h-100">
                                     <div class="card-body">
 
@@ -213,7 +130,7 @@
                                         </div>
 
                                         <div class="d-flex align-items-end mb-1">
-                                            <strong id="disk-usage" class="fs-6 text-dark">
+                                            <strong id="disk-usage" class="fs-3 text-dark">
                                                 -%
                                             </strong>
                                         </div>
@@ -232,6 +149,47 @@
                                 </div>
                             </div>
 
+                            <!-- 带宽使用率卡片 -->
+                            <div class="col">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <h6 class="text-muted mb-3">
+                                            <i class="fa-solid fa-network-wired me-1"></i>
+                                            带宽使用率
+                                        </h6>
+                                        
+                                        <!-- 下载和上传并排 -->
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-6">
+                                                <small class="text-muted d-block">
+                                                    <i class="fa-solid fa-arrow-down me-1 text-success"></i>下载
+                                                </small>
+                                                <strong id="net-download" class="fs-6 text-dark">0 KB/s</strong>
+                                            </div>
+                                            <div class="col-6">
+                                                <small class="text-muted d-block">
+                                                    <i class="fa-solid fa-arrow-up me-1 text-primary"></i>上传
+                                                </small>
+                                                <strong id="net-upload" class="fs-6 text-dark">0 KB/s</strong>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- 总流量 -->
+                                        <div class="text-muted small pt-2 border-top">
+                                            <div class="d-flex justify-content-between">
+                                                <span>总下载:</span>
+                                                <span id="net-total-down">0 MB</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between">
+                                                <span>总上传:</span>
+                                                <span id="net-total-up">0 MB</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 系统资源卡片结束 -->
                         </div>
                     </div>
                 </div>
