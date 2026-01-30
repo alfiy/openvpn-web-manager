@@ -11,6 +11,8 @@ from sqlalchemy import event, Engine
 from models import db, User, Role
 from routes.helpers import init_csrf_guard
 from utils.api_response import api_error
+from openvpn_monitor import openvpn_bp
+from extensions import limiter
 
 # 加载环境变量
 load_dotenv()
@@ -59,7 +61,6 @@ def optimize_sqlite_connection():
             cursor.execute("PRAGMA cache_size=-64000")
             cursor.execute("PRAGMA temp_store=MEMORY")
             cursor.close()
-
 
 def create_app():
     """
@@ -140,6 +141,7 @@ def create_app():
     csrf.init_app(app)
     db.init_app(app)
     login_manager.init_app(app)
+    limiter.init_app(app)
 
     # 启用 SQLite WAL 优化
     optimize_sqlite_connection()
@@ -208,7 +210,7 @@ def create_app():
         revoke_client_bp, uninstall_bp, download_client_bp,
         modify_client_expiry_bp, enable_client_bp, ip_bp,
         user_bp, add_users_bp, delete_user_bp, status_bp,
-        restart_openvpn_bp, client_groups_bp  # 新增用户组蓝图
+        restart_openvpn_bp, client_groups_bp
     ]
     
     for bp in json_blueprints:
@@ -231,7 +233,8 @@ def create_app():
     app.register_blueprint(status_bp)
     app.register_blueprint(restart_openvpn_bp)
     app.register_blueprint(api_bp)
-    app.register_blueprint(client_groups_bp)  # 注册用户组蓝图
+    app.register_blueprint(client_groups_bp)
+    app.register_blueprint(openvpn_bp)
 
     return app
 

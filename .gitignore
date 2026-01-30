@@ -4,3 +4,4 @@ venv/
 flask_session/
 vpn_users.db
 resource/openvpn-2.6.14/
+cookies.txt

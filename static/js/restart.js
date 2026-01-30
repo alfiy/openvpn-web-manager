@@ -2,12 +2,13 @@
  * restart openvpn service
  */
 import { qs,authFetch } from './utils.js'
+import { refreshPage } from './refresh.js';
 
 export function bindRestart(){
     const restartBtn = qs('#restart-btn');
     if (restartBtn) {
         restartBtn.addEventListener('click', async () => {
-            console.log('in restart btn js');
+            // console.log('in restart btn js');
             const restartBtnText = restartBtn.innerHTML;
             restartBtn.disabled = true;
             restartBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在重启...';

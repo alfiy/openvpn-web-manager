@@ -13,7 +13,7 @@ let groupDetailsModal = null;
 let addMemberModal = null;
 
 let currentGroupId = null;
-let allClients = []; // 缓存所有客户端列表
+
 
 // ========== 分页状态 ==========
 let groupsDataCache = []; // 缓存所有用户组数据
@@ -463,34 +463,37 @@ function renderMembersList(members, groupId) {
 // ========== 打开添加成员模态框 ==========
 async function openAddMemberModal() {
     try {
-        // 加载所有客户端
-        const clientsData = await authFetch('/clients/data?page=1');
-        allClients = clientsData.clients;
-        
-        // 过滤出未分组的客户端
-        const ungroupedClients = allClients.filter(c => !c.group_id);
-        
+        // ✅ 只从后端获取“未分组客户端”
+        const data = await authFetch('/api/clients/unassigned');
+
+        if (data.code !== 0) {
+            showCustomMessage(data.msg || '加载客户端列表失败');
+            return;
+        }
+
+        const ungroupedClients = data.data.clients || [];
         const select = qs('#clientSelect');
         if (!select) return;
-        
+
         select.innerHTML = '<option value="">-- 选择客户端 --</option>';
-        
+
         if (ungroupedClients.length === 0) {
             select.innerHTML += '<option disabled>没有可用的客户端</option>';
             showCustomMessage('所有客户端都已分组');
             return;
         }
-        
+
         ungroupedClients.forEach(client => {
             const option = document.createElement('option');
             option.value = client.name;
-            option.textContent = `${client.name}${client.description ? ' (' + client.description + ')' : ''}`;
+            option.textContent =
+                `${client.name}${client.description ? ' (' + client.description + ')' : ''}`;
             select.appendChild(option);
         });
-        
+
         const addMemberMessage = qs('#addMemberMessage');
         if (addMemberMessage) addMemberMessage.innerHTML = '';
-        
+
         if (addMemberModal) {
             addMemberModal.show();
         }
@@ -498,6 +501,7 @@ async function openAddMemberModal() {
         showCustomMessage('加载客户端列表失败: ' + error.message);
     }
 }
+
 
 // ========== 添加成员到用户组 ==========
 async function addMemberToGroup() {

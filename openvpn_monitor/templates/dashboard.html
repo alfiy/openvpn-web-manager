@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenVPN 监控系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status-indicator.online {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-indicator.offline {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-dot.online {
+            background: #10b981;
+        }
+
+        .status-dot.offline {
+            background: #ef4444;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #64748b;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #2563eb;
+            transition: width 0.3s ease;
+        }
+
+        .progress-fill.warning {
+            background: #f59e0b;
+        }
+
+        .progress-fill.danger {
+            background: #ef4444;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-secondary {
+            background: #64748b;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #475569;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .bandwidth-control {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .input-group label {
+            font-size: 14px;
+            color: #475569;
+            font-weight: 500;
+        }
+
+        .input-group input {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+
+        .client-list {
+            margin-top: 15px;
+        }
+
+        .client-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .client-info {
+            flex: 1;
+        }
+
+        .client-name {
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .client-address {
+            font-size: 12px;
+            color: #64748b;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .client-traffic {
+            font-size: 12px;
+            color: #64748b;
+            margin-right: 10px;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .bandwidth-control {
+                grid-template-columns: 1fr;
+            }
+
+            .client-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔒 OpenVPN 监控系统</h1>
+        </header>
+
+        <!-- 服务状态和控制 -->
+        <div class="grid">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">OpenVPN 状态</div>
+                    <div class="status-indicator" id="service-status">
+                        <span class="status-dot"></span>
+                        <span>检查中...</span>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="controlService('start')">启动服务</button>
+                    <button class="btn btn-danger" onclick="controlService('stop')">停止服务</button>
+                    <button class="btn btn-secondary" onclick="controlService('restart')">重启服务</button>
+                </div>
+                <div id="service-message"></div>
+            </div>
+
+            <!-- 系统资源监控 -->
+            <div class="card">
+                <div class="card-title">CPU 使用率</div>
+                <div class="stat-value" id="cpu-value">0%</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="cpu-progress"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">内存使用率</div>
+                <div class="stat-value" id="memory-value">0%</div>
+                <div class="stat-label" id="memory-detail">0 GB / 0 GB</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="memory-progress"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">磁盘使用率</div>
+                <div class="stat-value" id="disk-value">0%</div>
+                <div class="stat-label" id="disk-detail">0 GB / 0 GB</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="disk-progress"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 网络限速控制 -->
+        <div class="card">
+            <div class="card-title">网络限速控制</div>
+            <div class="bandwidth-control">
+                <div class="input-group">
+                    <label>下载速度 (Mbps)</label>
+                    <input type="number" id="download-limit" min="1" max="100" value="10" step="1">
+                </div>
+                <div class="input-group">
+                    <label>上传速度 (Mbps)</label>
+                    <input type="number" id="upload-limit" min="1" max="100" value="10" step="1">
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="setBandwidthLimit()">应用限速</button>
+                <button class="btn btn-secondary" onclick="removeBandwidthLimit()">移除限速</button>
+            </div>
+            <div id="bandwidth-message"></div>
+        </div>
+
+        <!-- 客户端连接列表 -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">客户端连接</div>
+                <div class="stat-label" id="client-count">0 个在线</div>
+            </div>
+            <div class="client-list" id="client-list">
+                <div class="alert alert-info">暂无客户端连接</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let refreshInterval;
+
+        // 格式化字节
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 更新进度条
+        function updateProgress(elementId, percent) {
+            const progress = document.getElementById(elementId);
+            progress.style.width = percent + '%';
+            
+            // 根据百分比设置颜色
+            progress.className = 'progress-fill';
+            if (percent > 80) {
+                progress.classList.add('danger');
+            } else if (percent > 60) {
+                progress.classList.add('warning');
+            }
+        }
+
+        // 显示消息
+        function showMessage(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => {
+                element.innerHTML = '';
+            }, 5000);
+        }
+
+        // 刷新仪表板数据
+        async function refreshDashboard() {
+            try {
+                const response = await fetch('/openvpn/api/dashboard');
+                const data = await response.json();
+
+                // 更新服务状态
+                const statusElement = document.getElementById('service-status');
+                const isRunning = data.openvpn.status.running;
+                statusElement.className = `status-indicator ${isRunning ? 'online' : 'offline'}`;
+                statusElement.innerHTML = `
+                    <span class="status-dot ${isRunning ? 'online' : 'offline'}"></span>
+                    <span>${isRunning ? '运行中' : '已停止'}</span>
+                `;
+
+                // 更新系统资源
+                document.getElementById('cpu-value').textContent = data.system.cpu.toFixed(1) + '%';
+                updateProgress('cpu-progress', data.system.cpu);
+
+                const memPercent = data.system.memory.percent;
+                document.getElementById('memory-value').textContent = memPercent.toFixed(1) + '%';
+                document.getElementById('memory-detail').textContent = 
+                    `${data.system.memory.used.toFixed(1)} GB / ${data.system.memory.total.toFixed(1)} GB`;
+                updateProgress('memory-progress', memPercent);
+
+                const diskPercent = data.system.disk.percent;
+                document.getElementById('disk-value').textContent = diskPercent.toFixed(1) + '%';
+                document.getElementById('disk-detail').textContent = 
+                    `${data.system.disk.used.toFixed(1)} GB / ${data.system.disk.total.toFixed(1)} GB`;
+                updateProgress('disk-progress', diskPercent);
+
+                // 更新客户端列表
+                const clients = data.openvpn.clients;
+                document.getElementById('client-count').textContent = `${clients.length} 个在线`;
+                
+                const clientList = document.getElementById('client-list');
+                if (clients.length === 0) {
+                    clientList.innerHTML = '<div class="alert alert-info">暂无客户端连接</div>';
+                } else {
+                    clientList.innerHTML = clients.map(client => `
+                        <div class="client-item">
+                            <div class="client-info">
+                                <div class="client-name">${client.common_name}</div>
+                                <div class="client-address">${client.real_address}</div>
+                            </div>
+                            <div class="client-traffic">
+                                ↓ ${formatBytes(client.bytes_received)} | ↑ ${formatBytes(client.bytes_sent)}
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+            } catch (error) {
+                console.error('刷新数据失败:', error);
+            }
+        }
+
+        // 控制服务
+        async function controlService(action) {
+            try {
+                const response = await fetch(`/openvpn/api/service/${action}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                showMessage('service-message', result.message, result.success ? 'success' : 'error');
+                
+                if (result.success) {
+                    setTimeout(refreshDashboard, 1000);
+                }
+            } catch (error) {
+                showMessage('service-message', '操作失败: ' + error.message, 'error');
+            }
+        }
+
+        // 设置带宽限制
+        async function setBandwidthLimit() {
+            const download = document.getElementById('download-limit').value;
+            const upload = document.getElementById('upload-limit').value;
+
+            try {
+                const response = await fetch('/openvpn/api/bandwidth/limit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        download: parseFloat(download),
+                        upload: parseFloat(upload)
+                    })
+                });
+                const result = await response.json();
+                
+                showMessage('bandwidth-message', result.message, result.success ? 'success' : 'error');
+            } catch (error) {
+                showMessage('bandwidth-message', '设置失败: ' + error.message, 'error');
+            }
+        }
+
+        // 移除带宽限制
+        async function removeBandwidthLimit() {
+            try {
+                const response = await fetch('/openvpn/api/bandwidth/limit', {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+                
+                showMessage('bandwidth-message', result.message, result.success ? 'success' : 'error');
+            } catch (error) {
+                showMessage('bandwidth-message', '移除失败: ' + error.message, 'error');
+            }
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshDashboard();
+            refreshInterval = setInterval(refreshDashboard, 5000);
+        });
+    </script>
+</body>
+</html>

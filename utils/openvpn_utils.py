@@ -29,42 +29,6 @@ class OnlineClient(NamedTuple):
 _last_check: float = 0
 _cache: Dict[str, OnlineClient] = {}
 
-# def check_openvpn_status():
-#     """
-#     检查 OpenVPN 服务状态并返回 'running', 'installed', 或 'not_installed'。
-#     此函数会使用 sudo 确保在普通用户环境下也能正常工作。
-#     """
-#     service_name = 'openvpn@server.service'
-#     config_path = '/etc/openvpn/server.conf'
-
-#     try:
-#         # --- 1. 检查运行状态:使用 systemctl is-active 的返回码 ---
-#         result_active = subprocess.run(
-#             ['sudo', 'systemctl', 'is-active', '--quiet', service_name],
-#             check=False  # 不抛出异常
-#         )
-#         if result_active.returncode == 0:
-#             return 'running'
-
-#         # --- 2. 检查安装状态:直接检查配置文件是否存在 ---
-#         # 使用 os.path.exists() 是最安全、最简洁的方法,且不依赖外部命令。
-#         # 但如果必须使用 sudo,subprocess.run + test -e 也是可行的。
-#         # 这里为了保持和原来风格一致,仍使用subprocess.run。
-#         result_config = subprocess.run(
-#             ['sudo', 'test', '-e', config_path],
-#             check=False
-#         )
-#         if result_config.returncode == 0:
-#             return 'installed'
-
-#         # --- 3. 未找到任何状态 ---
-#         return 'not_installed'
-    
-#     except FileNotFoundError:
-#         # 捕获当 'sudo' 或 'systemctl' 命令本身不存在时的情况
-#         return 'error: required command not found'
-#     except Exception as e:
-#         return f'error: {str(e)}'
 
 def check_openvpn_status():
     """

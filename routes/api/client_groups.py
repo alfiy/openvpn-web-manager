@@ -226,7 +226,11 @@ def add_group_member(group_id):
             return api_error(f'客户端已在 "{group.name}" 组中')
         
         # 如果客户端已在其他组，先移出
-        old_group_id = client.group_id
+        if client.group_id is not None:
+            return api_error(
+                f'客户端 "{client.name}" 已属于其他用户组，请先移除后再添加'
+            )
+
         client.group_id = group_id
         db.session.commit()
         
@@ -320,6 +324,17 @@ def get_group_members(group_id):
         logger.error(f"获取用户组成员失败: {str(e)}")
         return api_error(f'获取用户组成员失败: {str(e)}')
 
+# ==================== 未分组客户端 ====================
+@client_groups_bp.route('/api/clients/unassigned', methods=['GET'])
+@login_required
+def get_unassigned_clients():
+    clients = Client.query.filter(Client.group_id.is_(None)).all()
+    return api_success({
+        'clients': [
+            {'id': c.id, 'name': c.name}
+            for c in clients
+        ]
+    })
 
 # ==================== 辅助函数 ====================
 def validate_rate_format(rate_str):

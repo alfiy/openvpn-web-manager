@@ -7,9 +7,7 @@
     <meta name="csrf-token" content="{{ csrf_token }}">
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet"
-        href="{{ url_for('static', filename='vendor/fontawesome-6.5.1/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fontawesome-6.5.1/css/all.min.css') }}">
 
     <style>
         .status-indicator {
@@ -42,6 +40,53 @@
             overflow-y: auto;
         }
 
+        /* 状态指示器样式 */
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .status-running {
+            background-color: #28a745;
+            box-shadow: 0 0 4px #28a745;
+        }
+
+        .status-installed {
+            background-color: #ffc107;
+            box-shadow: 0 0 4px #ffc107;
+        }
+
+        .status-not-installed {
+            background-color: #6c757d;
+        }
+
+        .status-unknown {
+            background-color: #dc3545;
+        }
+
+        /* 系统监控卡片统一样式 */
+        #status-card-section .card.shadow-sm {
+            border: 1px solid rgba(0,0,0,0.08);
+            transition: box-shadow 0.2s;
+        }
+
+        #status-card-section .card.shadow-sm:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+        }
+
+        /* 进度条样式 */
+        .progress {
+            background-color: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            transition: width 0.6s ease;
+        }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -68,23 +113,131 @@
             </div>
         </header>
 
+        <!-- 系统监控区域 -->
         <section class="row mb-4" id="status-card-section">
             <div class="col-12">
                 <div class="card">
-                    <header class="card-header">
+                    <!-- 卡片标题：系统监控 -->
+                    <header class="card-header bg-light">
                         <h5 class="mb-0">
-                            <i class="fa-solid fa-signal me-2 text-success"></i>
-                            OpenVPN 状态
+                            <i class="fa-solid fa-chart-line me-2 text-primary"></i>
+                            系统监控
                         </h5>
                     </header>
+                    
                     <div class="card-body">
-                        <p id="openvpn-status-body"> <i class="fa-solid fa-spinner fa-spin me-2"></i>正在加载OpenVPN状态...</p>
-                        <div id="openvpn-status-actions"></div>
-                        <p><div id="status-message" class="alert alert-info d-none" role="alert"></div></p>
+                        <div class="row">
+                            <!-- OpenVPN 状态卡片（恢复原来的样式） -->
+                            <div class="col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+                                        <h6 class="text-muted mb-3">
+                                            <i class="fa-solid fa-signal me-1 text-success"></i>
+                                            OpenVPN 状态
+                                        </h6>
+                                        
+                                        <!-- 恢复原来的状态显示结构 -->
+                                        <div id="openvpn-status-container">
+                                            <p id="openvpn-status-body" class="mb-3">
+                                                <i class="fa-solid fa-spinner fa-spin me-2"></i>
+                                                正在加载OpenVPN状态...
+                                            </p>
+                                            <div id="openvpn-status-actions" class="mb-2"></div>
+                                            <div id="status-message" class="alert alert-info d-none" role="alert"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- CPU 使用率卡片 -->
+                            <div class="col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+
+                                        <div class="d-flex align-items-center mb-3 text-muted">
+                                            <i class="fa-solid fa-microchip me-2 opacity-75"></i>
+                                            <h6 class="mb-0">CPU 使用率</h6>
+                                        </div>
+
+                                        <div class="d-flex align-items-end mb-2">
+                                            <strong id="cpu-value" class="fs-3 text-dark">0%</strong>
+                                        </div>
+
+                                        <div class="progress" style="height: 8px;">
+                                            <div id="cpu-bar"
+                                                class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                                                style="width: 0%; min-width: 2px;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+
+                            <!-- 内存使用率卡片 -->
+                            <div class="col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+
+                                        <div class="d-flex align-items-center mb-3 text-muted">
+                                            <i class="fa-solid fa-memory me-2 opacity-75"></i>
+                                            <h6 class="mb-0">内存使用率</h6>
+                                        </div>
+
+                                        <div class="d-flex align-items-end mb-1">
+                                            <strong id="memory-value" class="fs-3 text-dark">0%</strong>
+                                        </div>
+
+                                        <div class="text-muted small mb-2" id="memory-detail">
+                                            - / -
+                                        </div>
+
+                                        <div class="progress" style="height: 8px;">
+                                            <div id="memory-progress"
+                                                class="progress-bar bg-primary"
+                                                style="width: 0%; min-width: 2px;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 磁盘使用率卡片 -->
+                            <div class="col-md-3">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body">
+
+                                        <div class="d-flex align-items-center mb-3 text-muted">
+                                            <i class="fa-solid fa-hard-drive me-2 opacity-75"></i>
+                                            <h6 class="mb-0">磁盘使用率</h6>
+                                        </div>
+
+                                        <div class="d-flex align-items-end mb-1">
+                                            <strong id="disk-usage" class="fs-6 text-dark">
+                                                -%
+                                            </strong>
+                                        </div>
+
+                                        <div class="text-muted small mb-2" id="disk-detail">
+                                            - / -
+                                        </div>
+
+                                        <div class="progress" style="height: 8px;">
+                                            <div id="disk-progress"
+                                                class="progress-bar bg-warning"
+                                                style="width: 0%; min-width: 2px;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
                     </div>
                 </div>
             </div>
         </section>
+
 
         {% if status in ['running', 'installed'] %}
         <section class="row g-4 mb-4">
@@ -417,6 +570,8 @@
         
         <script src="{{ url_for('static', filename='bootstrap/bootstrap.bundle.min.js') }}"></script>
         <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+        
     </div>
 </body>
 </html>

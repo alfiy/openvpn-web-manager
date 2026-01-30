@@ -32,7 +32,7 @@ def serialize_client(c: Client):
 def index():
     """首页，显示 OpenVPN 状态"""
     openvpn_status = check_openvpn_status()
-    print(f"DEBUG: OpenVPN status is: {openvpn_status}")
+    # print(f"DEBUG: OpenVPN status is: {openvpn_status}")
     return render_template('index.html', status=openvpn_status)
 
 # ---------- 网页客户端列表路由 ----------

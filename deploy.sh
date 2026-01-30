@@ -29,6 +29,7 @@ sudo rsync -av \
     --exclude 'deploy.sh' \
     --exclude 'deploy_with_tc.sh' \
     --exclude '*.md' \
+    --exclude 'tc_check.sh' \
     ./ "$APP_DIR/"
 echo "✓ 文件同步完成"
 
