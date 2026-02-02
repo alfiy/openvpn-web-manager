@@ -84,7 +84,7 @@ def create_client_group():
         # 导出 TC 配置
         export_tc_config()
         
-        logger.info(f"用户组创建成功: {name} (上行:{upload_rate}, 下行:{download_rate})")
+        # logger.info(f"用户组创建成功: {name} (上行:{upload_rate}, 下行:{download_rate})")
         return api_success(
             {'group': group.to_dict()},
             message=f'用户组 "{name}" 创建成功'
@@ -184,7 +184,7 @@ def delete_client_group(group_id):
         # 导出更新后的配置
         export_tc_config()
         
-        logger.info(f"用户组删除成功: {group_name}")
+        # logger.info(f"用户组删除成功: {group_name}")
         return api_success(
             message=f'用户组 "{group_name}" 已删除'
         )

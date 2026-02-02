@@ -94,7 +94,7 @@ def export_tc_config():
         with open(TC_ROLES_MAP_LOCAL, 'w') as f:
             f.write(roles_content)
         
-        logger.info(f"TC 配置已导出到本地备份: {TC_USERS_CONF_LOCAL} 和 {TC_ROLES_MAP_LOCAL}")
+        # logger.info(f"TC 配置已导出到本地备份: {TC_USERS_CONF_LOCAL} 和 {TC_ROLES_MAP_LOCAL}")
         
         # ========== 尝试写入系统目录（如果有权限）==========
         import subprocess
@@ -110,7 +110,7 @@ def export_tc_config():
                 timeout=5
             )
             if result.returncode == 0:
-                logger.info(f"✅ TC 用户配置已导出到系统: {TC_USERS_CONF_PATH}")
+                # logger.info(f"✅ TC 用户配置已导出到系统: {TC_USERS_CONF_PATH}")
                 success_count += 1
             else:
                 logger.warning(f"⚠️ 写入 {TC_USERS_CONF_PATH} 失败: {result.stderr.decode()}")
@@ -126,7 +126,7 @@ def export_tc_config():
                 timeout=5
             )
             if result.returncode == 0:
-                logger.info(f"✅ TC 角色映射已导出到系统: {TC_ROLES_MAP_PATH}")
+                # logger.info(f"✅ TC 角色映射已导出到系统: {TC_ROLES_MAP_PATH}")
                 success_count += 1
             else:
                 logger.warning(f"⚠️ 写入 {TC_ROLES_MAP_PATH} 失败: {result.stderr.decode()}")
