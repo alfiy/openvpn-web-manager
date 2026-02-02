@@ -205,7 +205,7 @@ def get_online_clients(status_file: str = None, cache_ttl: int = 10) -> Dict[str
         if cn == "UNDEF":
             continue
 
-        log_message(f"DEBUG  cn={cn}  conn_since={conn_since}")
+        # log_message(f"DEBUG  cn={cn}  conn_since={conn_since}")
 
         conn_dt = _parse_connected_since(conn_since)
 
@@ -213,7 +213,7 @@ def get_online_clients(status_file: str = None, cache_ttl: int = 10) -> Dict[str
             log_message(f"DEBUG  → conn_dt is None, skip")
             continue
         duration_sec = int((datetime.now(timezone.utc) - conn_dt).total_seconds())
-        log_message(f"DEBUG  → conn_dt={conn_dt}  duration_sec={duration_sec}")
+        # log_message(f"DEBUG  → conn_dt={conn_dt}  duration_sec={duration_sec}")
 
         real_ip = real_addr.split(":")[0] if ":" in real_addr else real_addr
 

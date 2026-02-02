@@ -277,9 +277,17 @@
                                 </span>
                                 <input type="text" id="client-search" class="form-control" placeholder="搜索客户端名称或描述信息后回车..."
                                     onfocus="this.value=''">
+                                <button class="btn btn-outline-success" type="button" id="filter-online-btn">
+                                    <i class="fa-solid fa-circle text-success me-1"></i>在线用户
+                                </button>
+                                <!-- 新增：显示全部按钮（筛选后显示） -->
+                                <button class="btn btn-outline-secondary" type="button" id="show-all-btn"
+                                    style="display: none;">
+                                    <i class="fa-solid fa-list me-1"></i>显示全部
+                                </button>
                             </div>
                         </div>
-
+        
                         <div class="table-responsive">
                             <table class="table table-hover" id="client-table">
                                 <thead>
@@ -295,7 +303,7 @@
                             </table>
                         </div>
                         <div id="client-revoke-msg" class="mt-2"></div>
-
+        
                         <nav aria-label="客户端分页导航">
                             <ul class="pagination pagination-sm justify-content-center" id="pagination"></ul>
                         </nav>

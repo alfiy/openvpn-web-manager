@@ -27,6 +27,8 @@ const elementsExist = tbody && paging && pageInfo && noData;
 // 全局变量当前页为第1页
 export let currentPage = 1;
 
+let showOnlyOnline = false;  // 是否只显示在线用户
+
 /* 统一渲染表格 */
 function render(data) {
     if (!elementsExist) {
@@ -35,15 +37,30 @@ function render(data) {
     }
 
     let clientsToRender = data.clients;
+
     if (userRole === 'USER') {
         clientsToRender = data.clients.filter(c => c.user_id === userId);
+    }
+
+    // ⭐ 新增：在线用户筛选
+    if (showOnlyOnline) {
+        clientsToRender = clientsToRender.filter(c => c.online === true);
     }
 
     if (!clientsToRender.length) {
         tbody.innerHTML = '';
         paging.innerHTML = '';
         noData.style.display = 'block';
-        noData.textContent = data.q ? `未找到与 "${data.q}" 相关的客户端。` : '没有客户端证书。';
+
+        // 根据状态显示不同的提示信息
+        if (showOnlyOnline) {
+            noData.textContent = '当前无客户端在线。';
+        } else if (data.q) {
+            noData.textContent = `未找到与 "${data.q}" 相关的客户端。`;
+        } else {
+            noData.textContent = '没有客户端证书。';
+        }
+
         pageInfo.textContent = '';
         return;
     }
@@ -390,6 +407,49 @@ export function bindClientEvents() {
     document.addEventListener('mousedown', markUserActive);
     document.addEventListener('keydown', markUserActive);
     document.addEventListener('scroll', markUserActive);
+
+    // ⭐ 新增：绑定在线用户筛选按钮
+    const filterOnlineBtn = document.getElementById('filter-online-btn');
+    const showAllBtn = document.getElementById('show-all-btn');
+
+    if (filterOnlineBtn) {
+        filterOnlineBtn.addEventListener('click', () => {
+            showOnlyOnline = true;
+            currentPage = 1;  // 重置到第一页
+            
+            // 切换按钮显示状态
+            filterOnlineBtn.style.display = 'none';
+            showAllBtn.style.display = 'block';
+            
+            // 更新搜索框提示
+            const searchInput = document.getElementById('client-search');
+            if (searchInput) {
+                searchInput.placeholder = '当前仅显示在线用户，点击"显示全部"查看所有客户端...';
+            }
+            
+            loadClients(currentPage, input ? input.value.trim() : '');
+        });
+    }
+
+    // ⭐ 新增：绑定显示全部按钮
+    if (showAllBtn) {
+        showAllBtn.addEventListener('click', () => {
+            showOnlyOnline = false;
+            currentPage = 1;  // 重置到第一页
+            
+            // 切换按钮显示状态
+            showAllBtn.style.display = 'none';
+            filterOnlineBtn.style.display = 'block';
+            
+            // 恢复搜索框提示
+            const searchInput = document.getElementById('client-search');
+            if (searchInput) {
+                searchInput.placeholder = '搜索客户端名称或描述信息后回车...';
+            }
+            
+            loadClients(currentPage, input ? input.value.trim() : '');
+        });
+    }
 
     if (input) {
         input.addEventListener('keydown', e => {
