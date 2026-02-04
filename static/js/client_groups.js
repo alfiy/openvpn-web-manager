@@ -20,6 +20,9 @@ let groupsDataCache = []; // 缓存所有用户组数据
 let currentPage = 1;
 const ITEMS_PER_PAGE = 3; // 每页显示3个
 
+// ⭐ 添加：是否需要强制刷新标志（用于客户端移动后的即时更新）
+let forceRefreshPending = false;
+
 // 🆕 工具函数：判断是否为默认用户组
 function isDefaultGroup(group) {
     // 优先检查 is_default 字段，如果不存在则通过名称判断
@@ -42,6 +45,152 @@ export function init() {
     bindGroupEvents();
 }
 
+
+// ⭐ 供外部调用的刷新接口 - 完全重新初始化
+export function refreshGroupsAfterClientMove() {
+    console.log('🔄 收到刷新请求，重新初始化用户组管理模块');
+    
+    // 延迟执行，确保后端事务提交
+    setTimeout(() => {
+        // ⭐ 清空缓存，强制重新加载
+        groupsDataCache = [];
+        currentPage = 1;
+        
+        // 如果详情模态框打开，先关闭它
+        if (groupDetailsModal) {
+            const modalEl = qs('#groupDetailsModal');
+            if (modalEl && modalEl.classList.contains('show')) {
+                groupDetailsModal.hide();
+            }
+        }
+        
+        // 重新加载数据
+        loadClientGroups(true);
+        
+    }, 300);
+}
+
+// ========== 加载用户组列表 ==========
+async function loadClientGroups(force = false) {
+    try {
+        // 如果详情页打开，刷新成员列表
+        if (currentGroupId) {
+            const modalEl = qs('#groupDetailsModal');
+            if (modalEl && modalEl.classList.contains('show')) {
+                await loadGroupMembers(currentGroupId);
+            }
+        }
+
+        // ⭐ 添加时间戳，防止浏览器缓存
+        const timestamp = new Date().getTime();
+        const url = `/api/client_groups?_=${timestamp}`;
+        
+        console.log('📡 请求用户组数据:', url);
+        
+        const response = await authFetch(url);
+        
+        if (response.code === 0) {
+            const newGroups = response.data.groups || [];
+            console.log('✅ 获取到用户组数据:', newGroups.map(g => `${g.name}:${g.client_count}`).join(', '));
+            
+            groupsDataCache = newGroups;
+            renderGroupsCards();
+        } else {
+            showCustomMessage(response.msg || '加载用户组失败');
+        }
+    } catch (error) {
+        console.error('❌ 加载用户组失败:', error);
+        showCustomMessage(`加载用户组失败: ${error.message}`);
+    }
+}
+
+
+// ========== 渲染用户组卡片 ==========
+function renderGroupsCards() {
+    const container = qs('#groupsContainer');
+    const placeholder = qs('#noGroupsPlaceholder');
+    const paginationNav = qs('#groupsPagination');
+    
+    if (!container) return;
+    
+    if (!groupsDataCache || groupsDataCache.length === 0) {
+        if (placeholder) placeholder.style.display = 'block';
+        container.innerHTML = '';
+        if (paginationNav) paginationNav.style.display = 'none';
+        return;
+    }
+    
+    if (placeholder) placeholder.style.display = 'none';
+    
+    const totalItems = groupsDataCache.length;
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+    
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+    
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const currentGroups = groupsDataCache.slice(startIndex, endIndex);
+    
+    // ⭐ 清空并重新渲染
+    container.innerHTML = currentGroups.map(group => {
+        const isDefault = isDefaultGroup(group);
+        
+        const deleteButton = isDefault ? '' : 
+            `<button class="btn btn-sm btn-danger ms-2 flex-shrink-0 deleteGroupBtn" data-group-id="${group.id}" title="删除">
+                <i class="fa fa-trash"></i>
+             </button>`;
+        
+        const defaultBadge = isDefault ? '<span class="badge bg-info ms-1">默认</span>' : '';
+        
+        return `
+            <div class="col-md-4 group-card-wrapper" data-group-id="${group.id}">
+                <div class="card group-card h-100">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+                        <div class="overflow-hidden">
+                            <h6 class="mb-0 text-truncate" title="${escapeHtml(group.name)}">
+                                ${escapeHtml(group.name)}${defaultBadge}
+                            </h6>
+                            <small class="text-light text-truncate d-block" title="${escapeHtml(group.description || '无描述')}">
+                                ${escapeHtml(group.description || '无描述')}
+                            </small>
+                        </div>
+                        ${deleteButton}
+                    </div>
+                    <div class="card-body py-2">
+                        <div class="row text-sm">
+                            <div class="col-6">
+                                <div class="text-success text-truncate">
+                                    <i class="fa fa-arrow-up"></i> ${escapeHtml(group.upload_rate)}
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-info text-truncate">
+                                    <i class="fa fa-arrow-down"></i> ${escapeHtml(group.download_rate)}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="fa fa-users"></i> 成员: <strong class="client-count-badge text-primary">${group.client_count || 0}</strong>
+                            </small>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-light py-2">
+                        <button class="btn btn-sm btn-outline-primary w-100 viewGroupBtn" data-group-id="${group.id}" data-is-default="${isDefault}">
+                            <i class="fa fa-eye"></i> 查看详情
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    updatePagination(totalPages);
+    console.log(`✅ 渲染完成: ${currentGroups.length} 个用户组`);
+}
+
+
 // ========== 初始化 Bootstrap Modal ==========
 function initializeModals() {
     try {
@@ -57,116 +206,6 @@ function initializeModals() {
     }
 }
 
-// ========== 加载用户组列表 ==========
-async function loadClientGroups() {
-    try {
-        const data = await authFetch('/api/client_groups');
-        
-        if (data.code === 0) {
-            groupsDataCache = data.data.groups || [];
-            currentPage = 1; // 重置到第一页
-            renderGroupsCards();
-        } else {
-            showCustomMessage(data.msg || '加载用户组失败');
-        }
-    } catch (error) {
-        console.error('加载用户组失败:', error);
-        showCustomMessage(`加载用户组失败: ${error.message}`);
-    }
-}
-
-// ========== 渲染用户组卡片（支持分页）==========
-function renderGroupsCards() {
-    const container = qs('#groupsContainer');
-    const placeholder = qs('#noGroupsPlaceholder');
-    const paginationNav = qs('#groupsPagination');
-    
-    if (!container) return;
-    
-    // 无数据情况
-    if (!groupsDataCache || groupsDataCache.length === 0) {
-        if (placeholder) placeholder.style.display = 'block';
-        container.innerHTML = '';
-        if (paginationNav) paginationNav.style.display = 'none';
-        return;
-    }
-    
-    if (placeholder) placeholder.style.display = 'none';
-    
-    // 计算分页
-    const totalItems = groupsDataCache.length;
-    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
-    
-    // 确保当前页有效
-    if (currentPage > totalPages) currentPage = totalPages;
-    if (currentPage < 1) currentPage = 1;
-    
-    // 获取当前页数据
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    const currentGroups = groupsDataCache.slice(startIndex, endIndex);
-    
-    // 渲染卡片
-    container.innerHTML = currentGroups.map(group => {
-        // 🆕 判断是否为默认用户组
-        const isDefault = isDefaultGroup(group);
-        
-        // 🆕 判断是否为默认用户组，决定是否显示删除按钮
-        const deleteButton = isDefault
-            ? '' 
-            : `<button class="btn btn-sm btn-danger ms-2 flex-shrink-0 deleteGroupBtn" data-group-id="${group.id}" data-is-default="false" title="删除">
-                   <i class="fa fa-trash"></i>
-               </button>`;
-        
-        // 🆕 添加默认用户组标识
-        const defaultBadge = isDefault
-            ? '<span class="badge bg-info ms-1">默认</span>' 
-            : '';
-        
-        return `
-            <div class="col-md-4">
-                <div class="card group-card h-100">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
-                        <div class="overflow-hidden">
-                            <h6 class="mb-0 text-truncate" title="${escapeHtml(group.name)}">
-                                ${escapeHtml(group.name)}${defaultBadge}
-                            </h6>
-                            <small class="text-light text-truncate d-block" title="${escapeHtml(group.description || '无描述')}">${escapeHtml(group.description || '无描述')}</small>
-                        </div>
-                        ${deleteButton}
-                    </div>
-                    <div class="card-body py-2">
-                        <div class="row text-sm">
-                            <div class="col-6">
-                                <div class="text-success text-truncate" title="上行: ${escapeHtml(group.upload_rate)}">
-                                    <i class="fa fa-arrow-up"></i> ${escapeHtml(group.upload_rate)}
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="text-info text-truncate" title="下行: ${escapeHtml(group.download_rate)}">
-                                    <i class="fa fa-arrow-down"></i> ${escapeHtml(group.download_rate)}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="mt-2">
-                            <small class="text-muted">
-                                <i class="fa fa-users"></i> 成员: <strong>${group.client_count || 0}</strong>
-                            </small>
-                        </div>
-                    </div>
-                    <div class="card-footer bg-light py-2">
-                        <button class="btn btn-sm btn-outline-primary w-100 viewGroupBtn" data-group-id="${group.id}" data-is-default="${isDefault}">
-                            <i class="fa fa-eye"></i> 查看详情
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
-    
-    // 更新分页显示
-    updatePagination(totalPages);
-}
 
 // ========== 更新分页控件 ==========
 function updatePagination(totalPages) {
@@ -580,7 +619,7 @@ async function addMemberToGroup() {
             setTimeout(() => {
                 if (addMemberModal) addMemberModal.hide();
                 loadGroupMembers(currentGroupId);
-                loadClientGroups();
+                loadClientGroups(); // 这会刷新卡片上的计数
             }, 1500);
         } else {
             if (messageDiv) {
@@ -612,7 +651,7 @@ async function removeMemberFromGroup(groupId, clientName) {
             if (data.code === 0) {
                 showCustomMessage('成员已移除');
                 loadGroupMembers(groupId);
-                loadClientGroups();
+                loadClientGroups(); // 这会刷新卡片上的计数
             } else {
                 showCustomMessage(data.msg || '移除失败', 'error');
             }
@@ -706,50 +745,6 @@ function deleteGroup(groupId, isDefault = false) {
         }
     });
 }
-
-// ========== 修改用户组 ==========
-function ensureModifyGroupModal() {
-    let modalEl = qs('#modifyGroupModal');
-    if (modalEl) return modalEl;
-
-    const html = `
-    <div class="modal fade" id="modifyGroupModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="fa-solid fa-layer-group me-2"></i>修改客户端用户组
-                    </h5>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="modifyGroupClientName">
-
-                    <div class="mb-3">
-                        <label class="form-label">客户端名称</label>
-                        <input class="form-control" id="modifyGroupClientDisplay" disabled>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">选择用户组</label>
-                        <select class="form-select" id="groupSelect">
-                            <option value="">加载中...</option>
-                        </select>
-                    </div>
-
-                    <div id="modifyGroupMessage"></div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-primary" id="confirmModifyGroup">
-                        <i class="fa fa-check me-1"></i>确认修改
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>`;
-    document.body.insertAdjacentHTML('beforeend', html);
-    return qs('#modifyGroupModal');
-}
-
 
 // ========== 辅助函数: HTML 转义 ==========
 function escapeHtml(text) {

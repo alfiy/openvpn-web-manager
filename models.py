@@ -4,6 +4,7 @@ from flask_login import UserMixin
 import enum
 import logging
 from datetime import datetime,timezone
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,25 @@ class Client(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
+    # 🆕 添加 to_dict 方法，用于序列化
+    def to_dict(self):
+        """将客户端对象序列化为字典"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'expiry': self.expiry.isoformat() if self.expiry else None,
+            'logical_expiry': self.logical_expiry.isoformat() if self.logical_expiry else None,
+            'online': self.online,
+            'disabled': self.disabled,
+            'vpn_ip': self.vpn_ip,
+            'real_ip': self.real_ip,
+            'duration': self.duration,
+            'group_id': self.group_id,
+            'group': self.group.name if self.group else None,  # 返回用户组名称
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 class ClientGroup(db.Model):
     """
@@ -108,33 +128,33 @@ class ClientGroup(db.Model):
         unique=True
     )
     
-    # 用户组描述
+   
     description = db.Column(db.String(255), nullable=True)
-    
-    # 上行速率（单位：Mbit，例如：5, 10, 20）
     upload_rate = db.Column(db.String(50), default="2Mbit", nullable=False)
-    
-    # 下行速率（单位：Mbit，例如：5, 10, 50）
     download_rate = db.Column(db.String(50), default="2Mbit", nullable=False)
-    
-    # 创建时间
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    
-    # 更新时间
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     
-    # 用户组的客户端关系（一对多）
     clients = db.relationship('Client', backref='group', lazy=True, cascade='save-update, merge')
     
     def to_dict(self):
         """序列化为字典"""
+        is_default = self.name.lower() == 'default'
+
+        client_count = (
+            db.session.query(func.count(Client.id))
+            .filter(Client.group_id == self.id)
+            .scalar()
+        )
+
         return {
             'id': self.id,
             'name': self.name,
             'description': self.description,
             'upload_rate': self.upload_rate,
             'download_rate': self.download_rate,
-            'client_count': len(self.clients),
+            'client_count': client_count,
+            'is_default': is_default, 
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

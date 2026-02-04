@@ -3,6 +3,8 @@
  */
 import { qs, qsa, showCustomConfirm, authFetch, toggleCustomDate } from './utils.js';
 import { setCurrentSearchQuery,markUserActive } from './refresh.js';
+import { refreshGroupsAfterClientMove } from './client_groups.js';
+
 
 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
@@ -35,6 +37,11 @@ function render(data) {
         console.warn("客户端管理DOM元素不存在,停止渲染。");
         return;
     }
+
+    // ⭐ 添加调试：查看第一个客户端的数据结构
+    // if (data.clients && data.clients.length > 0) {
+    //     console.log('第一个客户端数据:', data.clients[0]);
+    // }
 
     let clientsToRender = data.clients;
 
@@ -78,10 +85,12 @@ function render(data) {
             actionButtons.push(`<a href="/download_client/${c.name}" class="btn btn-sm btn-primary">下载配置</a>`);
 
             if (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') {
+                const currentGroupName = c.group || '未分组';
                 actionButtons.push(`
                     <button class="btn btn-sm btn-secondary modify-group-btn"
-                            data-client="${c.name}"
-                            data-current-group="${c.group || ''}">
+                            data-client="${c.name}"                                  
+                            data-current-group="${currentGroupName}"
+                            data-action="modify-group">
                         <i class="fa-solid fa-layer-group me-1"></i>用户组
                     </button>
                 `);
@@ -176,7 +185,7 @@ export function loadClients(page = currentPage, q = '') {
 }
 
 
-/* ⭐ 新增: 处理启用客户端的逻辑 */
+/* 处理启用客户端的逻辑 */
 async function handleEnableClient(clientName) {
     const msgDiv = qs('#client-revoke-msg');
     msgDiv.innerHTML = '';
@@ -188,7 +197,7 @@ async function handleEnableClient(clientName) {
             body: JSON.stringify({ client_name: clientName })
         });
 
-        // ⭐ 判断是否需要强制修改到期时间
+        // 判断是否需要强制修改到期时间
         if (data.status === 'require_expiry_update') {
             // 客户端已到期,强制弹出修改到期时间 Modal
             showForceExpiryUpdateModal(data.data);
@@ -211,7 +220,7 @@ async function handleEnableClient(clientName) {
 }
 
 
-/* ⭐ 新增: 显示强制修改到期时间的 Modal */
+/* 显示强制修改到期时间的 Modal */
 function showForceExpiryUpdateModal(data) {
     const clientName = data.client_name;
     const currentExpiry = data.current_expiry;
@@ -323,7 +332,7 @@ function showForceExpiryUpdateModal(data) {
 }
 
 
-/* ⭐ 新增: 提交强制修改到期时间 */
+/* 提交强制修改到期时间 */
 async function submitForceExpiryUpdate() {
     const clientName = qs('#forceModalClientName').textContent;
     const loader = qs('#forceExpiryLoader');
@@ -409,68 +418,163 @@ async function submitForceExpiryUpdate() {
 }
 
 
-/* 绑定撤销客户端操作事件 */
+/* ------------------ 修改用户组 Modal ------------------ */
+function ensureModifyGroupModal() {
+    let modalEl = qs('#modifyGroupModal');
+
+    if (!modalEl) {
+        const modalHtml = `
+            <div class="modal fade" id="modifyGroupModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">修改用户组</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                        </div>
+                        <div class="modal-body">
+                            <!-- 客户端名称（只读） -->
+                            <div class="mb-3">
+                                <label class="form-label">客户端名称</label>
+                                <input type="text" id="modifyGroupClientName" class="form-control" readonly>
+                            </div>
+                            
+                            <!-- 当前分组（只读显示） -->
+                            <div class="mb-3">
+                                <label class="form-label">当前分组</label>
+                                <input type="text" id="modifyGroupCurrentGroup" class="form-control" readonly>
+                            </div>
+                            
+                            <!-- 移动到分组（下拉选择） -->
+                            <div class="mb-3">
+                                <label class="form-label">移动到分组</label>
+                                <select id="groupSelect" class="form-select">
+                                    <option value="">-- 未分组 --</option>
+                                </select>
+                            </div>
+                            
+                            <div id="modifyGroupMessage"></div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="button" class="btn btn-primary" id="confirmModifyGroup">
+                                <i class="fa fa-check"></i> 确认修改
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modalEl = qs('#modifyGroupModal');
+
+        // 绑定确认按钮事件
+        const btnConfirm = qs('#confirmModifyGroup');
+        const inputClientName = qs('#modifyGroupClientName');
+        const selectGroup = qs('#groupSelect');
+        const msgDiv = qs('#modifyGroupMessage');
+
+        if (btnConfirm && inputClientName && selectGroup && msgDiv) {
+            btnConfirm.addEventListener('click', async () => {
+                const clientName = inputClientName.value;
+                const group = selectGroup.value;
+
+                try {
+                    const data = await authFetch('/api/clients/modify_group', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json', 
+                            'X-CSRFToken': csrfToken 
+                        },
+                        body: JSON.stringify({ 
+                            client_name: clientName, 
+                            group: group
+                        })
+                    });
+
+                    const success = data.code === 0 || data.status === 'success';
+                    const cls = success ? 'alert-success' : 'alert-danger';
+                    const message = data.msg || data.message || (success ? '操作成功' : '操作失败');
+                    
+                    msgDiv.innerHTML = `<div class="alert ${cls}">${message}</div>`;
+
+                    if (success) {
+                        setTimeout(() => {
+                            const modalIns = bootstrap.Modal.getInstance(modalEl);
+                            if (modalIns) modalIns.hide();
+                            
+                            // 刷新客户端列表
+                            loadClients();
+                            
+                            // ⭐ 关键：触发用户组管理选项卡刷新
+                            refreshGroupsAfterClientMove();
+                            
+                            msgDiv.innerHTML = '';
+                        }, 1000);
+                    }
+                } catch (err) {
+                    msgDiv.innerHTML = `<div class="alert alert-danger">操作失败: ${err.message || err}</div>`;
+                }
+            });
+        } else {
+            console.error('修改用户组 Modal 内部元素不存在!');
+        }
+    }
+
+    return modalEl;
+}
+
+
+/* 绑定客户端操作事件 */
 export function bindClientEvents() {
-   
+    // 全局标记用户活跃
     document.addEventListener('mousedown', markUserActive);
     document.addEventListener('keydown', markUserActive);
     document.addEventListener('scroll', markUserActive);
 
-    // ⭐ 新增：绑定在线用户筛选按钮
-    const filterOnlineBtn = document.getElementById('filter-online-btn');
-    const showAllBtn = document.getElementById('show-all-btn');
+    // 在线/显示全部切换按钮
+    const filterOnlineBtn = qs('#filter-online-btn');
+    const showAllBtn = qs('#show-all-btn');
 
     if (filterOnlineBtn) {
         filterOnlineBtn.addEventListener('click', () => {
             showOnlyOnline = true;
-            currentPage = 1;  // 重置到第一页
-            
-            // 切换按钮显示状态
+            currentPage = 1;
+
             filterOnlineBtn.style.display = 'none';
             showAllBtn.style.display = 'block';
-            
-            // 更新搜索框提示
-            const searchInput = document.getElementById('client-search');
-            if (searchInput) {
-                searchInput.placeholder = '当前仅显示在线用户，点击"显示全部"查看所有客户端...';
-            }
-            
+
+            if (input) input.placeholder = '当前仅显示在线用户，点击"显示全部"查看所有客户端...';
             loadClients(currentPage, input ? input.value.trim() : '');
         });
     }
 
-    // ⭐ 新增：绑定显示全部按钮
     if (showAllBtn) {
         showAllBtn.addEventListener('click', () => {
             showOnlyOnline = false;
-            currentPage = 1;  // 重置到第一页
-            
-            // 切换按钮显示状态
+            currentPage = 1;
+
             showAllBtn.style.display = 'none';
             filterOnlineBtn.style.display = 'block';
-            
-            // 恢复搜索框提示
-            const searchInput = document.getElementById('client-search');
-            if (searchInput) {
-                searchInput.placeholder = '搜索客户端名称或描述信息后回车...';
-            }
-            
+
+            if (input) input.placeholder = '搜索客户端名称或描述信息后回车...';
             loadClients(currentPage, input ? input.value.trim() : '');
         });
     }
 
+    // 搜索框回车
     if (input) {
         input.addEventListener('keydown', e => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 const q = input.value.trim();
-                currentPage = 1; // 搜索从第一页
-                setCurrentSearchQuery(q); // 通知 refresh.js
+                currentPage = 1;
+                setCurrentSearchQuery(q);
                 loadClients(1, q);
             }
         });
     }
 
+    // 分页
     if (paging) {
         paging.addEventListener('click', e => {
             if (e.target.classList.contains('page-link')) {
@@ -483,37 +587,92 @@ export function bindClientEvents() {
 
     const msgDiv = qs('#client-revoke-msg');
 
+    // 统一处理客户端按钮点击事件
     document.body.addEventListener('click', async e => {
-        const targetBtn = e.target.closest('.revoke-btn, .disconnect-btn, .enable-btn');
-        if (!targetBtn) return;
+        const btn = e.target.closest('[data-action], .revoke-btn, .disconnect-btn, .enable-btn, .modify-group-btn');
+        if (!btn) return;
 
-        const clientName = targetBtn.dataset.client;
-        let url = '';
-        let confirmMessage = '';
+        const clientName = btn.dataset.client;
 
-        // ⭐ 修改: 启用按钮单独处理
-        if (targetBtn.classList.contains('enable-btn')) {
-            showCustomConfirm(`确认要重新启用客户端 "${clientName}" 吗?`, (confirmed) => {
-                if (confirmed) {
-                    handleEnableClient(clientName);
-                }
-            });
-            return; // ⭐ 提前返回,不继续执行下面的逻辑
+
+        // 在 bindClientEvents 函数中的用户组按钮点击处理
+        if (btn.classList.contains('modify-group-btn')) {
+            // 获取当前分组，如果是"未分组"则显示为"未分组"
+            let currentGroup = btn.dataset.currentGroup || '';
+            if (currentGroup === '未分组' || currentGroup === '') {
+                currentGroup = '未分组';
+            }
+            
+            const modalEl = ensureModifyGroupModal();
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+            // 设置客户端名称
+            qs('#modifyGroupClientName').value = clientName;
+            
+            // 设置当前分组显示
+            const currentGroupInput = qs('#modifyGroupCurrentGroup');
+            if (currentGroupInput) {
+                currentGroupInput.value = currentGroup;
+            }
+            
+            qs('#modifyGroupMessage').innerHTML = '';
+
+            const select = qs('#groupSelect');
+            select.innerHTML = '<option value="">-- 未分组 --</option>';
+
+            try {
+                // 获取所有用户组列表
+                const data = await authFetch('/api/client_groups');
+                const groups = data.data?.groups || [];
+                
+                groups.forEach(g => {
+                    const option = document.createElement('option');
+                    option.value = g.name;
+                    
+                    // 如果该组是当前分组，在下拉框中标记但不选中
+                    if (g.name === currentGroup || (currentGroup === '未分组' && g.name === btn.dataset.currentGroup)) {
+                        option.textContent = `${g.name} (当前)`;
+                        option.disabled = true; // 禁用当前分组选项，防止重复选择
+                    } else {
+                        option.textContent = g.name;
+                    }
+                    select.appendChild(option);
+                });
+                
+                modal.show();
+            } catch (err) {
+                console.error('加载用户组失败:', err);
+                select.innerHTML = '<option value="">加载失败</option>';
+                showCustomMessage('加载用户组列表失败', 'error');
+            }
+            return;
         }
 
-        if (targetBtn.classList.contains('revoke-btn')) {
+        // ---------------- 启用客户端 ----------------
+        if (btn.classList.contains('enable-btn')) {
+            showCustomConfirm(`确认要重新启用客户端 "${clientName}" 吗?`, (confirmed) => {
+                if (confirmed) handleEnableClient(clientName);
+            });
+            return;
+        }
+
+        // ---------------- 禁用/撤销 ----------------
+        let url = '', confirmMessage = '';
+
+        if (btn.classList.contains('revoke-btn')) {
             url = '/api/clients/revoke';
             confirmMessage = `确定撤销客户端 "${clientName}" 的证书吗?此操作不可恢复!`;
-        } else if (targetBtn.classList.contains('disconnect-btn')) {
+        } else if (btn.classList.contains('disconnect-btn')) {
             url = '/api/clients/disable';
             confirmMessage = `确认要禁用客户端 "${clientName}" 吗?`;
+        } else {
+            return;
         }
 
         showCustomConfirm(confirmMessage, async (confirmed) => {
             if (!confirmed) return;
 
             msgDiv.innerHTML = '';
-
             try {
                 const data = await authFetch(url, {
                     method: 'POST',
@@ -524,12 +683,10 @@ export function bindClientEvents() {
                 const success = data.code === 0;
                 const message = (data.data && data.data.message) || data.msg || '操作完成';
                 const cls = success ? 'alert-success' : 'alert-danger';
-
                 msgDiv.innerHTML = `<div class="alert ${cls}">${message}</div>`;
 
                 setTimeout(() => { msgDiv.innerHTML = ''; }, success ? 2000 : 3000);
-
-                if (success) loadClients?.();
+                if (success) loadClients();
 
             } catch (err) {
                 msgDiv.innerHTML = `<div class="alert alert-danger">请求失败:${err}</div>`;
@@ -537,40 +694,8 @@ export function bindClientEvents() {
             }
         });
     });
-
-    // 修改用户组监听
-    document.body.addEventListener('click', async e => {
-        const btn = e.target.closest('.modify-group-btn');
-        if (!btn) return;
-
-        const clientName = btn.dataset.client;
-        const currentGroup = btn.dataset.currentGroup || '';
-
-        const modalEl = ensureModifyGroupModal();
-        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-
-        qs('#modifyGroupClientName').value = clientName;
-        qs('#modifyGroupClientDisplay').value = clientName;
-        qs('#modifyGroupMessage').innerHTML = '';
-
-        const select = qs('#groupSelect');
-        select.innerHTML = '<option value="">加载中...</option>';
-
-        try {
-            // ⭐ 从后端获取用户组列表（动态支持新增）
-            const data = await authFetch('/api/user-groups');
-
-            select.innerHTML = data.groups.map(g =>
-                `<option value="${g}" ${g === currentGroup ? 'selected' : ''}>${g}</option>`
-            ).join('');
-
-            modal.show();
-        } catch (err) {
-            select.innerHTML = '<option value="">加载失败</option>';
-        }
-    });
-
 }
+
 
 
 // 绑定添加客户端事件

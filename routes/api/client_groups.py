@@ -16,17 +16,57 @@ client_groups_bp = Blueprint('client_groups', __name__)
 
 
 # ==================== 获取所有用户组 ====================
+# @client_groups_bp.route('/api/client_groups', methods=['GET'])
+# @login_required
+# def get_client_groups():
+#     """获取所有用户组列表"""
+#     try:
+#         groups = ClientGroup.query.all()
+#         data = {
+#             'groups': [group.to_dict() for group in groups],
+#             'total': len(groups)
+#         }
+#         return api_success(data)
+#     except Exception as e:
+#         logger.error(f"获取用户组列表失败: {str(e)}")
+#         return api_error(f"获取用户组列表失败: {str(e)}")
+
+# ==================== 获取所有用户组 ====================
 @client_groups_bp.route('/api/client_groups', methods=['GET'])
 @login_required
 def get_client_groups():
     """获取所有用户组列表"""
     try:
+        # ⭐ 最彻底的方式：关闭当前会话，强制全新查询
+        db.session.close()
+        
+        # 重新查询所有组
         groups = ClientGroup.query.all()
-        data = {
-            'groups': [group.to_dict() for group in groups],
-            'total': len(groups)
-        }
-        return api_success(data)
+        
+        # ⭐ 关键：强制重新加载每个组的 clients 关联
+        result = []
+        for group in groups:
+            # 强制刷新组对象
+            db.session.refresh(group)
+            
+            # ⭐ 关键：显式查询该组的客户端数量（完全绕过缓存）
+            count = db.session.query(Client).filter_by(group_id=group.id).count()
+            
+            result.append({
+                'id': group.id,
+                'name': group.name,
+                'description': group.description,
+                'upload_rate': group.upload_rate,
+                'download_rate': group.download_rate,
+                'is_default': group.name.lower() == 'default',
+                'client_count': count,  # 使用显式查询的计数
+                'created_at': group.created_at.isoformat() if group.created_at else None
+            })
+        
+        return api_success({
+            'groups': result,
+            'total': len(result)
+        })
     except Exception as e:
         logger.error(f"获取用户组列表失败: {str(e)}")
         return api_error(f"获取用户组列表失败: {str(e)}")
@@ -324,6 +364,75 @@ def get_group_members(group_id):
         logger.error(f"获取用户组成员失败: {str(e)}")
         return api_error(f'获取用户组成员失败: {str(e)}')
 
+# ==================== 修改客户端所属用户组 ====================
+@client_groups_bp.route('/api/clients/modify_group', methods=['POST'])
+@login_required
+@role_required([Role.ADMIN, Role.SUPER_ADMIN])
+def modify_client_group():
+    """
+    修改客户端所属的用户组
+    请求体：
+    {
+        "client_name": "client_001",
+        "group": "普通用户组"  // 空字符串或 null 表示移出分组
+    }
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        client_name = (data.get('client_name') or '').strip()
+        group_name = data.get('group')
+        
+        if not client_name:
+            return api_error('客户端名称不能为空')
+        
+        # 查找客户端
+        client = Client.query.filter_by(name=client_name).first()
+        if not client:
+            return api_error(f'客户端 "{client_name}" 不存在')
+        
+        # 如果 group 为空字符串或 null，表示移出分组
+        if not group_name or group_name.strip() == '':
+            old_group_name = client.group.name if client.group else '无'
+            client.group_id = None
+            db.session.commit()
+            export_tc_config()
+            
+            logger.info(f"客户端 {client_name} 从用户组 {old_group_name} 移出")
+            return api_success(
+                {'client': client.to_dict()},
+                message=f'客户端 "{client_name}" 已移出用户组'
+            )
+        
+        # 查找目标用户组
+        group_name = group_name.strip()
+        group = ClientGroup.query.filter_by(name=group_name).first()
+        if not group:
+            return api_error(f'用户组 "{group_name}" 不存在')
+        
+        # 检查是否已经在该组
+        if client.group_id == group.id:
+            return api_error(f'客户端已在 "{group_name}" 组中')
+        
+        # 更新用户组
+        old_group_name = client.group.name if client.group else '无'
+        client.group_id = group.id
+        db.session.commit()
+        
+        # 导出配置
+        export_tc_config()
+        
+        logger.info(f"客户端 {client_name} 从 {old_group_name} 移动到 {group_name}")
+        return api_success(
+            {'client': client.to_dict()},
+            message=f'客户端 "{client_name}" 已移动到 "{group_name}"'
+        )
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"修改客户端用户组失败: {str(e)}")
+        return api_error(f'修改用户组失败: {str(e)}')
+    
+    
 # ==================== 未分组客户端 ====================
 @client_groups_bp.route('/api/clients/unassigned', methods=['GET'])
 @login_required

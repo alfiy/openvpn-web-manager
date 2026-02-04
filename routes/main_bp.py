@@ -23,7 +23,9 @@ def serialize_client(c: Client):
         "real_ip": c.real_ip,
         "duration": c.duration,
         # 前端显示 expiry = logical_expiry
-        "expiry": c.logical_expiry.strftime('%Y-%m-%d %H:%M:%S') if c.logical_expiry else None
+        "expiry": c.logical_expiry.strftime('%Y-%m-%d %H:%M:%S') if c.logical_expiry else None,
+        "group": c.group.name if c.group else None,
+        "group_id": c.group_id,
     }
 
 # ---------- 首页路由 ----------

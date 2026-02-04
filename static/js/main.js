@@ -10,7 +10,7 @@ import { init as initClientManagement } from './clientManagement.js';
 // 从 userManagement.js 模块中导入统一的初始化函数
 import { init as initUserManagement } from './userManagement.js';
 // 从 clientGroupsManagement.js 模块中导入用户组管理函数
-import {init as initClientGroups} from './clientGroupsManagement.js';
+import {init as initClientGroups} from './client_groups.js';
 // 从 installUninstall.js 模块中导入统一的初始化函数
 import { init as initInstallUninstall } from './installUninstall.js';
 // 可以根据需要，为其他模块创建并导入 init 函数
