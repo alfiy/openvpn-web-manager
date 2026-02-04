@@ -89,8 +89,8 @@ class Client(db.Model):
     group_id = db.Column(db.Integer, db.ForeignKey('client_groups.id'), nullable=True)
     
     # ✅ 改进：添加创建时间和更新时间
-    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc), nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class ClientGroup(db.Model):
@@ -118,13 +118,13 @@ class ClientGroup(db.Model):
     download_rate = db.Column(db.String(50), default="2Mbit", nullable=False)
     
     # 创建时间
-    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     
     # 更新时间
-    updated_at = db.Column(db.DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc), nullable=False)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     
     # 用户组的客户端关系（一对多）
-    clients = db.relationship('Client', backref='group', lazy=True, cascade='all, delete-orphan')
+    clients = db.relationship('Client', backref='group', lazy=True, cascade='save-update, merge')
     
     def to_dict(self):
         """序列化为字典"""

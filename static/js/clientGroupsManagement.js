@@ -707,6 +707,50 @@ function deleteGroup(groupId, isDefault = false) {
     });
 }
 
+// ========== 修改用户组 ==========
+function ensureModifyGroupModal() {
+    let modalEl = qs('#modifyGroupModal');
+    if (modalEl) return modalEl;
+
+    const html = `
+    <div class="modal fade" id="modifyGroupModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fa-solid fa-layer-group me-2"></i>修改客户端用户组
+                    </h5>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="modifyGroupClientName">
+
+                    <div class="mb-3">
+                        <label class="form-label">客户端名称</label>
+                        <input class="form-control" id="modifyGroupClientDisplay" disabled>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">选择用户组</label>
+                        <select class="form-select" id="groupSelect">
+                            <option value="">加载中...</option>
+                        </select>
+                    </div>
+
+                    <div id="modifyGroupMessage"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id="confirmModifyGroup">
+                        <i class="fa fa-check me-1"></i>确认修改
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+    return qs('#modifyGroupModal');
+}
+
+
 // ========== 辅助函数: HTML 转义 ==========
 function escapeHtml(text) {
     if (text === null || text === undefined) return '';

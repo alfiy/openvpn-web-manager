@@ -78,6 +78,14 @@ function render(data) {
             actionButtons.push(`<a href="/download_client/${c.name}" class="btn btn-sm btn-primary">下载配置</a>`);
 
             if (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') {
+                actionButtons.push(`
+                    <button class="btn btn-sm btn-secondary modify-group-btn"
+                            data-client="${c.name}"
+                            data-current-group="${c.group || ''}">
+                        <i class="fa-solid fa-layer-group me-1"></i>用户组
+                    </button>
+                `);
+
                 actionButtons.push(`<button class="btn btn-sm btn-info modify-expiry-btn"
                                             data-client="${c.name}"
                                             data-bs-toggle="modal"
@@ -529,6 +537,39 @@ export function bindClientEvents() {
             }
         });
     });
+
+    // 修改用户组监听
+    document.body.addEventListener('click', async e => {
+        const btn = e.target.closest('.modify-group-btn');
+        if (!btn) return;
+
+        const clientName = btn.dataset.client;
+        const currentGroup = btn.dataset.currentGroup || '';
+
+        const modalEl = ensureModifyGroupModal();
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+        qs('#modifyGroupClientName').value = clientName;
+        qs('#modifyGroupClientDisplay').value = clientName;
+        qs('#modifyGroupMessage').innerHTML = '';
+
+        const select = qs('#groupSelect');
+        select.innerHTML = '<option value="">加载中...</option>';
+
+        try {
+            // ⭐ 从后端获取用户组列表（动态支持新增）
+            const data = await authFetch('/api/user-groups');
+
+            select.innerHTML = data.groups.map(g =>
+                `<option value="${g}" ${g === currentGroup ? 'selected' : ''}>${g}</option>`
+            ).join('');
+
+            modal.show();
+        } catch (err) {
+            select.innerHTML = '<option value="">加载失败</option>';
+        }
+    });
+
 }
 
 
