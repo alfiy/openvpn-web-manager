@@ -4,7 +4,7 @@ import subprocess
 from datetime import datetime, timedelta
 
 from routes.helpers import login_required
-from models import Client, db
+from models import Client, db, ClientGroup
 from utils.api_response import api_success, api_error
 
 from sqlalchemy.exc import IntegrityError
@@ -51,7 +51,33 @@ def add_client():
     cert_expiry_days = 3650
 
     # ------------------------------------------------------------------
-    # 4. 🔒 数据库预检查（NOCASE 生效，防 Test001 / test001）
+    # 🆕 4. 用户组选择（如果未指定则使用默认用户组）
+    # ------------------------------------------------------------------
+    group_id = data.get('group_id', None)
+    
+    # 如果没有指定用户组，自动分配到默认用户组
+    if group_id is None:
+        default_group = ClientGroup.query.filter_by(name='default').first()
+        if default_group:
+            group_id = default_group.id
+    else:
+        # 验证指定的用户组是否存在
+        try:
+            group_id = int(group_id)
+            group = ClientGroup.query.get(group_id)
+            if not group:
+                return api_error(
+                    data={"error": f"指定的用户组不存在 (ID: {group_id})"},
+                    code=400
+                )
+        except (TypeError, ValueError):
+            return api_error(
+                data={"error": "group_id 必须是有效的整数"},
+                code=400
+            )
+
+    # ------------------------------------------------------------------
+    # 5. 🔒 数据库预检查（NOCASE 生效，防 Test001 / test001）
     # ------------------------------------------------------------------
     existing = Client.query.filter(Client.name == client_name).first()
     if existing:
@@ -61,7 +87,7 @@ def add_client():
         )
 
     # ------------------------------------------------------------------
-    # 5. 调用 easy-rsa 生成证书和 ovpn
+    # 6. 调用 easy-rsa 生成证书和 ovpn
     # ------------------------------------------------------------------
     try:
         commands = [
@@ -136,7 +162,7 @@ def add_client():
         return api_error(data={"error": f"内部错误: {str(e)}"}, code=500)
 
     # ------------------------------------------------------------------
-    # 6. 写入数据库（最终裁决，防并发）
+    # 7. 写入数据库（最终裁决，防并发）
     # ------------------------------------------------------------------
     try:
         cert_expiry_dt = datetime.now() + timedelta(days=cert_expiry_days)
@@ -151,11 +177,16 @@ def add_client():
             disabled=False,
             vpn_ip="",
             real_ip="",
-            duration=""
+            duration="",
+            group_id=group_id  # 🆕 设置用户组
         )
 
         db.session.add(new_client)
         db.session.commit()
+
+        # 🆕 导出 TC 配置（更新限速规则）
+        from utils.tc_config_exporter import export_tc_config
+        export_tc_config()
 
     except IntegrityError:
         db.session.rollback()
@@ -172,11 +203,18 @@ def add_client():
         )
 
     # ------------------------------------------------------------------
-    # 7. 返回成功
+    # 8. 返回成功(包含用户组信息)
     # ------------------------------------------------------------------
+    group_info = ""
+    if group_id:
+        group = ClientGroup.query.get(group_id)
+        if group:
+            group_info = f"，已分配到用户组：{group.name} (上行:{group.upload_rate} 下行:{group.download_rate})"
+
     return api_success(
         data={
             "client_name": client_name,
+            "group_id": group_id,
             "logical_expiry_days": logical_expiry_days,
             "logical_expiry_date": logical_expiry_dt.strftime('%Y-%m-%d'),
             "cert_expiry_date": cert_expiry_dt.strftime('%Y-%m-%d'),
@@ -186,6 +224,7 @@ def add_client():
                 f'(到期:{logical_expiry_dt.strftime("%Y-%m-%d")})，'
                 f'证书有效期10年 '
                 f'(到期:{cert_expiry_dt.strftime("%Y-%m-%d")})'
+                f'{group_info}'
             )
         },
         code=0,

@@ -227,8 +227,8 @@ if [ ! -f "$TC_USERS_CONF" ]; then
 # 生成时间: 由 openvpn-web-manager 自动导出
 # 格式: 用户/用户组=上行速率 下行速率
 
-# ========== 默认配置 ==========
-# 未分组客户端使用默认速率（2Mbit上行 / 5Mbit下行）
+# ========== 默认用户组（不限速）==========
+@default=1000Mbit 1000Mbit
 
 # ========== 角色定义（用户组）==========
 # 示例：
@@ -502,6 +502,12 @@ echo ""
 echo "📌 访问地址:"
 echo "   Flask 应用: http://127.0.0.1:$APP_PORT"
 echo ""
+echo "📌 默认用户组:"
+echo "   名称: default"
+echo "   描述: 默认用户组（不限速）"
+echo "   速率: 上行 1000Mbit / 下行 1000Mbit"
+echo "   说明: 新添加的客户端如果不指定用户组，将自动分配到此组"
+echo ""
 echo "📌 TC 限速配置文件:"
 echo "   用户配置: $TC_USERS_CONF"
 echo "   角色映射: $TC_ROLES_MAP"
@@ -542,5 +548,7 @@ echo "   1. TC 限速服务会在 OpenVPN 启动后自动启动"
 echo "   2. 通过 Web 界面管理用户组时，TC 配置会自动更新"
 echo "   3. 如需手动编辑 TC 配置，修改后需重启 vpn-tc-daemon 服务"
 echo "   4. 确保 /var/log/openvpn/status.log 文件存在且可读"
+echo "   5. 🆕 新添加的客户端将自动分配到 default 用户组（不限速）"
+echo "   6. 🆕 可通过 Web 界面或 API 指定客户端的用户组"
 echo ""
 echo "==================================================================="

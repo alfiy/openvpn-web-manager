@@ -16,6 +16,7 @@ import { init as initInstallUninstall } from './installUninstall.js';
 // 可以根据需要，为其他模块创建并导入 init 函数
 import { init as initPasswordConfirm } from './password-confirm.js';
 import { init as ChangePassword } from './changePassword.js';
+import { initNetworkInterfaceSettings } from './changeInterface.js';
 
 /**
  * 统一绑定所有模块的事件和初始化逻辑
@@ -31,6 +32,7 @@ function bindAll() {
             initUserManagement();
             initClientManagement();
             initClientGroups(); // 超级管理员初始化用户组管理
+            initNetworkInterfaceSettings();
         } else if (upperCaseRole === 'ADMIN') {
             initClientManagement();
             initClientGroups(); // 管理员也可以管理用户组

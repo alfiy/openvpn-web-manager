@@ -149,14 +149,30 @@
                                 </div>
                             </div>
 
-                            <!-- 带宽使用率卡片 -->
+                            <!-- 带宽使用率卡片 -->                         
                             <div class="col">
                                 <div class="card shadow-sm h-100">
                                     <div class="card-body">
-                                        <h6 class="text-muted mb-3">
-                                            <i class="fa-solid fa-network-wired me-1"></i>
-                                            带宽使用率
-                                        </h6>
+                                        <!-- 添加标题和设置图标 -->
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <h6 class="text-muted mb-0">
+                                                <i class="fa-solid fa-network-wired me-1"></i>
+                                                带宽使用率
+                                            </h6>
+                                            <button class="btn btn-sm btn-link text-secondary p-0" 
+                                                    id="networkInterfaceSettingsBtn" 
+                                                    title="设置监控接口"
+                                                    style="font-size: 1.2rem;">
+                                                <i class="fa-solid fa-gear"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        <!-- 显示当前监控接口 -->
+                                        <div class="mb-2">
+                                            <small class="text-muted">
+                                                接口: <span id="current-interface" class="badge bg-info">tun0</span>
+                                            </small>
+                                        </div>
                                         
                                         <!-- 下载和上传并排 -->
                                         <div class="row g-2 mb-2">
@@ -189,6 +205,48 @@
                                 </div>
                             </div>
 
+                            <!-- 网络接口设置模态框 -->
+                            <div class="modal fade" id="networkInterfaceModal" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">
+                                                <i class="fa-solid fa-network-wired me-2"></i>网络监控接口设置
+                                            </h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="mb-3">
+                                                <label class="form-label">选择网络接口 <span class="text-danger">*</span></label>
+                                                <select class="form-select" id="interfaceSelect">
+                                                    <option value="">加载中...</option>
+                                                </select>
+                                                <small class="form-text text-muted">选择用于监控带宽的网络接口，默认为 tun0</small>
+                                            </div>
+                                            
+                                            <!-- 或者手动输入 -->
+                                            <div class="mb-3">
+                                                <label class="form-label">或手动输入接口名称</label>
+                                                <input type="text" class="form-control" id="interfaceInput" placeholder="例如: tun0, eth0, ens33">
+                                            </div>
+                                            
+                                            <div class="alert alert-warning">
+                                                <i class="fa-solid fa-exclamation-triangle me-2"></i>
+                                                <strong>注意:</strong> 修改后将写入配置文件并立即生效，无需重启服务
+                                            </div>
+                                            
+                                            <div id="interfaceMessage"></div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                                            <button type="button" class="btn btn-primary" id="saveInterfaceBtn">
+                                                <i class="fa-solid fa-save me-1"></i>保存配置
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- 系统资源卡片结束 -->
                         </div>
                     </div>
@@ -203,7 +261,7 @@
                 <!-- 添加客户端和客户端用户组管理 -->
                 <div class="col-md-6">
                     <div class="card">
-                        <header class="card-header"><h5 class="mb-0">添加客户端</h5></header>
+                        <header class="card-header"><h5 class="mb-0"><i class="fa-solid fa-users text-primary me-2"></i>添加客户端</h5></header>
                         <div class="card-body">
                             <form id="add-client-form">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -264,7 +322,7 @@
                 <div class="card h-100">
                     <header class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">
-                            <i class="fa-solid fa-users me-2"></i>
+                            <i class="fa-solid fa-users text-primary me-2"></i>
                             客户端管理
                         </h5>
                         <small id="page-info" class="text-muted"></small>

@@ -8,7 +8,7 @@ from flask_mail import Mail
 from flask_wtf.csrf import CSRFError
 from flask_login import LoginManager
 from sqlalchemy import event, Engine
-from models import db, User, Role
+from models import db, User, Role, ClientGroup
 from routes.helpers import init_csrf_guard
 from utils.api_response import api_error
 from extensions import limiter
@@ -43,8 +43,6 @@ from routes.api import api_bp
 from routes.api.client_groups import client_groups_bp
 from flask_wtf.csrf import generate_csrf
 from routes.dashboard import dashboard_bp
-
-# 新增导入
 from utils.tc_config_exporter import export_tc_config
 
 
@@ -196,11 +194,23 @@ def create_app():
             db.session.add(admin)
             db.session.commit()
             print("✅ 默认管理员账户已创建: admin / admin123")
+
+         # 🆕 检查并创建默认用户组（不限速）
+        if not ClientGroup.query.filter_by(name='default').first():
+            default_group = ClientGroup(
+                name='default',
+                description='默认用户组（不限速）',
+                upload_rate='1000Mbit',
+                download_rate='1000Mbit'
+            )
+            db.session.add(default_group)
+            db.session.commit()
+            print("✅ 默认用户组已创建: default (不限速: 1000Mbit/1000Mbit)")       
         
         # 初始化导出 TC 配置
         try:
             export_tc_config()
-            print("✅ TC 配置已初始化")
+            # print("✅ TC 配置已初始化")
         except Exception as e:
             print(f"⚠️  TC 配置初始化失败: {e}")
 

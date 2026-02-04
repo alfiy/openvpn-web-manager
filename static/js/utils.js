@@ -169,16 +169,36 @@ export function toggleCustomDate(prefix) {
  * @param {string} message
  * @param {string} title
  */
-export function showCustomMessage(message, title = '提示') {
+let messageModalTimer = null;
+
+export function showCustomMessage(message, title = '提示', options = {}) {
+    const {
+        autoClose = true,   // 默认自动关闭
+        duration = 3000     // 默认 3 秒
+    } = options;
+
     const modalEl = qs('#messageModal');
-    // 使用新的 Bootstrap 实例化方法来避免重复创建和 aria-hidden 问题
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    
+
     qs('#messageModal .modal-title').textContent = title;
     qs('#messageModal .modal-body').textContent = message;
-    
+
+    // 清理上一次的定时器，防止连点导致提前关闭
+    if (messageModalTimer) {
+        clearTimeout(messageModalTimer);
+        messageModalTimer = null;
+    }
+
     modal.show();
+
+    if (autoClose) {
+        messageModalTimer = setTimeout(() => {
+            modal.hide();
+            messageModalTimer = null;
+        }, duration);
+    }
 }
+
 
 
 /**

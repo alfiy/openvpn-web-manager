@@ -20,6 +20,15 @@ let groupsDataCache = []; // 缓存所有用户组数据
 let currentPage = 1;
 const ITEMS_PER_PAGE = 3; // 每页显示3个
 
+// 🆕 工具函数：判断是否为默认用户组
+function isDefaultGroup(group) {
+    // 优先检查 is_default 字段，如果不存在则通过名称判断
+    if (group.is_default !== undefined) {
+        return group.is_default;
+    }
+    return group.name === 'default' || group.name === 'Default';
+}
+
 // ========== 初始化函数 ==========
 export function init() {
     const groupsContainer = qs('#groupsContainer');
@@ -98,45 +107,62 @@ function renderGroupsCards() {
     const currentGroups = groupsDataCache.slice(startIndex, endIndex);
     
     // 渲染卡片
-    container.innerHTML = currentGroups.map(group => `
-        <div class="col-md-4">
-            <div class="card group-card h-100">
-                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
-                    <div class="overflow-hidden">
-                        <h6 class="mb-0 text-truncate" title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</h6>
-                        <small class="text-light text-truncate d-block" title="${escapeHtml(group.description || '无描述')}">${escapeHtml(group.description || '无描述')}</small>
+    container.innerHTML = currentGroups.map(group => {
+        // 🆕 判断是否为默认用户组
+        const isDefault = isDefaultGroup(group);
+        
+        // 🆕 判断是否为默认用户组，决定是否显示删除按钮
+        const deleteButton = isDefault
+            ? '' 
+            : `<button class="btn btn-sm btn-danger ms-2 flex-shrink-0 deleteGroupBtn" data-group-id="${group.id}" data-is-default="false" title="删除">
+                   <i class="fa fa-trash"></i>
+               </button>`;
+        
+        // 🆕 添加默认用户组标识
+        const defaultBadge = isDefault
+            ? '<span class="badge bg-info ms-1">默认</span>' 
+            : '';
+        
+        return `
+            <div class="col-md-4">
+                <div class="card group-card h-100">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+                        <div class="overflow-hidden">
+                            <h6 class="mb-0 text-truncate" title="${escapeHtml(group.name)}">
+                                ${escapeHtml(group.name)}${defaultBadge}
+                            </h6>
+                            <small class="text-light text-truncate d-block" title="${escapeHtml(group.description || '无描述')}">${escapeHtml(group.description || '无描述')}</small>
+                        </div>
+                        ${deleteButton}
                     </div>
-                    <button class="btn btn-sm btn-danger ms-2 flex-shrink-0 deleteGroupBtn" data-group-id="${group.id}" title="删除">
-                        <i class="fa fa-trash"></i>
-                    </button>
-                </div>
-                <div class="card-body py-2">
-                    <div class="row text-sm">
-                        <div class="col-6">
-                            <div class="text-success text-truncate" title="上行: ${escapeHtml(group.upload_rate)}">
-                                <i class="fa fa-arrow-up"></i> ${escapeHtml(group.upload_rate)}
+                    <div class="card-body py-2">
+                        <div class="row text-sm">
+                            <div class="col-6">
+                                <div class="text-success text-truncate" title="上行: ${escapeHtml(group.upload_rate)}">
+                                    <i class="fa fa-arrow-up"></i> ${escapeHtml(group.upload_rate)}
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-info text-truncate" title="下行: ${escapeHtml(group.download_rate)}">
+                                    <i class="fa fa-arrow-down"></i> ${escapeHtml(group.download_rate)}
+                                </div>
                             </div>
                         </div>
-                        <div class="col-6">
-                            <div class="text-info text-truncate" title="下行: ${escapeHtml(group.download_rate)}">
-                                <i class="fa fa-arrow-down"></i> ${escapeHtml(group.download_rate)}
-                            </div>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="fa fa-users"></i> 成员: <strong>${group.client_count || 0}</strong>
+                            </small>
                         </div>
                     </div>
-                    <div class="mt-2">
-                        <small class="text-muted">
-                            <i class="fa fa-users"></i> 成员: <strong>${group.client_count || 0}</strong>
-                        </small>
+                    <div class="card-footer bg-light py-2">
+                        <button class="btn btn-sm btn-outline-primary w-100 viewGroupBtn" data-group-id="${group.id}" data-is-default="${isDefault}">
+                            <i class="fa fa-eye"></i> 查看详情
+                        </button>
                     </div>
-                </div>
-                <div class="card-footer bg-light py-2">
-                    <button class="btn btn-sm btn-outline-primary w-100 viewGroupBtn" data-group-id="${group.id}">
-                        <i class="fa fa-eye"></i> 查看详情
-                    </button>
                 </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
     
     // 更新分页显示
     updatePagination(totalPages);
@@ -208,12 +234,16 @@ function bindGroupEvents() {
     if (groupsContainer) {
         groupsContainer.addEventListener('click', (e) => {
             if (e.target.closest('.viewGroupBtn')) {
-                const groupId = e.target.closest('.viewGroupBtn').dataset.groupId;
-                openGroupDetailsModal(groupId);
+                const btn = e.target.closest('.viewGroupBtn');
+                const groupId = btn.dataset.groupId;
+                const isDefault = btn.dataset.isDefault === 'true';
+                openGroupDetailsModal(groupId, isDefault);
             }
             if (e.target.closest('.deleteGroupBtn')) {
-                const groupId = e.target.closest('.deleteGroupBtn').dataset.groupId;
-                deleteGroup(groupId);
+                const btn = e.target.closest('.deleteGroupBtn');
+                const groupId = btn.dataset.groupId;
+                const isDefault = btn.dataset.isDefault === 'true';
+                deleteGroup(groupId, isDefault);
             }
         });
     }
@@ -250,13 +280,8 @@ function bindGroupEvents() {
         });
     }
     
-    // 删除用户组
-    const deleteGroupBtn = qs('#deleteGroupBtn');
-    if (deleteGroupBtn) {
-        deleteGroupBtn.addEventListener('click', () => {
-            deleteGroup(currentGroupId);
-        });
-    }
+    // 🆕 删除用户组按钮（详情页）- 动态绑定
+    // 注意：这个按钮的显示/隐藏在 openGroupDetailsModal 中控制
     
     // 添加成员
     const addMemberBtn = qs('#addMemberBtn');
@@ -343,7 +368,7 @@ async function saveGroup() {
 }
 
 // ========== 打开用户组详情模态框 ==========
-async function openGroupDetailsModal(groupId) {
+async function openGroupDetailsModal(groupId, isDefault = false) {
     currentGroupId = groupId;
     
     try {
@@ -355,9 +380,15 @@ async function openGroupDetailsModal(groupId) {
             return;
         }
         
+        // 🆕 重新判断是否为默认组（以实际数据为准）
+        const groupIsDefault = isDefaultGroup(group);
+        
         // 填充基本信息
         const detailsTitle = qs('#groupDetailsTitle');
-        if (detailsTitle) detailsTitle.textContent = `${group.name} - 详情`;
+        if (detailsTitle) {
+            const defaultBadge = groupIsDefault ? ' <span class="badge bg-info">默认</span>' : '';
+            detailsTitle.innerHTML = `${escapeHtml(group.name)} - 详情${defaultBadge}`;
+        }
         
         const detailsName = qs('#detailsName');
         if (detailsName) detailsName.textContent = group.name;
@@ -383,6 +414,22 @@ async function openGroupDetailsModal(groupId) {
         
         const detailsDownloadRate = qs('#detailsDownloadRate');
         if (detailsDownloadRate) detailsDownloadRate.value = group.download_rate.replace('Mbit', '');
+        
+        // 🆕 根据是否为默认用户组，控制删除按钮的显示/隐藏
+        const deleteGroupBtn = qs('#deleteGroupBtn');
+        if (deleteGroupBtn) {
+            if (groupIsDefault) {
+                deleteGroupBtn.style.display = 'none';
+            } else {
+                deleteGroupBtn.style.display = 'inline-block';
+                // 移除旧的事件监听器，添加新的
+                const newDeleteBtn = deleteGroupBtn.cloneNode(true);
+                deleteGroupBtn.parentNode.replaceChild(newDeleteBtn, deleteGroupBtn);
+                newDeleteBtn.addEventListener('click', () => {
+                    deleteGroup(currentGroupId, groupIsDefault);
+                });
+            }
+        }
         
         // 加载成员列表
         loadGroupMembers(groupId);
@@ -463,7 +510,7 @@ function renderMembersList(members, groupId) {
 // ========== 打开添加成员模态框 ==========
 async function openAddMemberModal() {
     try {
-        // ✅ 只从后端获取“未分组客户端”
+        // ✅ 只从后端获取"未分组客户端"
         const data = await authFetch('/api/clients/unassigned');
 
         if (data.code !== 0) {
@@ -629,7 +676,13 @@ async function updateGroupRates() {
 }
 
 // ========== 删除用户组 ==========
-function deleteGroup(groupId) {
+function deleteGroup(groupId, isDefault = false) {
+    // 🆕 如果是默认用户组，不允许删除
+    if (isDefault) {
+        showCustomMessage('默认用户组不能删除', 'error');
+        return;
+    }
+    
     showCustomConfirm('确定要删除这个用户组吗?组内的客户端不会被删除,只是移出分组。', async (confirmed) => {
         if (!confirmed) return;
         
