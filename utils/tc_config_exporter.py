@@ -1,214 +1,163 @@
 """
-🆕 TC 配置导出工具
-将数据库中的用户组和限速配置导出到 /etc/openvpn/tc-users.conf 和 tc-roles.map
-供 vpn-tc-daemon.sh 脚本读取
+TC 配置文件导出工具
+负责将数据库中的用户组和客户端数据导出为守护进程可读的配置文件
 """
-import os
 import logging
-from models import ClientGroup, Client, db
+import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# TC 配置文件路径（需要 sudo 权限写入）
-TC_USERS_CONF_PATH = "/etc/openvpn/tc-users.conf"
-TC_ROLES_MAP_PATH = "/etc/openvpn/tc-roles.map"
-
-# 本地备份路径（不需要 sudo）
-TC_USERS_CONF_LOCAL = "/opt/vpnwm/data/tc-users.conf"
-TC_ROLES_MAP_LOCAL = "/opt/vpnwm/data/tc-roles.map"
+# 配置文件路径
+USER_RATE_CONF = "/etc/openvpn/tc-users.conf"
+USER_ROLE_MAP = "/etc/openvpn/tc-roles.map"
 
 
 def export_tc_config():
     """
-    导出 TC 配置到文件
-    生成两个文件：
-    1. tc-users.conf: 定义用户组速率和直接用户速率
-       格式: 
-         alice=2Mbit 5Mbit          # 直接配置（未分组客户端）
-         @vip=20Mbit 50Mbit         # 角色定义（用户组）
+    导出 TC 配置文件
     
-    2. tc-roles.map: 客户端到用户组的映射
-       格式:
-         alice=@vip                  # 客户端alice属于vip组
-         bob=@normal                 # 客户端bob属于normal组
+    生成两个文件:
+    1. /etc/openvpn/tc-users.conf - 用户组速率配置
+       格式: group_name=upload_rate download_rate
+       例如: vip_users=10Mbit 50Mbit
+    
+    2. /etc/openvpn/tc-roles.map - 客户端→用户组映射
+       格式: client_name=group_name
+       例如: alice=vip_users
+    
+    Returns:
+        bool: 是否导出成功
     """
     try:
-        # 查询所有用户组和客户端
-        groups = ClientGroup.query.all()
-        clients = Client.query.all()
+        # 延迟导入，避免循环依赖
+        from models import db, ClientGroup, Client
         
         # ========== 生成 tc-users.conf ==========
-        users_lines = [
-            "# 自动生成的 TC 用户限速配置",
-            "# 生成时间: 由 openvpn-web-manager 自动导出",
-            "# 格式: 用户/用户组=上行速率 下行速率",
-            ""
-        ]
+        groups = ClientGroup.query.all()
         
-        # 1. 导出未分组的客户端（直接配置）
-        ungrouped_clients = [c for c in clients if not c.group_id]
-        if ungrouped_clients:
-            users_lines.append("# ========== 直接配置（未分组客户端）==========")
-            for client in ungrouped_clients:
-                users_lines.append(f"{client.name}=2Mbit 5Mbit")
-            users_lines.append("")
+        lines_conf = []
+        for group in groups:
+            # 提取速率值（去掉可能的单位，统一格式）
+            upload = group.upload_rate.strip()
+            download = group.download_rate.strip()
+            
+            # 格式: group_name=upload download
+            lines_conf.append(f"{group.name}={upload} {download}")
         
-        # 2. 导出用户组定义（角色定义，使用 @ 前缀）
-        if groups:
-            users_lines.append("# ========== 角色定义（用户组）==========")
-            for group in groups:
-                users_lines.append(f"@{group.name}={group.upload_rate} {group.download_rate}")
-            users_lines.append("")
+        # 确保目录存在
+        conf_path = Path(USER_RATE_CONF)
+        conf_path.parent.mkdir(parents=True, exist_ok=True)
         
-        users_content = "\n".join(users_lines)
+        # 写入文件
+        with open(USER_RATE_CONF, 'w') as f:
+            f.write('\n'.join(lines_conf) + '\n')
+        
+        logger.info(f"✅ 已导出 {len(groups)} 个用户组到 {USER_RATE_CONF}")
         
         # ========== 生成 tc-roles.map ==========
-        roles_lines = [
-            "# 自动生成的客户端角色映射",
-            "# 生成时间: 由 openvpn-web-manager 自动导出",
-            "# 格式: 客户端名=@用户组名",
-            ""
-        ]
+        # 只导出有分组的客户端
+        clients = Client.query.filter(Client.group_id.isnot(None)).all()
         
-        # 导出分组客户端的映射关系
-        grouped_clients = [c for c in clients if c.group_id]
-        if grouped_clients:
-            roles_lines.append("# ========== 客户端到用户组的映射 ==========")
-            for client in grouped_clients:
-                group = ClientGroup.query.get(client.group_id)
-                if group:
-                    roles_lines.append(f"{client.name}=@{group.name}")
-            roles_lines.append("")
-        else:
-            roles_lines.append("# 当前没有客户端分配到用户组")
-            roles_lines.append("")
+        lines_map = []
+        for client in clients:
+            if client.group:  # 确保有关联的用户组
+                lines_map.append(f"{client.name}={client.group.name}")
         
-        roles_content = "\n".join(roles_lines)
+        # 确保目录存在
+        map_path = Path(USER_ROLE_MAP)
+        map_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # ========== 写入本地备份 ==========
-        os.makedirs(os.path.dirname(TC_USERS_CONF_LOCAL), exist_ok=True)
-        
-        with open(TC_USERS_CONF_LOCAL, 'w') as f:
-            f.write(users_content)
-        
-        with open(TC_ROLES_MAP_LOCAL, 'w') as f:
-            f.write(roles_content)
-        
-        # logger.info(f"TC 配置已导出到本地备份: {TC_USERS_CONF_LOCAL} 和 {TC_ROLES_MAP_LOCAL}")
-        
-        # ========== 尝试写入系统目录（如果有权限）==========
-        import subprocess
-        
-        success_count = 0
-        
-        # 写入 tc-users.conf
-        try:
-            result = subprocess.run(
-                ['sudo', 'tee', TC_USERS_CONF_PATH],
-                input=users_content.encode(),
-                capture_output=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                # logger.info(f"✅ TC 用户配置已导出到系统: {TC_USERS_CONF_PATH}")
-                success_count += 1
+        # 写入文件
+        with open(USER_ROLE_MAP, 'w') as f:
+            if lines_map:
+                f.write('\n'.join(lines_map) + '\n')
             else:
-                logger.warning(f"⚠️ 写入 {TC_USERS_CONF_PATH} 失败: {result.stderr.decode()}")
-        except Exception as e:
-            logger.warning(f"⚠️ 无法写入 {TC_USERS_CONF_PATH}: {str(e)}")
+                # 如果没有任何客户端分组，写入空文件
+                f.write('')
         
-        # 写入 tc-roles.map
-        try:
-            result = subprocess.run(
-                ['sudo', 'tee', TC_ROLES_MAP_PATH],
-                input=roles_content.encode(),
-                capture_output=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                # logger.info(f"✅ TC 角色映射已导出到系统: {TC_ROLES_MAP_PATH}")
-                success_count += 1
-            else:
-                logger.warning(f"⚠️ 写入 {TC_ROLES_MAP_PATH} 失败: {result.stderr.decode()}")
-        except Exception as e:
-            logger.warning(f"⚠️ 无法写入 {TC_ROLES_MAP_PATH}: {str(e)}")
+        logger.info(f"✅ 已导出 {len(clients)} 个客户端映射到 {USER_ROLE_MAP}")
         
-        return success_count > 0
+        return True
+        
+    except PermissionError as e:
+        logger.error(f"❌ 权限不足，无法写入配置文件: {e}")
+        logger.error(f"   请确保 Flask 应用有权限写入 {USER_RATE_CONF} 和 {USER_ROLE_MAP}")
+        return False
         
     except Exception as e:
-        logger.error(f"❌ 导出 TC 配置失败: {str(e)}")
+        logger.error(f"❌ 导出 TC 配置失败: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
-def get_tc_config_preview():
-    """获取 TC 配置预览（用于前端显示）"""
-    try:
-        groups = ClientGroup.query.all()
-        clients = Client.query.all()
-        
-        lines = [
-            "# ==================== tc-users.conf ====================",
-            "# TC 用户限速配置预览",
-            ""
-        ]
-        
-        # 未分组客户端
-        ungrouped = [c for c in clients if not c.group_id]
-        if ungrouped:
-            lines.append("# 直接配置（未分组客户端）")
-            for client in ungrouped:
-                lines.append(f"{client.name}=2Mbit 5Mbit")
-            lines.append("")
-        
-        # 用户组定义
-        if groups:
-            lines.append("# 角色定义（用户组）")
-            for group in groups:
-                lines.append(f"@{group.name}={group.upload_rate} {group.download_rate}")
-            lines.append("")
-        
-        lines.append("")
-        lines.append("# ==================== tc-roles.map ====================")
-        lines.append("# 客户端角色映射预览")
-        lines.append("")
-        
-        # 分组客户端映射
-        grouped = [c for c in clients if c.group_id]
-        if grouped:
-            lines.append("# 客户端到用户组的映射")
-            for client in grouped:
-                group = ClientGroup.query.get(client.group_id)
-                if group:
-                    lines.append(f"{client.name}=@{group.name}")
-        else:
-            lines.append("# 当前没有客户端分配到用户组")
-        
-        return "\n".join(lines)
-        
-    except Exception as e:
-        logger.error(f"获取配置预览失败: {str(e)}")
-        return f"错误: {str(e)}"
-
-
-def reload_tc_daemon():
+def ensure_config_files_writable():
     """
-    重新加载 TC 守护进程（可选）
-    如果配置文件更新后需要通知守护进程重新读取
+    检查配置文件是否可写（用于启动时健康检查）
+    
+    Returns:
+        bool: 是否可写
     """
     try:
-        import subprocess
-        # 发送 HUP 信号让守护进程重新加载配置
-        result = subprocess.run(
-            ['sudo', 'systemctl', 'reload', 'vpn-tc-daemon.service'],
-            capture_output=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            logger.info("✅ TC 守护进程已重新加载配置")
-            return True
-        else:
-            logger.warning(f"⚠️ 重新加载 TC 守护进程失败: {result.stderr.decode()}")
-            return False
+        for path in [USER_RATE_CONF, USER_ROLE_MAP]:
+            # 确保目录存在
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            
+            # 尝试创建或打开文件
+            Path(path).touch(exist_ok=True)
+            
+            # 检查是否可写
+            if not os.access(path, os.W_OK):
+                logger.error(f"❌ 配置文件不可写: {path}")
+                return False
+        
+        logger.info("✅ TC 配置文件可写性检查通过")
+        return True
+        
     except Exception as e:
-        logger.warning(f"⚠️ 无法重新加载 TC 守护进程: {str(e)}")
+        logger.error(f"❌ 配置文件可写性检查失败: {e}")
         return False
+
+
+def get_client_rate_from_config(client_name: str) -> tuple:
+    """
+    从配置文件读取客户端的速率配置（用于调试）
+    
+    Args:
+        client_name: 客户端名称
+        
+    Returns:
+        tuple: (upload_rate, download_rate) 或 None
+    """
+    try:
+        # 读取用户→组映射
+        if not os.path.exists(USER_ROLE_MAP):
+            return None
+        
+        group_name = None
+        with open(USER_ROLE_MAP, 'r') as f:
+            for line in f:
+                if line.strip().startswith(f"{client_name}="):
+                    group_name = line.strip().split('=')[1]
+                    break
+        
+        if not group_name:
+            return None
+        
+        # 读取组速率
+        if not os.path.exists(USER_RATE_CONF):
+            return None
+        
+        with open(USER_RATE_CONF, 'r') as f:
+            for line in f:
+                if line.strip().startswith(f"{group_name}="):
+                    rates = line.strip().split('=')[1].split()
+                    if len(rates) == 2:
+                        return (rates[0], rates[1])
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"❌ 读取客户端速率配置失败: {e}")
+        return None

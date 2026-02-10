@@ -1,5 +1,3 @@
-# openvpn_monitor/tc_hotreload.py
-
 """
 TC 热更新模块
 用于向守护进程发送速率变更信号，实现不断线的实时限速调整
@@ -40,6 +38,7 @@ def _write_signal(signal_line: str) -> bool:
         
     except PermissionError:
         logger.error(f"❌ 权限不足，无法写入信号文件: {RELOAD_SIGNAL}")
+        logger.error(f"   请执行: sudo chown -R $USER:$USER /var/run/openvpn-tc")
         return False
     except Exception as e:
         logger.error(f"❌ 发送热更新信号失败: {e}")
@@ -55,7 +54,7 @@ def notify_user_update(username: str, vpn_ip: str) -> bool:
     - 单独修改某用户的速率配置
     
     Args:
-        username: 用户名
+        username: 用户名（客户端名称）
         vpn_ip: VPN IP 地址（例如: 10.8.0.23）
         
     Returns:
@@ -116,3 +115,35 @@ def check_signal_file_writable() -> bool:
     except Exception as e:
         logger.error(f"❌ 信号文件不可写: {e}")
         return False
+
+
+def clear_signal_file():
+    """
+    清空信号文件（用于调试或重置）
+    """
+    try:
+        with open(RELOAD_SIGNAL, 'w') as f:
+            f.write('')
+        logger.info("✅ 信号文件已清空")
+        return True
+    except Exception as e:
+        logger.error(f"❌ 清空信号文件失败: {e}")
+        return False
+
+
+def get_pending_signals() -> list:
+    """
+    读取待处理的信号（用于调试）
+    
+    Returns:
+        list: 信号列表
+    """
+    try:
+        if not os.path.exists(RELOAD_SIGNAL):
+            return []
+        
+        with open(RELOAD_SIGNAL, 'r') as f:
+            return [line.strip() for line in f if line.strip()]
+    except Exception as e:
+        logger.error(f"❌ 读取信号文件失败: {e}")
+        return []

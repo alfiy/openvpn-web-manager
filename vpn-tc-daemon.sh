@@ -103,9 +103,18 @@ filter_exists_src() {
 init_tc() {
     log "开始初始化 TC 规则..."
 
-    # 创建热更新信号目录
-    mkdir -p "$RELOAD_DIR"
-    > "$RELOAD_SIGNAL"  # 清空旧信号
+    # 创建热更新信号目录与文件（确保权限）
+    if [[ ! -d "$RELOAD_DIR" ]]; then
+        mkdir -p "$RELOAD_DIR"
+    fi
+
+    if [[ ! -f "$RELOAD_SIGNAL" ]]; then
+        touch "$RELOAD_SIGNAL"
+    fi
+
+    # 强制权限（避免 umask/systemd 差异）
+    chmod 775 "$RELOAD_DIR"
+    chmod 664 "$RELOAD_SIGNAL"
 
     # 检查必要命令
     for c in tc ip modprobe; do

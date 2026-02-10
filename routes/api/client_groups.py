@@ -8,6 +8,7 @@ from models import db, ClientGroup, Client, Role
 from routes.helpers import role_required
 from utils.api_response import api_success, api_error
 from utils.tc_config_exporter import export_tc_config
+from openvpn_monitor.tc_hotreload import notify_user_update, notify_role_update
 import logging
 
 logger = logging.getLogger(__name__)
@@ -104,10 +105,10 @@ def create_client_group():
         db.session.add(group)
         db.session.commit()
         
-        # 导出 TC 配置
+        # 🆕 导出 TC 配置
         export_tc_config()
         
-        # logger.info(f"用户组创建成功: {name} (上行:{upload_rate}, 下行:{download_rate})")
+        logger.info(f"用户组创建成功: {name} (上行:{upload_rate}, 下行:{download_rate})")
         return api_success(
             {'group': group.to_dict()},
             message=f'用户组 "{name}" 创建成功'
@@ -140,6 +141,11 @@ def update_client_group(group_id):
         
         data = request.get_json(silent=True) or {}
         
+        # 🆕 记录是否修改了速率
+        rate_changed = False
+        old_upload = group.upload_rate
+        old_download = group.download_rate
+        
         # 更新字段
         if 'name' in data:
             new_name = (data['name'] or '').strip()
@@ -159,18 +165,31 @@ def update_client_group(group_id):
             upload_rate = (data['upload_rate'] or '2Mbit').strip()
             if not validate_rate_format(upload_rate):
                 return api_error('上行速率格式无效')
+            if group.upload_rate != upload_rate:
+                rate_changed = True
             group.upload_rate = upload_rate
         
         if 'download_rate' in data:
             download_rate = (data['download_rate'] or '2Mbit').strip()
             if not validate_rate_format(download_rate):
                 return api_error('下行速率格式无效')
+            if group.download_rate != download_rate:
+                rate_changed = True
             group.download_rate = download_rate
         
         db.session.commit()
         
-        # 更新后导出配置
+        # 🆕 导出配置文件
         export_tc_config()
+        
+        # 🆕 如果速率有变化，通知守护进程热更新
+        if rate_changed:
+            success = notify_role_update(group.name)
+            logger.info(
+                f"用户组 {group.name} 速率已更新: "
+                f"{old_upload}/{old_download} → {group.upload_rate}/{group.download_rate}，"
+                f"热更新{'成功' if success else '失败'}"
+            )
         
         logger.info(f"用户组更新成功: {group.name}")
         return api_success(
@@ -204,10 +223,10 @@ def delete_client_group(group_id):
         db.session.delete(group)
         db.session.commit()
         
-        # 导出更新后的配置
+        # 🆕 导出更新后的配置
         export_tc_config()
         
-        # logger.info(f"用户组删除成功: {group_name}")
+        logger.info(f"用户组删除成功: {group_name}")
         return api_success(
             message=f'用户组 "{group_name}" 已删除'
         )
@@ -257,10 +276,19 @@ def add_group_member(group_id):
         client.group_id = group_id
         db.session.commit()
         
-        # 导出配置
+        # 🆕 导出配置
         export_tc_config()
         
-        logger.info(f"客户端 {client_name} 添加到用户组 {group.name}")
+        # 🆕 如果客户端在线，发送热更新信号
+        if client.online and client.vpn_ip:
+            success = notify_user_update(client.name, client.vpn_ip)
+            logger.info(
+                f"客户端 {client_name} 添加到用户组 {group.name}，"
+                f"热更新{'成功' if success else '失败'}"
+            )
+        else:
+            logger.info(f"客户端 {client_name} 添加到用户组 {group.name}（离线）")
+        
         return api_success(
             {'group': group.to_dict()},
             message=f'客户端 "{client_name}" 已添加到组 "{group.name}"'
@@ -304,10 +332,19 @@ def remove_group_member(group_id):
         client.group_id = None
         db.session.commit()
         
-        # 导出配置
+        # 🆕 导出配置
         export_tc_config()
         
-        logger.info(f"客户端 {client_name} 从用户组 {group.name} 移除")
+        # 🆕 如果客户端在线，发送热更新信号（移除限速）
+        if client.online and client.vpn_ip:
+            success = notify_user_update(client.name, client.vpn_ip)
+            logger.info(
+                f"客户端 {client_name} 从用户组 {group.name} 移除，"
+                f"热更新{'成功' if success else '失败'}"
+            )
+        else:
+            logger.info(f"客户端 {client_name} 从用户组 {group.name} 移除（离线）")
+        
         return api_success(
             {'group': group.to_dict()},
             message=f'客户端 "{client_name}" 已从组 "{group.name}" 移除'
@@ -378,9 +415,20 @@ def modify_client_group():
             old_group_name = client.group.name if client.group else '无'
             client.group_id = None
             db.session.commit()
+            
+            # 🆕 导出配置文件
             export_tc_config()
             
-            logger.info(f"客户端 {client_name} 从用户组 {old_group_name} 移出")
+            # 🆕 如果客户端在线，发送热更新信号
+            if client.online and client.vpn_ip:
+                success = notify_user_update(client.name, client.vpn_ip)
+                logger.info(
+                    f"客户端 {client_name} 从用户组 {old_group_name} 移出，"
+                    f"热更新{'成功' if success else '失败'}"
+                )
+            else:
+                logger.info(f"客户端 {client_name} 从用户组 {old_group_name} 移出（离线）")
+            
             return api_success(
                 {'client': client.to_dict()},
                 message=f'客户端 "{client_name}" 已移出用户组'
@@ -401,10 +449,19 @@ def modify_client_group():
         client.group_id = group.id
         db.session.commit()
         
-        # 导出配置
+        # 🆕 导出配置文件
         export_tc_config()
         
-        logger.info(f"客户端 {client_name} 从 {old_group_name} 移动到 {group_name}")
+        # 🆕 如果客户端在线，发送热更新信号
+        if client.online and client.vpn_ip:
+            success = notify_user_update(client.name, client.vpn_ip)
+            logger.info(
+                f"客户端 {client_name} 从 {old_group_name} 移动到 {group_name}，"
+                f"热更新{'成功' if success else '失败'}"
+            )
+        else:
+            logger.info(f"客户端 {client_name} 从 {old_group_name} 移动到 {group_name}（离线）")
+        
         return api_success(
             {'client': client.to_dict()},
             message=f'客户端 "{client_name}" 已移动到 "{group_name}"'
@@ -420,10 +477,11 @@ def modify_client_group():
 @client_groups_bp.route('/api/clients/unassigned', methods=['GET'])
 @login_required
 def get_unassigned_clients():
+    """获取所有未分组的客户端"""
     clients = Client.query.filter(Client.group_id.is_(None)).all()
     return api_success({
         'clients': [
-            {'id': c.id, 'name': c.name}
+            {'id': c.id, 'name': c.name, 'description': c.description}
             for c in clients
         ]
     })
