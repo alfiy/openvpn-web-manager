@@ -21,6 +21,10 @@ USER_ROLE_MAP="/etc/openvpn/tc-roles.map"
 
 INTERVAL=3
 
+# 🆕 新增: 热更新配置
+RELOAD_DIR="/var/run/openvpn-tc"
+RELOAD_SIGNAL="$RELOAD_DIR/reload.signal"
+
 # 显式以全局方式声明（避免函数内 declare 导致局部/未绑定问题）
 declare -g -A IP_CLASS_MAP=()    # ip -> "user:classid"
 declare -g -A CLASSID_USED=()    # classid -> 1
@@ -98,6 +102,10 @@ filter_exists_src() {
 #####################################
 init_tc() {
     log "开始初始化 TC 规则..."
+
+    # 创建热更新信号目录
+    mkdir -p "$RELOAD_DIR"
+    > "$RELOAD_SIGNAL"  # 清空旧信号
 
     # 检查必要命令
     for c in tc ip modprobe; do
@@ -365,7 +373,6 @@ ensure_tc_base() {
 }
 
 
-
 # 自愈函数
 repair_client() {
     local user="$1"
@@ -438,7 +445,131 @@ repair_client() {
     fi
 }
 
+#####################################
+# 🆕 热更新单个客户端速率
+#####################################
+update_client_rate() {
+    local user="$1"
+    local ip="$2"
+    
+    # 检查是否在线
+    local entry="${IP_CLASS_MAP[$ip]:-}"
+    if [[ -z "$entry" ]]; then
+        log "⚠️ update_rate: $user ($ip) 不在线,跳过"
+        return 0
+    fi
+    
+    local classid="${entry##*:}"
+    read RATE_UP RATE_DOWN <<< "$(get_user_rate "$user")"
+    
+    log "🔄 开始热更新: $user ($ip) class=$classid → ↑$RATE_UP ↓$RATE_DOWN"
+    
+    # 修改 tun0 上行速率
+    if class_exists "$VPN_DEV" "1:" "$classid"; then
+        if tc class change dev "$VPN_DEV" classid 1:$classid htb \
+            rate "$RATE_UP" ceil "$RATE_UP" 2>/dev/null; then
+            log "  ✓ tun0 上行已更新: 1:$classid → $RATE_UP"
+        else
+            log "  ✗ tun0 上行更新失败: 1:$classid"
+            return 1
+        fi
+    else
+        log "  ⚠ tun0 class 1:$classid 不存在,跳过"
+    fi
+    
+    # 修改 ifb0 下行速率
+    if class_exists "$IFB_DEV" "2:" "$classid"; then
+        if tc class change dev "$IFB_DEV" classid 2:$classid htb \
+            rate "$RATE_DOWN" ceil "$RATE_DOWN" 2>/dev/null; then
+            log "  ✓ ifb0 下行已更新: 2:$classid → $RATE_DOWN"
+        else
+            log "  ✗ ifb0 下行更新失败: 2:$classid"
+            return 1
+        fi
+    else
+        log "  ⚠ ifb0 class 2:$classid 不存在,跳过"
+    fi
+    
+    log "✅ 热更新成功: $user ($ip) → ↑$RATE_UP ↓$RATE_DOWN"
+    return 0
+}
 
+#####################################
+# 🆕 处理热更新信号
+#####################################
+process_reload_signals() {
+    [[ ! -f "$RELOAD_SIGNAL" ]] && return 0
+    
+    local processed=0
+    local line_count=0
+    
+    while IFS='=' read -r action value; do
+        ((line_count++))
+        
+        # 跳过空行
+        [[ -z "${action//[[:space:]]/}" ]] && continue
+        
+        action=$(echo "$action" | xargs)  # trim 空白
+        value=$(echo "$value" | xargs)
+        
+        case "$action" in
+            UPDATE_USER)
+                # value 格式: username|ip
+                local user="${value%%|*}"
+                local ip="${value##*|}"
+                
+                if [[ -n "$user" && -n "$ip" ]]; then
+                    log "📢 收到用户更新信号: $user ($ip)"
+                    update_client_rate "$user" "$ip" && processed=1
+                else
+                    log "⚠️ 无效的 UPDATE_USER 格式: $value"
+                fi
+                ;;
+                
+            UPDATE_ROLE)
+                # value 格式: rolename
+                local role="$value"
+                log "📢 收到角色更新信号: $role"
+                
+                local updated_count=0
+                
+                # 遍历所有在线客户端
+                for ip in "${!IP_CLASS_MAP[@]}"; do
+                    local entry="${IP_CLASS_MAP[$ip]}"
+                    local user="${entry%%:*}"
+                    
+                    # 检查用户是否属于该角色
+                    if [[ -f "$USER_ROLE_MAP" ]]; then
+                        local user_role
+                        user_role=$(grep "^${user}=" "$USER_ROLE_MAP" 2>/dev/null | head -n1 | cut -d= -f2)
+                        
+                        if [[ "$user_role" == "$role" ]]; then
+                            update_client_rate "$user" "$ip" && {
+                                ((updated_count++))
+                                processed=1
+                            }
+                        fi
+                    fi
+                done
+                
+                log "✅ 角色 $role 更新完成: $updated_count 个在线用户"
+                ;;
+                
+            *)
+                log "⚠️ 未知的热更新命令: $action"
+                ;;
+        esac
+        
+    done < "$RELOAD_SIGNAL"
+    
+    # 清空信号文件
+    if (( processed == 1 )); then
+        > "$RELOAD_SIGNAL"
+        log "🎉 本轮热更新完成 (处理 $line_count 条信号)"
+    fi
+    
+    return 0
+}
 
 #####################################
 # 主循环
@@ -509,6 +640,9 @@ while true; do
         REPAIR_TICK=0
     fi
 
+    # ========= 热更新检测 =========
+    process_reload_signals || true
+
     # ========= 更新快照 =========
     LAST_SEEN=()
     for ip in "${!CURRENT_MAP[@]}"; do
@@ -518,6 +652,8 @@ while true; do
     if [[ -n "${WATCHDOG_USEC:-}" ]] && command -v systemd-notify >/dev/null 2>&1; then
         systemd-notify --status="监控中: ${#CURRENT_MAP[@]} 个客户端在线" WATCHDOG=1
     fi
+
+
 
     sleep "$INTERVAL"
 done

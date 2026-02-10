@@ -14,23 +14,6 @@ logger = logging.getLogger(__name__)
 
 client_groups_bp = Blueprint('client_groups', __name__)
 
-
-# ==================== 获取所有用户组 ====================
-# @client_groups_bp.route('/api/client_groups', methods=['GET'])
-# @login_required
-# def get_client_groups():
-#     """获取所有用户组列表"""
-#     try:
-#         groups = ClientGroup.query.all()
-#         data = {
-#             'groups': [group.to_dict() for group in groups],
-#             'total': len(groups)
-#         }
-#         return api_success(data)
-#     except Exception as e:
-#         logger.error(f"获取用户组列表失败: {str(e)}")
-#         return api_error(f"获取用户组列表失败: {str(e)}")
-
 # ==================== 获取所有用户组 ====================
 @client_groups_bp.route('/api/client_groups', methods=['GET'])
 @login_required
