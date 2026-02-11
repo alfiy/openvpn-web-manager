@@ -1,5 +1,5 @@
 /**
- * 这个模块包含了所有客户端相关的逻辑
+ * 这个模块包含了所有客户端相关的逻辑(Bootstrap + Font Awesome 6 语义化图标统一版)
  */
 import { qs, qsa, showCustomConfirm, authFetch, toggleCustomDate } from './utils.js';
 import { setCurrentSearchQuery,markUserActive } from './refresh.js';
@@ -28,20 +28,12 @@ const elementsExist = tbody && paging && pageInfo && noData;
 
 // 全局变量当前页为第1页
 export let currentPage = 1;
-
-let showOnlyOnline = false;  // 是否只显示在线用户
+let showOnlyOnline = false;
 
 /* 统一渲染表格 */
 function render(data) {
-    if (!elementsExist) {
-        console.warn("客户端管理DOM元素不存在,停止渲染。");
-        return;
-    }
+    if (!elementsExist) { return;}
 
-    // ⭐ 添加调试：查看第一个客户端的数据结构
-    // if (data.clients && data.clients.length > 0) {
-    //     console.log('第一个客户端数据:', data.clients[0]);
-    // }
 
     let clientsToRender = data.clients;
 
@@ -80,9 +72,11 @@ function render(data) {
         const actionButtons = [];
 
         if (c.disabled) {
-            actionButtons.push(`<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">重新启用</button>`);
+            actionButtons.push(`<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}"
+                <i class="fa-solid fa-shield-check me-1"></i>重新启用
+                </button>`);
         } else {
-            actionButtons.push(`<a href="/download_client/${c.name}" class="btn btn-sm btn-primary">下载配置</a>`);
+            actionButtons.push(`<a href="/download_client/${c.name}" class="btn btn-sm btn-primary"><i class="fa-solid fa-download me-1"></i>下载配置</a>`);
 
             if (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') {
                 const currentGroupName = c.group || '未分组';
@@ -98,9 +92,18 @@ function render(data) {
                 actionButtons.push(`<button class="btn btn-sm btn-info modify-expiry-btn"
                                             data-client="${c.name}"
                                             data-bs-toggle="modal"
-                                            data-bs-target="#modifyExpiryModal">修改到期</button>`);
-                actionButtons.push(`<button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">禁用</button>`);
-                actionButtons.push(`<button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">撤销</button>`);
+                                            data-bs-target="#modifyExpiryModal">
+                                            <i class="fa-solid fa-calendar-days me-1"></i>修改到期
+                                            </button>
+                                `);
+                actionButtons.push(`<button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">
+                                    <i class="fa-solid fa-ban me-1"></i>禁用
+                                    </button>
+                                `);
+                actionButtons.push(`<button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">
+                                    <i class="fa-solid fa-trash-can me-1"></i>撤销
+                                    </button>
+                                `);
             }
         }
 
@@ -113,11 +116,11 @@ function render(data) {
                 </td>
                 <td class="align-middle">
                     ${c.online
-                        ? `<span class="badge bg-success"><i class="fa fa-circle"></i> 在线</span>
+                        ? `<span class="badge bg-success"><i class="fa-solid fa-circle me-1"></i> 在线</span>
                            ${c.vpn_ip ? `<br><small class="text-success">VPN: ${c.vpn_ip}</small>` : ''}
                            ${c.real_ip ? `<br><small class="text-muted">来源: ${c.real_ip}</small>` : ''}
                            ${c.duration ? `<br><small class="text-info">时长: ${c.duration}</small>` : ''}`
-                        : `<span class="badge bg-secondary"><i class="fa fa-circle"></i> 离线</span>`
+                        : `<span class="badge bg-secondary"><i class="fa-solid fa-circle me-1"></i> 离线</span>`
                     }
                 </td>
                 <td class="align-middle"><small class="text-muted">${c.expiry || '未知'}</small></td>
