@@ -464,7 +464,7 @@ def modify_client_group():
         
         return api_success(
             {'client': client.to_dict()},
-            message=f'客户端 "{client_name}" 已移动到 "{group_name}"'
+            # message=f'客户端 "{client_name}" 已移动到 "{group_name}"'
         )
         
     except Exception as e:

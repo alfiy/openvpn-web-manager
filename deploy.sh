@@ -17,6 +17,21 @@ TC_ROLES_MAP="/etc/openvpn/tc-roles.map"
 
 echo "=== VPN Web Manager 部署脚本（含 TC 限速功能）==="
 
+# 检查 Redis 是否已安装
+if ! command_exists redis-server; then
+    echo "Redis 没有安装，正在安装 Redis..."
+    sudo apt update && sudo apt install -y redis-server
+    echo "✓ Redis 安装完成"
+else
+    echo "Redis 已经安装"
+fi
+
+# 确保 Redis 服务启动
+echo "正在启动 Redis 服务..."
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+echo "✓ Redis 服务已启动并设置为开机启动"
+
 echo "=== 1. 创建应用目录 ==="
 sudo mkdir -p "$APP_DIR"
 

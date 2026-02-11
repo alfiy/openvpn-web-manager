@@ -53,7 +53,7 @@ def export_tc_config():
         with open(USER_RATE_CONF, 'w') as f:
             f.write('\n'.join(lines_conf) + '\n')
         
-        logger.info(f"✅ 已导出 {len(groups)} 个用户组到 {USER_RATE_CONF}")
+        # logger.info(f"✅ 已导出 {len(groups)} 个用户组到 {USER_RATE_CONF}")
         
         # ========== 生成 tc-roles.map ==========
         # 只导出有分组的客户端
@@ -76,7 +76,7 @@ def export_tc_config():
                 # 如果没有任何客户端分组，写入空文件
                 f.write('')
         
-        logger.info(f"✅ 已导出 {len(clients)} 个客户端映射到 {USER_ROLE_MAP}")
+        # logger.info(f"✅ 已导出 {len(clients)} 个客户端映射到 {USER_ROLE_MAP}")
         
         return True
         

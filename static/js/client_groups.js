@@ -48,7 +48,7 @@ export function init() {
 
 // ⭐ 供外部调用的刷新接口 - 完全重新初始化
 export function refreshGroupsAfterClientMove() {
-    console.log('🔄 收到刷新请求，重新初始化用户组管理模块');
+    // console.log('🔄 收到刷新请求，重新初始化用户组管理模块');
     
     // 延迟执行，确保后端事务提交
     setTimeout(() => {
@@ -85,13 +85,13 @@ async function loadClientGroups(force = false) {
         const timestamp = new Date().getTime();
         const url = `/api/client_groups?_=${timestamp}`;
         
-        console.log('📡 请求用户组数据:', url);
+        // console.log('📡 请求用户组数据:', url);
         
         const response = await authFetch(url);
         
         if (response.code === 0) {
             const newGroups = response.data.groups || [];
-            console.log('✅ 获取到用户组数据:', newGroups.map(g => `${g.name}:${g.client_count}`).join(', '));
+            // console.log('✅ 获取到用户组数据:', newGroups.map(g => `${g.name}:${g.client_count}`).join(', '));
             
             groupsDataCache = newGroups;
             renderGroupsCards();
@@ -187,7 +187,7 @@ function renderGroupsCards() {
     }).join('');
     
     updatePagination(totalPages);
-    console.log(`✅ 渲染完成: ${currentGroups.length} 个用户组`);
+    // console.log(`✅ 渲染完成: ${currentGroups.length} 个用户组`);
 }
 
 

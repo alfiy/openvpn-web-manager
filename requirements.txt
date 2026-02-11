@@ -11,3 +11,4 @@ gunicorn>=23.0.0
 Flask-Session>=0.8.0
 tenacity>=9.1.2
 psutil>=5.9.4
+redis>=7.1.1

@@ -11,7 +11,20 @@ from sqlalchemy import event, Engine
 from models import db, User, Role, ClientGroup
 from routes.helpers import init_csrf_guard
 from utils.api_response import api_error
-from extensions import limiter
+from extensions import Limiter
+from flask_limiter.util import get_remote_address
+from redis import Redis
+
+# 创建 Redis 连接
+try:
+    redis = Redis(host='localhost', port=6379, db=0)
+    redis.ping()
+    print("Redis connected successfully")
+except Exception as e:
+    print("Failed to connect to Redis:", e)
+
+# 设置 Limiter 使用 Redis 存储
+limiter = Limiter(get_remote_address, storage_uri="redis://localhost:6379/0")
 
 # 加载环境变量
 load_dotenv()
@@ -65,6 +78,7 @@ def create_app():
     应用程序工厂函数，用于创建和配置 Flask 应用实例。
     """
     app = Flask(__name__)
+    limiter.init_app(app)
     app.config['DEBUG'] = True
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'a-very-secret-key-that-should-be-kept-secret')
     app.config['SESSION_TYPE'] = 'filesystem'
