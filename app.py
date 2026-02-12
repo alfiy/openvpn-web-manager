@@ -2,29 +2,52 @@
 import os
 from datetime import timedelta
 from dotenv import load_dotenv
-from flask import Flask, jsonify, redirect, url_for, flash
+from flask import Flask, redirect, url_for, flash
 from flask_session import Session
 from flask_mail import Mail
-from flask_wtf.csrf import CSRFError
 from flask_login import LoginManager
 from sqlalchemy import event, Engine
 from models import db, User, Role, ClientGroup
 from routes.helpers import init_csrf_guard
-from utils.api_response import api_error
 from extensions import Limiter
 from flask_limiter.util import get_remote_address
 from redis import Redis
+from flask_wtf.csrf import generate_csrf
+
+# ============================================================================
+# 导入重构后的工具模块
+# ============================================================================
+from utils.request_monitor import ConcurrentRequestLimiter, RequestMonitor
+from utils.api_response import register_error_handlers, register_request_handlers
+
+# 创建并发限制器和监控器
+concurrent_limiter = ConcurrentRequestLimiter(max_concurrent=10)
+request_monitor = RequestMonitor(max_records=100)
+
+# ============================================================================
+# Redis 和 Limiter 初始化
+# ============================================================================
 
 # 创建 Redis 连接
 try:
-    redis = Redis(host='localhost', port=6379, db=0)
+    redis = Redis(host='localhost', port=6379, db=0, socket_timeout=5)
     redis.ping()
-    print("Redis connected successfully")
+    print("✅ Redis connected successfully")
 except Exception as e:
-    print("Failed to connect to Redis:", e)
+    print(f"⚠️  Failed to connect to Redis: {e}")
+    redis = None
 
 # 设置 Limiter 使用 Redis 存储
-limiter = Limiter(get_remote_address, storage_uri="redis://localhost:6379/0")
+if redis:
+    limiter = Limiter(
+        get_remote_address, 
+        storage_uri="redis://localhost:6379/0",
+        storage_options={"socket_timeout": 5}
+    )
+else:
+    # 如果 Redis 不可用，使用内存存储
+    limiter = Limiter(get_remote_address, storage_uri="memory://")
+    print("⚠️  Using memory storage for rate limiting (Redis unavailable)")
 
 # 加载环境变量
 load_dotenv()
@@ -54,8 +77,11 @@ from routes.status_bp import status_bp
 from routes.restart_openvpn import restart_openvpn_bp
 from routes.api import api_bp
 from routes.api.client_groups import client_groups_bp
-from flask_wtf.csrf import generate_csrf
 from routes.dashboard import dashboard_bp
+
+# 导入健康检查 API
+from routes.api.health import health_bp, init_health_monitor
+
 from utils.tc_config_exporter import export_tc_config
 
 
@@ -71,7 +97,9 @@ def optimize_sqlite_connection():
             cursor.execute("PRAGMA synchronous=NORMAL")
             cursor.execute("PRAGMA cache_size=-64000")
             cursor.execute("PRAGMA temp_store=MEMORY")
+            cursor.execute("PRAGMA busy_timeout=10000")  # 10 秒超时
             cursor.close()
+
 
 def create_app():
     """
@@ -126,26 +154,11 @@ def create_app():
     app.config['WTF_CSRF_FIELD_NAME'] = 'csrf_token'
     app.config['WTF_CSRF_HEADERS'] = ['X-CSRFToken']
 
-    # 全局 JSON 错误处理
-    @app.errorhandler(400)
-    def _handle_400(e):
-        return api_error("Bad request", status=400)
-
-    @app.errorhandler(401)
-    def _handle_401(e):
-        return api_error("Unauthorized", status=401)
-
-    @app.errorhandler(403)
-    def _handle_403(e):
-        return api_error("Forbidden", status=403)
-
-    @app.errorhandler(404)
-    def _handle_404(e):
-        return api_error("Not found", status=404)
-
-    @app.errorhandler(500)
-    def _handle_500(e):
-        return api_error("Internal server error", status=500)
+    # ========================================================================
+    # 注册全局错误处理器和请求处理器（使用重构后的模块）
+    # ========================================================================
+    register_error_handlers(app)
+    register_request_handlers(app, concurrent_limiter, request_monitor)
 
     # 初始化扩展
     Session(app)
@@ -171,10 +184,6 @@ def create_app():
     def unauthorized_callback():
         flash('您需要登录才能访问此页面', 'warning')
         return redirect(url_for('auth_bp.login'))
-
-    @app.errorhandler(CSRFError)
-    def csrf_error(e):
-        return jsonify({'status': 'error', 'message': '安全令牌无效,请刷新页面后重试。'}), 400
 
     # 确保所有模板都能访问 csrf_token
     @app.context_processor
@@ -209,7 +218,7 @@ def create_app():
             db.session.commit()
             print("✅ 默认管理员账户已创建: admin / admin123")
 
-         # 🆕 检查并创建默认用户组（不限速）
+         # 检查并创建默认用户组（不限速）
         if not ClientGroup.query.filter_by(name='default').first():
             default_group = ClientGroup(
                 name='default',
@@ -224,7 +233,6 @@ def create_app():
         # 初始化导出 TC 配置
         try:
             export_tc_config()
-            # print("✅ TC 配置已初始化")
         except Exception as e:
             print(f"⚠️  TC 配置初始化失败: {e}")
 
@@ -240,7 +248,9 @@ def create_app():
     for bp in json_blueprints:
         init_csrf_guard(bp)
 
+    # ========================================================================
     # 注册所有蓝图
+    # ========================================================================
     app.register_blueprint(main_bp, url_prefix='/')
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(install_bp)
@@ -259,6 +269,10 @@ def create_app():
     app.register_blueprint(api_bp)
     app.register_blueprint(client_groups_bp)
     app.register_blueprint(dashboard_bp)
+    
+    # 注册健康检查 API（放在最后）
+    init_health_monitor(redis, concurrent_limiter, request_monitor)
+    app.register_blueprint(health_bp)
 
     return app
 
@@ -272,9 +286,18 @@ if __name__ == '__main__':
     print("=" * 60)
     print("✅ SQLite WAL 模式已启用")
     print("✅ 数据库连接池已配置")
+    print("✅ 请求超时保护已启用")
+    print("✅ 并发请求限制已启用 (最大: 10)")
+    print("✅ 性能监控已启用")
+    print("✅ 健康检查 API: /api/health")
+    print("✅ 性能指标 API: /api/metrics")
+    print("✅ 系统状态 API: /api/status")
     print("✅ TC 配置导出已初始化")
     print("✅ 用户组管理路由已加载")
     print("=" * 60)
     print("📍 访问地址: http://0.0.0.0:8080")
+    print("📍 健康检查: http://0.0.0.0:8080/api/health")
+    print("📍 性能指标: http://0.0.0.0:8080/api/metrics")
+    print("📍 系统状态: http://0.0.0.0:8080/api/status")
     print("=" * 60)
     app.run(debug=True, host='0.0.0.0', port=8080, use_reloader=False)
