@@ -72,9 +72,14 @@ function render(data) {
         const actionButtons = [];
 
         if (c.disabled) {
-            actionButtons.push(`<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}"
+            actionButtons.push(`<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">
                 <i class="fa-solid fa-shield-check me-1"></i>重新启用
                 </button>`);
+            if (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') {
+                actionButtons.push(`<button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">
+                                    <i class="fa-solid fa-trash-can me-1"></i>撤销
+                                    </button>`);
+            }
         } else {
             actionButtons.push(`<a href="/download_client/${c.name}" class="btn btn-sm btn-primary"><i class="fa-solid fa-download me-1"></i>下载配置</a>`);
 
