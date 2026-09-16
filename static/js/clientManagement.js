@@ -28,7 +28,7 @@ const elementsExist = tbody && paging && pageInfo && noData;
 
 // 全局变量当前页为第1页
 export let currentPage = 1;
-let showOnlyOnline = false;
+let listFilter = 'all'; // all | online | issue
 
 /* 统一渲染表格 */
 function render(data) {
@@ -47,8 +47,10 @@ function render(data) {
         noData.style.display = 'block';
 
         // 根据状态显示不同的提示信息
-        if (showOnlyOnline) {
+        if (listFilter === 'online') {
             noData.textContent = '当前无客户端在线。';
+        } else if (listFilter === 'issue') {
+            noData.textContent = '当前没有到期或已禁用的客户端。';
         } else if (data.q) {
             noData.textContent = `未找到与 "${data.q}" 相关的客户端。`;
         } else {
@@ -182,8 +184,10 @@ export function loadClients(page = currentPage, q = '') {
 
     currentPage = Number(page) || 1;
 
-    const onlineParam = showOnlyOnline ? '&online=1' : '';
-    authFetch(`/clients/data?page=${currentPage}&q=${encodeURIComponent(q)}${onlineParam}`)
+    let filterParam = '';
+    if (listFilter === 'online') filterParam = '&online=1';
+    if (listFilter === 'issue') filterParam = '&issue=1';
+    authFetch(`/clients/data?page=${currentPage}&q=${encodeURIComponent(q)}${filterParam}`)
         .then(render)
         .catch(console.error);
 }
@@ -537,36 +541,37 @@ export function bindClientEvents() {
 
     // 在线/显示全部切换按钮
     const filterOnlineBtn = qs('#filter-online-btn');
+    const filterIssueBtn = qs('#filter-issue-btn');
     const showAllBtn = qs('#show-all-btn');
 
-    if (filterOnlineBtn) {
-        filterOnlineBtn.addEventListener('click', () => {
-            showOnlyOnline = true;
-            currentPage = 1;
-
-            filterOnlineBtn.style.display = 'none';
-            showAllBtn.style.display = 'block';
-
-            if (input) {
-                input.value = '';
-                input.placeholder = '当前仅显示在线用户，点击"显示全部"查看所有客户端...';
+    function setFilterButtons(mode) {
+        listFilter = mode;
+        currentPage = 1;
+        if (filterOnlineBtn) filterOnlineBtn.style.display = mode === 'all' ? 'block' : 'none';
+        if (filterIssueBtn) filterIssueBtn.style.display = mode === 'all' ? 'block' : 'none';
+        if (showAllBtn) showAllBtn.style.display = mode === 'all' ? 'none' : 'block';
+        if (input) {
+            input.value = '';
+            if (mode === 'online') {
+                input.placeholder = '当前仅显示在线用户，点击“显示全部”返回...';
+            } else if (mode === 'issue') {
+                input.placeholder = '当前仅显示到期或已禁用用户，点击“显示全部”返回...';
+            } else {
+                input.placeholder = '搜索客户端名称或描述信息后回车...';
             }
-            setCurrentSearchQuery('');
-            loadClients(1, '');
-        });
+        }
+        setCurrentSearchQuery('');
+        loadClients(1, '');
     }
 
+    if (filterOnlineBtn) {
+        filterOnlineBtn.addEventListener('click', () => setFilterButtons('online'));
+    }
+    if (filterIssueBtn) {
+        filterIssueBtn.addEventListener('click', () => setFilterButtons('issue'));
+    }
     if (showAllBtn) {
-        showAllBtn.addEventListener('click', () => {
-            showOnlyOnline = false;
-            currentPage = 1;
-
-            showAllBtn.style.display = 'none';
-            filterOnlineBtn.style.display = 'block';
-
-            if (input) input.placeholder = '搜索客户端名称或描述信息后回车...';
-            loadClients(currentPage, input ? input.value.trim() : '');
-        });
+        showAllBtn.addEventListener('click', () => setFilterButtons('all'));
     }
 
     // 搜索框回车

@@ -1,3 +1,4 @@
+from datetime import datetime
 from flask import Blueprint, request, render_template, jsonify
 from flask_login import login_required
 from models import Client  # ORM 模型
@@ -86,6 +87,7 @@ def clients_data():
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '', type=str).strip()
     online_only = request.args.get('online', '', type=str).strip() in ('1', 'true', 'yes')
+    issue_only = request.args.get('issue', '', type=str).strip() in ('1', 'true', 'yes')
 
     # 先拉 7505 在线名单，避免多次占用 management 单连接
     live_online = get_online_clients(cache_ttl=3)
@@ -102,10 +104,16 @@ def clients_data():
         )
 
     rows = query.order_by(Client.name.asc()).all()
+    now = datetime.now()
     if online_only:
         rows = [
             c for c in rows
             if not c.disabled and (c.name or '').lower() in live_by_lower
+        ]
+    elif issue_only:
+        rows = [
+            c for c in rows
+            if c.disabled or (c.logical_expiry is not None and c.logical_expiry <= now)
         ]
 
     total = len(rows)
