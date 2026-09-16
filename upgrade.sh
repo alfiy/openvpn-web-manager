@@ -10,6 +10,9 @@ DB_FILE="$DATA_DIR/vpn_users.db"
 BACKUP_ROOT="${BACKUP_ROOT:-$HOME/vpnwm-upgrade-backup}"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP_DIR="$BACKUP_ROOT/$STAMP"
+# 生产若前面有 Nginx，保持 127.0.0.1；直连访问可: BIND=0.0.0.0:8080
+BIND="${BIND:-0.0.0.0:8080}"
+WORKERS="${WORKERS:-2}"
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
@@ -23,14 +26,21 @@ if [ ! -d "$APP_DIR" ]; then
     exit 1
 fi
 
-echo "=== 1. 备份（升级前必做）==="
+echo "=== 1. 停止会写库的 Web 相关服务（不停 OpenVPN）==="
+sudo systemctl stop vpnwm 2>/dev/null || true
+sudo systemctl stop sync_openvpn_clients.timer 2>/dev/null || true
+sudo systemctl stop sync_openvpn_clients.service 2>/dev/null || true
+
+echo "=== 2. 备份（checkpoint 后再拷库）==="
 mkdir -p "$BACKUP_DIR"
 if [ -f "$DB_FILE" ]; then
-    sudo cp -a "$DB_FILE" "$BACKUP_DIR/vpn_users.db"
     if command_exists sqlite3; then
+        sudo sqlite3 "$DB_FILE" "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null || true
         sudo sqlite3 "$DB_FILE" ".backup '$BACKUP_DIR/vpn_users.backup.sqlite'"
+        echo "✓ 数据库一致性备份: $BACKUP_DIR/vpn_users.backup.sqlite"
     fi
-    echo "✓ 数据库已备份: $BACKUP_DIR/vpn_users.db"
+    sudo cp -a "$DB_FILE" "$BACKUP_DIR/vpn_users.db"
+    echo "✓ 数据库文件已备份: $BACKUP_DIR/vpn_users.db"
 else
     echo "⚠️  未找到 $DB_FILE，若这是正在使用的环境请立刻停止升级"
 fi
@@ -41,20 +51,19 @@ fi
 if [ -d "$APP_DIR/data/session" ]; then
     sudo cp -a "$APP_DIR/data/session" "$BACKUP_DIR/session" 2>/dev/null || true
 fi
-# OpenVPN 证书与客户端配置（只备份，不改）
 if [ -d /etc/openvpn ]; then
     sudo tar -C /etc -czf "$BACKUP_DIR/etc-openvpn.tgz" openvpn
     echo "✓ /etc/openvpn 已备份: $BACKUP_DIR/etc-openvpn.tgz"
 fi
+if [ -f "$BACKUP_DIR/vpn_users.backup.sqlite" ] && command_exists sqlite3; then
+    echo "--- 备份库行数 ---"
+    sudo sqlite3 "$BACKUP_DIR/vpn_users.backup.sqlite" "SELECT 'users=' || COUNT(*) FROM users;"
+    sudo sqlite3 "$BACKUP_DIR/vpn_users.backup.sqlite" "SELECT 'clients=' || COUNT(*) FROM clients;"
+fi
 sudo chown -R "$APP_USER":"$APP_USER" "$BACKUP_DIR" 2>/dev/null || true
 echo "备份目录: $BACKUP_DIR"
 
-echo "=== 2. 停止 Web 服务（不停 OpenVPN）==="
-sudo systemctl stop vpnwm || true
-# 不要 stop openvpn@server，不要跑卸载
-
 echo "=== 3. 同步代码（排除数据与密钥）==="
-# 不用 deploy.sh：它会 rsync 覆盖 .env，且会重写一堆服务
 sudo rsync -a \
     --exclude 'venv/' \
     --exclude 'data/' \
@@ -81,13 +90,21 @@ fi
 sudo chown "$APP_USER":"$APP_USER" "$ENV_FILE"
 sudo chmod 600 "$ENV_FILE"
 
-echo "=== 5. 数据目录权限 ==="
+echo "=== 5. 数据目录与 TC 导出权限 ==="
 sudo mkdir -p "$DATA_DIR"
 sudo chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 sudo chmod 750 "$DATA_DIR"
 if [ -f "$DB_FILE" ]; then
     sudo chmod 640 "$DB_FILE"
 fi
+if [ -d /etc/openvpn ]; then
+    sudo touch /etc/openvpn/tc-users.conf /etc/openvpn/tc-roles.map
+    sudo chown "$APP_USER":"$APP_USER" /etc/openvpn/tc-users.conf /etc/openvpn/tc-roles.map
+    sudo chmod 644 /etc/openvpn/tc-users.conf /etc/openvpn/tc-roles.map
+fi
+sudo mkdir -p /var/run/openvpn-tc
+sudo chown -R "$APP_USER":"$APP_USER" /var/run/openvpn-tc
+sudo chmod 755 /var/run/openvpn-tc
 
 echo "=== 6. 依赖（沿用原 venv）==="
 if [ -x "$APP_DIR/venv/bin/pip" ]; then
@@ -111,7 +128,7 @@ WorkingDirectory=$APP_DIR
 Environment="FLASK_ENV=production"
 Environment="PYTHONUNBUFFERED=1"
 EnvironmentFile=-$APP_DIR/.env
-ExecStart=$APP_DIR/venv/bin/gunicorn --timeout 600 -w 1 -b 127.0.0.1:8080 --access-logfile /dev/null --error-logfile - "app:app"
+ExecStart=$APP_DIR/venv/bin/gunicorn --timeout 600 -w $WORKERS -b $BIND --access-logfile /dev/null --error-logfile - "app:app"
 Restart=always
 RestartSec=10
 
@@ -119,7 +136,6 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-# 受限 sudo（安装/签发证书需要）
 SUDOERS_FILE="/etc/sudoers.d/vpnwm"
 sudo tee "$SUDOERS_FILE" > /dev/null <<SUDOEOF
 Defaults:$APP_USER !requiretty
@@ -128,6 +144,7 @@ $APP_USER ALL=(root) NOPASSWD: /bin/systemctl stop openvpn@server.service
 $APP_USER ALL=(root) NOPASSWD: /bin/systemctl restart openvpn@server.service
 $APP_USER ALL=(root) NOPASSWD: /bin/systemctl reload openvpn@server.service
 $APP_USER ALL=(root) NOPASSWD: /bin/systemctl is-active openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /bin/systemctl is-active --quiet openvpn@server.service
 $APP_USER ALL=(root) NOPASSWD: /bin/systemctl status openvpn@server.service
 $APP_USER ALL=(root) NOPASSWD: /bin/systemctl disable openvpn@server.service
 $APP_USER ALL=(root) NOPASSWD: /bin/systemctl enable openvpn@server.service
@@ -136,6 +153,7 @@ $APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop openvpn@server.service
 $APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart openvpn@server.service
 $APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reload openvpn@server.service
 $APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl is-active openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl is-active --quiet openvpn@server.service
 $APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl status openvpn@server.service
 $APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl disable openvpn@server.service
 $APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl enable openvpn@server.service
@@ -179,10 +197,11 @@ fi
 sudo systemctl daemon-reload
 sudo systemctl start vpnwm
 sleep 2
+sudo systemctl start sync_openvpn_clients.timer 2>/dev/null || true
 
 echo "=== 8. 检查 ===="
 if sudo systemctl is-active --quiet vpnwm; then
-    echo "✓ vpnwm 已启动"
+    echo "✓ vpnwm 已启动  (监听 $BIND)"
 else
     echo "✗ vpnwm 启动失败，看日志: sudo journalctl -u vpnwm -n 80 --no-pager"
     echo "  数据备份在: $BACKUP_DIR"
@@ -204,5 +223,7 @@ echo "备份: $BACKUP_DIR"
 echo "注意:"
 echo "  1. 若 admin/super_admin 仍是 admin123，登录后必须先改密"
 echo "  2. 若这次新写了 SECRET_KEY，旧 Session 会失效，重新登录即可，库数据不受影响"
-echo "  3. 回滚: sudo systemctl stop vpnwm && sudo cp $BACKUP_DIR/vpn_users.db $DB_FILE && 用旧代码覆盖 $APP_DIR 后 start"
+echo "  3. 回滚库: sudo systemctl stop vpnwm sync_openvpn_clients.timer && sudo cp $BACKUP_DIR/vpn_users.backup.sqlite $DB_FILE && sudo rm -f ${DB_FILE}-wal ${DB_FILE}-shm && sudo systemctl start vpnwm"
 echo "  4. 不要执行 Web 上的「卸载 OpenVPN」，那会删 /etc/openvpn"
+echo "  5. 直连 8080（无 Nginx）请用: BIND=0.0.0.0:8080 bash ./upgrade.sh"
+echo "  6. 新功能（在线筛选/批量/7505 踢人）已包含在本次 rsync 的代码里，无需另拷文件"
