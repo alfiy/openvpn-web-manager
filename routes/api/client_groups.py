@@ -7,6 +7,7 @@ from flask_login import login_required, current_user
 from models import db, ClientGroup, Client, Role
 from routes.helpers import role_required
 from utils.api_response import api_success, api_error
+from utils.validation import ValidationError, validate_client_name, validate_group_name, validate_rate
 from utils.tc_config_exporter import export_tc_config
 from openvpn_monitor.tc_hotreload import notify_user_update, notify_role_update
 import logging
@@ -75,24 +76,17 @@ def create_client_group():
         data = request.get_json(silent=True) or {}
         
         # 参数验证
-        name = (data.get('name') or '').strip()
+        try:
+            name = validate_group_name((data.get('name') or '').strip())
+            upload_rate = validate_rate((data.get('upload_rate') or '2Mbit').strip())
+            download_rate = validate_rate((data.get('download_rate') or '2Mbit').strip())
+        except ValidationError as exc:
+            return api_error(str(exc))
         description = (data.get('description') or '').strip()
-        upload_rate = (data.get('upload_rate') or '2Mbit').strip()
-        download_rate = (data.get('download_rate') or '2Mbit').strip()
-        
-        if not name:
-            return api_error('用户组名称不能为空')
         
         # 检查用户组名称是否已存在
         if ClientGroup.query.filter_by(name=name).first():
             return api_error(f'用户组 "{name}" 已存在')
-        
-        # 验证速率格式 (例如: 2Mbit, 5Mbit, 10kbit)
-        if not validate_rate_format(upload_rate):
-            return api_error('上行速率格式无效，应为数字+单位(如：5Mbit)')
-        
-        if not validate_rate_format(download_rate):
-            return api_error('下行速率格式无效，应为数字+单位(如：50Mbit)')
         
         # 创建用户组
         group = ClientGroup(
@@ -148,9 +142,10 @@ def update_client_group(group_id):
         
         # 更新字段
         if 'name' in data:
-            new_name = (data['name'] or '').strip()
-            if not new_name:
-                return api_error('用户组名称不能为空')
+            try:
+                new_name = validate_group_name((data['name'] or '').strip())
+            except ValidationError as exc:
+                return api_error(str(exc))
             # 检查新名称是否被其他组占用
             if new_name.lower() != group.name.lower():
                 existing = ClientGroup.query.filter_by(name=new_name).first()
@@ -163,16 +158,20 @@ def update_client_group(group_id):
         
         if 'upload_rate' in data:
             upload_rate = (data['upload_rate'] or '2Mbit').strip()
-            if not validate_rate_format(upload_rate):
-                return api_error('上行速率格式无效')
+            try:
+                upload_rate = validate_rate(upload_rate)
+            except ValidationError as exc:
+                return api_error(str(exc))
             if group.upload_rate != upload_rate:
                 rate_changed = True
             group.upload_rate = upload_rate
         
         if 'download_rate' in data:
             download_rate = (data['download_rate'] or '2Mbit').strip()
-            if not validate_rate_format(download_rate):
-                return api_error('下行速率格式无效')
+            try:
+                download_rate = validate_rate(download_rate)
+            except ValidationError as exc:
+                return api_error(str(exc))
             if group.download_rate != download_rate:
                 rate_changed = True
             group.download_rate = download_rate
@@ -254,10 +253,10 @@ def add_group_member(group_id):
             return api_error('用户组不存在', code=404)
         
         data = request.get_json(silent=True) or {}
-        client_name = (data.get('client_name') or '').strip()
-        
-        if not client_name:
-            return api_error('客户端名称不能为空')
+        try:
+            client_name = validate_client_name((data.get('client_name') or '').strip())
+        except ValidationError as exc:
+            return api_error(str(exc))
         
         client = Client.query.filter_by(name=client_name).first()
         if not client:
@@ -317,10 +316,10 @@ def remove_group_member(group_id):
             return api_error('用户组不存在', code=404)
         
         data = request.get_json(silent=True) or {}
-        client_name = (data.get('client_name') or '').strip()
-        
-        if not client_name:
-            return api_error('客户端名称不能为空')
+        try:
+            client_name = validate_client_name((data.get('client_name') or '').strip())
+        except ValidationError as exc:
+            return api_error(str(exc))
         
         client = Client.query.filter_by(name=client_name).first()
         if not client:
@@ -399,11 +398,11 @@ def modify_client_group():
     """
     try:
         data = request.get_json(silent=True) or {}
-        client_name = (data.get('client_name') or '').strip()
+        try:
+            client_name = validate_client_name((data.get('client_name') or '').strip())
+        except ValidationError as exc:
+            return api_error(str(exc))
         group_name = data.get('group')
-        
-        if not client_name:
-            return api_error('客户端名称不能为空')
         
         # 查找客户端
         client = Client.query.filter_by(name=client_name).first()

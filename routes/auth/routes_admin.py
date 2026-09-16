@@ -36,12 +36,15 @@ def change_user_role():
     if not target:
         return jsonify({'status': 'error', 'message': '用户不存在'}), 404
 
-    # Admins cannot modify SUPER_ADMIN
-    if current_user.role == Role.ADMIN and target.role == Role.SUPER_ADMIN:
-        return jsonify({'status': 'error', 'message': '您无权修改超级管理员的权限'}), 403
-
     if target.id == current_user.id:
         return jsonify({'status': 'error', 'message': '无法修改自己的权限'}), 403
+
+    # ADMIN 不能动 SUPER_ADMIN，也不能把任何人提成 SUPER_ADMIN
+    if current_user.role != Role.SUPER_ADMIN:
+        if target.role == Role.SUPER_ADMIN:
+            return jsonify({'status': 'error', 'message': '您无权修改超级管理员的权限'}), 403
+        if new_role_str == Role.SUPER_ADMIN.name:
+            return jsonify({'status': 'error', 'message': '您无权授予超级管理员权限'}), 403
 
     try:
         target.role = Role[new_role_str]

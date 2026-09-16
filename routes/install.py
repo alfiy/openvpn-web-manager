@@ -2,7 +2,8 @@ from flask import Blueprint, request, jsonify, render_template
 import os
 import subprocess
 import time
-from routes.helpers import login_required
+from routes.helpers import admin_required
+from utils.validation import ValidationError, validate_ipv4
 
 install_bp = Blueprint('install', __name__)
 
@@ -10,7 +11,7 @@ SCRIPT_PATH = './ubuntu-openvpn-install.sh'
 
 
 @install_bp.route('/install', methods=['POST'])
-@login_required
+@admin_required
 def install():
     # 1. 检查脚本是否存在
     if not os.path.exists(SCRIPT_PATH):
@@ -53,7 +54,18 @@ def install():
         except:
             return '10.0.0.1'
 
-    server_ip = data.get('ip', '').strip() or get_internal_ip()
+    raw_ip = (data.get('ip') or '').strip()
+    if raw_ip:
+        try:
+            server_ip = validate_ipv4(raw_ip)
+        except ValidationError as exc:
+            return jsonify({'status': 'error', 'message': str(exc)})
+    else:
+        server_ip = get_internal_ip()
+        try:
+            server_ip = validate_ipv4(server_ip)
+        except ValidationError:
+            return jsonify({'status': 'error', 'message': '无法自动检测合法 IPv4，请手动填写'})
 
     # 5. 启动脚本（参数：端口 + IP）
     try:

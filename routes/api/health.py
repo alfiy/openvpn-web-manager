@@ -3,8 +3,10 @@
 健康检查和性能监控 API
 """
 from flask import Blueprint, jsonify
+from flask_login import login_required
 from models import db
 from sqlalchemy import text
+from routes.helpers import admin_required
 import time
 import logging
 
@@ -60,7 +62,7 @@ def health_check():
         health_status['components']['database'] = 'ok'
     except Exception as e:
         logger.error(f"Database health check failed: {e}", exc_info=True)
-        health_status['components']['database'] = f'error: {str(e)[:100]}'
+        health_status['components']['database'] = 'error'
         health_status['status'] = 'degraded'
     
     # 检查 Redis 连接
@@ -71,7 +73,7 @@ def health_check():
             health_status['components']['redis'] = 'ok'
         except Exception as e:
             logger.error(f"Redis health check failed: {e}", exc_info=True)
-            health_status['components']['redis'] = f'error: {str(e)[:100]}'
+            health_status['components']['redis'] = 'error'
             health_status['status'] = 'degraded'
     else:
         health_status['components']['redis'] = 'not configured'
@@ -89,6 +91,8 @@ def health_check():
 
 
 @health_bp.route('/metrics', methods=['GET'])
+@login_required
+@admin_required
 def metrics():
     """
     性能指标端点
@@ -125,6 +129,8 @@ def metrics():
 
 
 @health_bp.route('/metrics/slow-requests', methods=['GET'])
+@login_required
+@admin_required
 def slow_requests():
     """
     获取慢请求详情
@@ -162,6 +168,8 @@ def slow_requests():
 
 
 @health_bp.route('/metrics/reset', methods=['POST'])
+@login_required
+@admin_required
 def reset_metrics():
     """
     重置监控数据
@@ -186,6 +194,8 @@ def reset_metrics():
 
 
 @health_bp.route('/status', methods=['GET'])
+@login_required
+@admin_required
 def system_status():
     """
     系统状态概览

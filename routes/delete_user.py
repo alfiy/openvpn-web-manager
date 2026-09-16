@@ -38,6 +38,12 @@ def delete_user():
                 'message': '用户不存在'
             }), 404
 
+        if int(user_id) == current_user.id:
+            return jsonify({
+                'status': 'error',
+                'message': '不能删除当前登录账号'
+            }), 403
+
         # 使用 SQLAlchemy 删除用户
         db.session.delete(user_to_delete)
         db.session.commit()

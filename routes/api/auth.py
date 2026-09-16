@@ -18,5 +18,12 @@ def api_login():
     if not user or not user.check_password(password):
         return api_error("用户名或密码不正确", status=401)
 
+    if user.check_password('admin123'):
+        user.must_change_password = True
+        from models import db
+        db.session.commit()
     login_user(user)
-    return api_success({"redirect": "/"}, msg="登录成功")
+    return api_success({
+        "redirect": "/",
+        "must_change_password": bool(user.must_change_password),
+    }, msg="登录成功" if not user.must_change_password else "请先修改默认密码")

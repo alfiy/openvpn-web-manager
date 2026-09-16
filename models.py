@@ -41,12 +41,13 @@ class User(db.Model, UserMixin):
 
     reset_token = db.Column(db.String(128))
     reset_expire = db.Column(db.DateTime, nullable=True)
+    must_change_password = db.Column(db.Boolean, default=False, nullable=False)
 
     def set_password(self, raw):
         if not raw:
             raise ValueError("密码不能为空")
-        if len(raw) < 6:
-            raise ValueError("密码长度至少为6个字符")
+        if len(raw) < 8:
+            raise ValueError("密码长度至少为8个字符")
         self.password_hash = generate_password_hash(raw)
 
     def check_password(self, raw):

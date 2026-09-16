@@ -5,6 +5,9 @@ import socket
 import time
 from flask import jsonify, request
 from flask_login import login_required
+from routes.helpers import admin_required
+from utils.validation import ValidationError, validate_client_name
+from utils.openvpn_ops import set_ccd_disabled
 from . import api_bp
 from utils.api_response import api_success, api_error
 from utils.openvpn_utils import log_message
@@ -140,32 +143,25 @@ def openvpn_client_kill(host, port, client_name, mgmt_password=None):
 
 # ---------------- API 禁用客户端接口 ----------------
 @api_bp.route('/clients/disable', methods=['POST'])
-@login_required
+@admin_required
 def api_disable_client():
     """
     禁用客户端(创建 ccd disable 文件 + 断开客户端 + 数据库标志位)
     """
-    data = request.get_json()
-    client_name = data.get('client_name', '').strip()
-    if not client_name:
-        return api_error("缺少 client_name", 400)
+    data = request.get_json() or {}
+    try:
+        client_name = validate_client_name(data.get('client_name', '').strip())
+    except ValidationError as exc:
+        return api_error(str(exc), 400)
 
     # ---------- 1. 创建禁用文件 ----------
     try:
-        ccd_dir = '/etc/openvpn/ccd'
-        disable_file_path = os.path.join(ccd_dir, client_name)
-        os.makedirs(ccd_dir, exist_ok=True)
-
-        cmd = ['sudo', 'sh', '-c', f'echo "disable" > {disable_file_path}']
-        log_message(f"执行命令以禁用客户端:{' '.join(cmd)}")
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
-
-        os.system(f"sudo chown root:root {disable_file_path}")
-        os.system(f"sudo chmod 644 {disable_file_path}")
-        log_message(f"禁用文件创建成功:{disable_file_path}")
-
-    except subprocess.CalledProcessError as e:
-        return api_error(f"创建禁用文件失败:{e.stderr}")
+        ok, err = set_ccd_disabled(client_name, True)
+        if not ok:
+            return api_error(f"创建禁用文件失败:{err}")
+        log_message(f"禁用文件创建成功:{err}")
+    except ValidationError as e:
+        return api_error(str(e))
     except Exception as e:
         return api_error(f"创建禁用文件异常:{e}")
 

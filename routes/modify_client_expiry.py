@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
-from routes.helpers import login_required
+from routes.helpers import admin_required
+from utils.validation import ValidationError, validate_client_name
+from utils.openvpn_ops import set_ccd_disabled
 from models import Client, db
 import os
 import subprocess
@@ -8,7 +10,7 @@ import subprocess
 modify_client_expiry_bp = Blueprint('modify_client_expiry', __name__)
 
 @modify_client_expiry_bp.route('/api/clients/modify_expiry', methods=['POST'])
-@login_required
+@admin_required
 def modify_client_expiry():
     """
     修改客户端逻辑到期时间（支持 expiry_days 或 expiry_date）
@@ -19,7 +21,10 @@ def modify_client_expiry():
     if not data:
         return jsonify({'status': 'error', 'message': '请求数据格式错误'}), 400
 
-    client_name = data.get('client_name', '').strip()
+    try:
+        client_name = validate_client_name(data.get('client_name', '').strip())
+    except ValidationError as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 400
     expiry_days = data.get('expiry_days')
     expiry_date = data.get('expiry_date')  # 新字段
 
@@ -60,14 +65,9 @@ def modify_client_expiry():
         was_disabled = client.disabled
         if client.disabled:
             client.disabled = False
-            ccd_dir = '/etc/openvpn/ccd'
-            disable_file_path = os.path.join(ccd_dir, client_name)
-            if os.path.exists(disable_file_path):
-                try:
-                    subprocess.run(['sudo', 'rm', '-f', disable_file_path],
-                                   capture_output=True, text=True, check=True)
-                except subprocess.CalledProcessError as e:
-                    print(f"[WARN] 删除禁用文件失败: {e.stderr}")
+            ok, err = set_ccd_disabled(client_name, False)
+            if not ok:
+                print(f"[WARN] 删除禁用文件失败: {err}")
 
         db.session.commit()
 

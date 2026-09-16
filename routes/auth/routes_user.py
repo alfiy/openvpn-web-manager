@@ -11,7 +11,7 @@ from utils.password_validator import PasswordValidator
 
 
 # 使用项目统一的 CSRF
-from extensions import csrf
+from extensions import csrf, limiter
 
 
 # ------------------------------------------------------
@@ -28,33 +28,11 @@ def get_csrf_token():
 # ------------------------------------------------------
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
+    # P0: 关闭公开注册，仅超级管理员可通过 /add_users 创建账号
     if request.method == 'GET':
-        return render_template('register.html')
-
-    form = request.form
-    username = form.get('username', '').strip()
-    email = form.get('email', '').strip().lower()
-    password = form.get('password', '')
-
-    if not username or not email or not password:
-        return jsonify({'status': 'error', 'message': '缺少字段'}), 400
-
-    # 使用统一的密码验证（替换原来的 len(password) < 6）
-    is_valid, error_msg = PasswordValidator.validate_strength(password)
-    if not is_valid:
-        return jsonify({'status': 'error', 'message': error_msg}), 400
-
-    from sqlalchemy.exc import IntegrityError
-    try:
-        user = User(username=username, email=email, role=Role.NORMAL)
-        user.set_password(password)
-        db.session.add(user)
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': '用户名或邮箱已存在'}), 400
-
-    return jsonify({'status': 'success'}), 201
+        flash('公开注册已关闭，请联系管理员创建账号', 'warning')
+        return redirect(url_for('auth_bp.login'))
+    return jsonify({'status': 'error', 'message': '公开注册已关闭'}), 403
 
 
 # ------------------------------------------------------
@@ -71,6 +49,7 @@ def login():
 # ------------------------------------------------------
 @csrf.exempt
 @auth_bp.route('/api/login', methods=['POST'])
+@limiter.limit("10 per minute")
 def api_login():
     data = request.get_json(silent=True)
     if not data:
@@ -84,15 +63,20 @@ def api_login():
 
     user = User.query.filter_by(username=username).first()
     if user and user.check_password(password):
+        if user.check_password('admin123'):
+            user.must_change_password = True
+            db.session.commit()
         login_user(user)
         current_app.logger.info("用户 %s 登录", username)
-
-        # 登录成功后返回 CSRF 给客户端
-        return jsonify({
+        payload = {
             'status': 'success',
             'redirect': url_for('main_bp.index'),
-            'csrf': generate_csrf()
-        }), 200
+            'csrf': generate_csrf(),
+            'must_change_password': bool(user.must_change_password),
+        }
+        if user.must_change_password:
+            payload['message'] = '检测到默认或弱口令，请先修改密码后再使用系统'
+        return jsonify(payload), 200
 
     return jsonify({'status': 'error', 'message': '用户名或密码不正确'}), 401
 
@@ -216,8 +200,11 @@ def api_change_password():
     if not is_valid:
         return jsonify({'status': 'error', 'message': error_msg}), 400
 
-    # 更新密码
+    if new_pwd == 'admin123':
+        return jsonify({'status': 'error', 'message': '不能使用系统默认密码'}), 400
+
     current_user.set_password(new_pwd)
+    current_user.must_change_password = False
     db.session.commit()
 
     return jsonify({'status': 'success', 'message': '密码修改成功'})

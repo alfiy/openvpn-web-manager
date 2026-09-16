@@ -48,6 +48,21 @@ sudo rsync -av \
     ./ "$APP_DIR/"
 echo "✓ 文件同步完成"
 
+echo "=== 2.1 写入 SECRET_KEY ==="
+ENV_FILE="$APP_DIR/.env"
+if [ ! -f "$ENV_FILE" ]; then
+    sudo -u "$APP_USER" touch "$ENV_FILE"
+fi
+if ! grep -q '^SECRET_KEY=' "$ENV_FILE" 2>/dev/null; then
+    SK=$(openssl rand -hex 32)
+    echo "SECRET_KEY=$SK" | sudo tee -a "$ENV_FILE" >/dev/null
+    sudo chown "$APP_USER":"$APP_USER" "$ENV_FILE"
+    sudo chmod 600 "$ENV_FILE"
+    echo "✓ 已生成 SECRET_KEY 并写入 $ENV_FILE"
+else
+    echo "✓ SECRET_KEY 已存在，跳过"
+fi
+
 echo "=== 3. 创建数据库目录和文件 ==="
 DATA_DIR="$APP_DIR/data"
 echo "创建数据目录：$DATA_DIR"
@@ -334,6 +349,66 @@ sudo chmod 644 "$TC_ROLES_MAP"
 echo "✓ TC 配置文件权限已设置"
 
 echo ""
+echo "=== 6.7 配置 vpnwm 受限 sudo ==="
+SUDOERS_FILE="/etc/sudoers.d/vpnwm"
+sudo tee "$SUDOERS_FILE" > /dev/null <<SUDOEOF
+# OpenVPN Web Manager — 仅允许部署用户执行管理所需命令
+Defaults:$APP_USER !requiretty
+$APP_USER ALL=(root) NOPASSWD: /bin/systemctl start openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /bin/systemctl stop openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /bin/systemctl restart openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /bin/systemctl reload openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /bin/systemctl is-active openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /bin/systemctl status openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /bin/systemctl disable openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /bin/systemctl enable openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl start openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reload openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl is-active openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl status openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl disable openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl enable openvpn@server.service
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl daemon-reload
+$APP_USER ALL=(root) NOPASSWD: /bin/systemctl daemon-reload
+$APP_USER ALL=(root) NOPASSWD: /etc/openvpn/easy-rsa/easyrsa
+$APP_USER ALL=(root) NOPASSWD: /usr/share/easy-rsa/easyrsa
+$APP_USER ALL=(root) NOPASSWD: /bin/cp
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/cp
+$APP_USER ALL=(root) NOPASSWD: /bin/rm
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/rm
+$APP_USER ALL=(root) NOPASSWD: /bin/mv
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/mv
+$APP_USER ALL=(root) NOPASSWD: /bin/chmod
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/chmod
+$APP_USER ALL=(root) NOPASSWD: /bin/chown
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/chown
+$APP_USER ALL=(root) NOPASSWD: /bin/mkdir
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/mkdir
+$APP_USER ALL=(root) NOPASSWD: /bin/cat
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/cat
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/test
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/tee
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/sed
+$APP_USER ALL=(root) NOPASSWD: /bin/sed
+$APP_USER ALL=(root) NOPASSWD: /usr/sbin/sysctl
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/apt-get
+$APP_USER ALL=(root) NOPASSWD: /bin/systemctl stop iptables-openvpn
+$APP_USER ALL=(root) NOPASSWD: /bin/systemctl disable iptables-openvpn
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop iptables-openvpn
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl disable iptables-openvpn
+$APP_USER ALL=(root) NOPASSWD: /bin/bash $APP_DIR/ubuntu-openvpn-install.sh *
+SUDOEOF
+sudo chmod 440 "$SUDOERS_FILE"
+if sudo visudo -cf "$SUDOERS_FILE"; then
+    echo "✓ sudoers 已安装: $SUDOERS_FILE"
+else
+    echo "✗ sudoers 语法错误，已删除以免锁死 sudo"
+    sudo rm -f "$SUDOERS_FILE"
+    exit 1
+fi
+
 echo "=== 7. 配置 Flask 应用服务 ==="
 sudo tee /etc/systemd/system/vpnwm.service > /dev/null <<EOF
 [Unit]
@@ -342,10 +417,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=$APP_USER
+Group=$APP_USER
 WorkingDirectory=$APP_DIR
 Environment="FLASK_ENV=production"
 Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=-$APP_DIR/.env
 ExecStart=$APP_DIR/venv/bin/gunicorn --timeout 600 -w 1 -b 0.0.0.0:$APP_PORT --access-logfile /dev/null --error-logfile - "app:app"
 Restart=always
 RestartSec=10
@@ -515,7 +592,7 @@ echo "=== 部署完成！==="
 echo "==================================================================="
 echo ""
 echo "📌 访问地址:"
-echo "   Flask 应用: http://127.0.0.1:$APP_PORT"
+echo "   Flask 应用(本机): http://127.0.0.1:$APP_PORT\n   建议用 Nginx 反代并启用 HTTPS，不要把 8080 直接暴露到公网"
 echo ""
 echo "📌 默认用户组:"
 echo "   名称: default"

@@ -1,6 +1,8 @@
 from flask import Blueprint, request
 from datetime import datetime, timezone
-from routes.helpers import login_required
+from routes.helpers import admin_required
+from utils.validation import ValidationError, validate_client_name
+from utils.openvpn_ops import set_ccd_disabled
 from models import Client, db
 from utils.openvpn_utils import log_message
 from utils.api_response import api_success, api_error
@@ -10,28 +12,12 @@ import subprocess
 enable_client_bp = Blueprint('enable_client', __name__)
 
 def enable_client(client_name):
-    """
-    启用客户端:
-    - 删除 CCD 禁用文件
-    - 更新数据库: client.disabled = False
-    """
-    ccd_dir = '/etc/openvpn/ccd'
-    disable_file_path = os.path.join(ccd_dir, client_name)
-    
-    # 删除 CCD 禁用文件
-    if os.path.exists(disable_file_path):
-        try:
-            subprocess.run(
-                ['sudo', 'rm', '-f', disable_file_path],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            log_message(f"已删除客户端 {client_name} 的禁用文件")
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"删除禁用文件失败: {e.stderr}")
-    
-    # 更新数据库: client.disabled = False
+    """启用客户端: 删除 CCD 禁用文件并更新数据库."""
+    client_name = validate_client_name(client_name)
+    ok, err = set_ccd_disabled(client_name, False)
+    if not ok:
+        raise Exception(f"删除禁用文件失败: {err}")
+    log_message(f"已删除客户端 {client_name} 的禁用文件")
     client = Client.query.filter_by(name=client_name).first()
     if client:
         client.disabled = False
@@ -39,7 +25,7 @@ def enable_client(client_name):
         log_message(f"数据库更新: 客户端 {client_name} disabled=False")
 
 @enable_client_bp.route('/api/clients/enable', methods=['POST'])
-@login_required
+@admin_required
 def api_enable_client():
     """
     重新启用客户端:
@@ -52,10 +38,11 @@ def api_enable_client():
             log_message("请求数据格式错误")
             return api_error("请求数据格式错误", status=400)
         
-        client_name = data.get('client_name', '').strip()
-        if not client_name:
-            log_message("客户端名称不能为空")
-            return api_error("客户端名称不能为空", status=400)
+        try:
+            client_name = validate_client_name(data.get('client_name', '').strip())
+        except ValidationError as exc:
+            log_message(str(exc))
+            return api_error(str(exc), status=400)
         
         # 查询客户端
         client = Client.query.filter_by(name=client_name).first()

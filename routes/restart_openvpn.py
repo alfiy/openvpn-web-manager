@@ -1,7 +1,7 @@
 import subprocess
 import logging
 from flask import Blueprint, jsonify, request
-from routes.helpers import login_required
+from routes.helpers import login_required, admin_required
 from flask_login import current_user
 from extensions import limiter
 
@@ -76,7 +76,7 @@ def execute_systemctl(action: str, service_name: str) -> dict:
 
 @limiter.limit("1 per minute")
 @restart_openvpn_bp.route("/api/restart_openvpn", methods=["POST"])
-@login_required
+@admin_required
 def restart_openvpn():
     """
     安全地重启 OpenVPN 服务

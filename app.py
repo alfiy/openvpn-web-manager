@@ -9,10 +9,10 @@ from flask_login import LoginManager
 from sqlalchemy import event, Engine
 from models import db, User, Role, ClientGroup
 from routes.helpers import init_csrf_guard
-from extensions import Limiter
 from flask_limiter.util import get_remote_address
 from redis import Redis
 from flask_wtf.csrf import generate_csrf
+import secrets
 
 # ============================================================================
 # 导入重构后的工具模块
@@ -37,17 +37,8 @@ except Exception as e:
     print(f"⚠️  Failed to connect to Redis: {e}")
     redis = None
 
-# 设置 Limiter 使用 Redis 存储
-if redis:
-    limiter = Limiter(
-        get_remote_address, 
-        storage_uri="redis://localhost:6379/0",
-        storage_options={"socket_timeout": 5}
-    )
-else:
-    # 如果 Redis 不可用，使用内存存储
-    limiter = Limiter(get_remote_address, storage_uri="memory://")
-    print("⚠️  Using memory storage for rate limiting (Redis unavailable)")
+# Limiter 使用 extensions 中的单例，避免重启接口限流失效
+from extensions import limiter as _limiter_mod  # noqa: F401
 
 # 加载环境变量
 load_dotenv()
@@ -57,7 +48,7 @@ mail = Mail()
 login_manager = LoginManager()
 
 # 从 extensions 统一导入 csrf
-from extensions import csrf
+from extensions import csrf, limiter
 
 # 统一导入所有蓝图
 from routes.auth import auth_bp
@@ -101,14 +92,57 @@ def optimize_sqlite_connection():
             cursor.close()
 
 
+def _ensure_user_schema():
+    """为已有库补齐 must_change_password 列。"""
+    from sqlalchemy import inspect, text
+    try:
+        inspector = inspect(db.engine)
+        if 'users' not in inspector.get_table_names():
+            return
+        cols = {c['name'] for c in inspector.get_columns('users')}
+        if 'must_change_password' not in cols:
+            db.session.execute(text(
+                'ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0'
+            ))
+            db.session.commit()
+            print('✅ 已为 users 表添加 must_change_password 列')
+    except Exception as exc:
+        db.session.rollback()
+        print(f'⚠️  检查 users 表结构失败: {exc}')
+
+
+def _flag_default_passwords():
+    try:
+        for user in User.query.filter(User.username.in_(['admin', 'super_admin'])).all():
+            if user.check_password('admin123') and not user.must_change_password:
+                user.must_change_password = True
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        print(f'⚠️  标记默认口令失败: {exc}')
+
+
 def create_app():
     """
     应用程序工厂函数，用于创建和配置 Flask 应用实例。
     """
     app = Flask(__name__)
-    limiter.init_app(app)
-    app.config['DEBUG'] = True
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'a-very-secret-key-that-should-be-kept-secret')
+    flask_env = (os.getenv('FLASK_ENV') or os.getenv('FLASK_DEBUG') or '').lower()
+    is_prod = flask_env in ('production', 'prod') or os.getenv('VPNWM_REQUIRE_SECRET') == '1'
+    secret = (os.environ.get('SECRET_KEY') or '').strip()
+    weak_secrets = {'', 'a-very-secret-key-that-should-be-kept-secret', 'changeme', 'secret'}
+    if secret in weak_secrets:
+        if is_prod:
+            raise RuntimeError('生产环境必须通过环境变量 SECRET_KEY 设置足够强度的密钥')
+        secret = secrets.token_hex(32)
+        print('⚠️  未配置 SECRET_KEY，本次使用临时密钥（重启后 Session 失效）。生产环境请写入 .env')
+    app.config['SECRET_KEY'] = secret
+    app.config['DEBUG'] = (not is_prod) and os.getenv('FLASK_DEBUG', '0') == '1'
+    if redis:
+        app.config['RATELIMIT_STORAGE_URI'] = 'redis://localhost:6379/0'
+    else:
+        app.config['RATELIMIT_STORAGE_URI'] = 'memory://'
+        print("⚠️  Using memory storage for rate limiting (Redis unavailable)")
     app.config['SESSION_TYPE'] = 'filesystem'
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
 
@@ -190,9 +224,43 @@ def create_app():
     def inject_csrf_token():
         return dict(csrf_token=generate_csrf())
 
+    ALLOW_WHEN_MUST_CHANGE = {
+        'auth_bp.login',
+        'auth_bp.logout',
+        'auth_bp.api_login',
+        'auth_bp.api_change_password',
+        'auth_bp.get_csrf_token',
+        'api_bp.api_login',
+        'static',
+        'health.health_check',
+    }
+
+    @app.before_request
+    def _force_password_change():
+        from flask import request
+        from flask_login import current_user
+        if not getattr(current_user, 'is_authenticated', False):
+            return None
+        if not getattr(current_user, 'must_change_password', False):
+            return None
+        endpoint = request.endpoint or ''
+        if endpoint in ALLOW_WHEN_MUST_CHANGE or endpoint.startswith('static'):
+            return None
+        if request.is_json or request.path.startswith('/api/'):
+            return {
+                'status': 'error',
+                'code': 'must_change_password',
+                'message': '请先修改默认密码后再使用系统'
+            }, 403
+        from flask import redirect, url_for, flash
+        flash('请先修改默认密码后再使用系统', 'warning')
+        return redirect(url_for('main_bp.index'))
+
     # 在应用上下文中执行数据库操作
     with app.app_context():
         db.create_all()
+        _ensure_user_schema()
+        _flag_default_passwords()
         
         # 检查并创建超级管理员账户
         if not User.query.filter_by(username='super_admin').first():
@@ -202,9 +270,10 @@ def create_app():
                 role=Role.SUPER_ADMIN
             )
             super_admin.set_password('admin123')
+            super_admin.must_change_password = True
             db.session.add(super_admin)
             db.session.commit()
-            print("✅ 默认超级管理员账户已创建: super_admin / admin123")
+            print("✅ 默认超级管理员已创建: super_admin / admin123（首次登录必须改密）")
         
         # 检查并创建普通管理员账户
         if not User.query.filter_by(username='admin').first():
@@ -214,9 +283,10 @@ def create_app():
                 role=Role.ADMIN
             )
             admin.set_password('admin123')
+            admin.must_change_password = True
             db.session.add(admin)
             db.session.commit()
-            print("✅ 默认管理员账户已创建: admin / admin123")
+            print("✅ 默认管理员已创建: admin / admin123（首次登录必须改密）")
 
          # 检查并创建默认用户组（不限速）
         if not ClientGroup.query.filter_by(name='default').first():
@@ -300,4 +370,4 @@ if __name__ == '__main__':
     print("📍 性能指标: http://0.0.0.0:8080/api/metrics")
     print("📍 系统状态: http://0.0.0.0:8080/api/status")
     print("=" * 60)
-    app.run(debug=True, host='0.0.0.0', port=8080, use_reloader=False)
+    app.run(debug=app.config.get('DEBUG', False), host='0.0.0.0', port=8080, use_reloader=False)

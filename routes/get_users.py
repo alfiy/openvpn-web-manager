@@ -1,11 +1,12 @@
 from flask import Blueprint, jsonify
-from routes.helpers import login_required
+from routes.helpers import login_required, super_admin_required
 from models import User
 
 user_bp = Blueprint('user', __name__)
 
 @user_bp.route('/get_users', methods=['GET'])
 @login_required
+@super_admin_required
 def get_users():
     """
     获取所有用户信息（超级管理员可见）

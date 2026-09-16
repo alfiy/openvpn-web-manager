@@ -3,6 +3,7 @@ import subprocess
 import re
 import sys
 from models import db, Client
+from utils.openvpn_ops import set_ccd_disabled
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Dict
 import time
@@ -314,11 +315,10 @@ def get_openvpn_clients() -> List[Dict[str, str]]:
                             db_client.disabled = True
                             db.session.commit()
                             # 创建 CCD 禁用文件
-                            disable_file_path = os.path.join(disabled_dir, client_name)
                             try:
-                                os.makedirs(disabled_dir, exist_ok=True)
-                                subprocess.run(['sudo', 'sh', '-c', f'echo "disable" > {disable_file_path}'],
-                                             capture_output=True, text=True, check=True)
+                                ok, err = set_ccd_disabled(client_name, True)
+                                if not ok:
+                                    log_message(f"自动禁用客户端 {client_name} 失败: {err}")
                             except Exception as e:
                                 log_message(f"自动禁用客户端 {client_name} 失败: {e}")
             except Exception as e:
