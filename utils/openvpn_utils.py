@@ -283,7 +283,8 @@ def get_openvpn_clients() -> List[Dict[str, str]]:
 
         for line in result.stdout.splitlines():
             line = line.strip()
-            if not (line.startswith("V") or line.startswith("R")):
+            # 已吊销(R)不进入客户端列表，避免同步回卡片
+            if not line.startswith("V"):
                 continue
             parts = line.split("\t")
             if len(parts) < 6:
@@ -310,7 +311,6 @@ def get_openvpn_clients() -> List[Dict[str, str]]:
             except Exception:
                 expiry_readable = "Unknown"
 
-            is_revoked = line.startswith("R")
             is_disabled = client_name in disabled_clients
             
             # 检查逻辑到期时间
@@ -335,7 +335,7 @@ def get_openvpn_clients() -> List[Dict[str, str]]:
                 log_message(f"检查逻辑到期时间失败: {e}")
             
             # 只有"未被禁用且未被吊销且未逻辑过期"才判断在线
-            is_online = not (is_disabled or is_revoked or is_logically_expired) and client_name in online_clients
+            is_online = not (is_disabled or is_logically_expired) and client_name in online_clients
 
             # 取在线信息(可能不存在)
             oc: OnlineClient = online_clients.get(client_name)  # type: ignore
@@ -344,7 +344,7 @@ def get_openvpn_clients() -> List[Dict[str, str]]:
                     "name": client_name,
                     "expiry": expiry_readable,
                     "online": is_online,
-                    "disabled": is_disabled or is_revoked or is_logically_expired,
+                    "disabled": is_disabled or is_logically_expired,
                     "vpn_ip": oc.vpn_ip if oc else "",
                     "real_ip": oc.real_ip if oc else "",
                     "duration": oc.duration_str if oc else "",
@@ -378,14 +378,36 @@ def sync_openvpn_clients_to_db():
     """
     try:
         ovpn_clients = get_openvpn_clients()
+        valid_names = {(c.get("name") or "").lower() for c in ovpn_clients if c.get("name")}
+
+        result = subprocess.run(
+            ["sudo", "-n", "cat", "/etc/openvpn/easy-rsa/pki/index.txt"],
+            capture_output=True, text=True, timeout=5
+        )
+        revoked = set()
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                if not line.startswith("R"):
+                    continue
+                match = re.search(r"CN=([^/]+)", line)
+                if match and match.group(1).lower() != "server":
+                    revoked.add(match.group(1).lower())
 
         changed = False
+        if revoked:
+            for row in Client.query.all():
+                if row.name.lower() in revoked and row.name.lower() not in valid_names:
+                    db.session.delete(row)
+                    changed = True
+
         for c in ovpn_clients:
             name = c.get("name")
             if not name:
                 continue
 
             # 若数据库中不存在 → 自动新增
+            if c.get("disabled") and not Client.query.filter_by(name=name).first():
+                continue
             exists = Client.query.filter_by(name=name).first()
             if not exists:
                 new_client = Client(name=name, disabled=False)

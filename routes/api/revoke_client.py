@@ -8,6 +8,7 @@ from utils.api_response import api_success, api_error
 from utils.validation import ValidationError, validate_client_name
 from utils.openvpn_ops import (
     INDEX_TXT, revoke_client_cert, generate_and_install_crl, cleanup_client_files,
+    path_exists, read_text,
 )
 
 revoke_client_bp = Blueprint('revoke_client', __name__)
@@ -59,17 +60,16 @@ def api_revoke_client():
     crt_path = f'/etc/openvpn/easy-rsa/pki/issued/{client_name}.crt'
 
     try:
-        if not os.path.exists(INDEX_TXT):
+        if not path_exists(INDEX_TXT):
             return api_error("OpenVPN PKI 不存在", code=500)
-        if not os.path.exists(crt_path):
+        if not path_exists(crt_path):
             return api_error(f"证书文件 {client_name}.crt 不存在，无法撤销", code=500)
 
         found = False
-        with open(INDEX_TXT, 'r') as f:
-            for line in f:
-                if f'CN={client_name},' in line or line.rstrip().endswith(f'CN={client_name}'):
-                    found = True
-                    break
+        for line in read_text(INDEX_TXT).splitlines():
+            if f'CN={client_name},' in line or line.rstrip().endswith(f'CN={client_name}'):
+                found = True
+                break
         if not found:
             return api_error(f"客户端 {client_name} 不存在于证书数据库", code=404)
 
@@ -88,6 +88,11 @@ def api_revoke_client():
             if client:
                 db.session.delete(client)
                 db.session.commit()
+                try:
+                    from utils.tc_config_exporter import export_tc_config
+                    export_tc_config()
+                except Exception:
+                    pass
         except Exception as db_err:
             print(f"[WARN] Failed to delete client {client_name} from DB:", db_err)
 

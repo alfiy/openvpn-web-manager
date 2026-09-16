@@ -133,6 +133,27 @@ def get_online_clients(status_file=OPENVPN_STATUS_FILE):
 
     return clients
 
+def load_revoked_names():
+    names = set()
+    try:
+        with open(INDEX_TXT, "r") as f:
+            lines = f.readlines()
+    except Exception as e:
+        log_message(f"无法读取 index.txt: {e}")
+        return names
+    for line in lines:
+        line = line.strip()
+        if not line.startswith("R"):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 6:
+            continue
+        match = re.search(r"CN=([^/]+)", parts[5])
+        if match and match.group(1) != "server":
+            names.add(match.group(1))
+    return names
+
+
 def get_openvpn_clients():
     clients_list = []
     online_clients = get_online_clients()
@@ -152,7 +173,8 @@ def get_openvpn_clients():
 
     for line in lines:
         line = line.strip()
-        if not (line.startswith("V") or line.startswith("R")):
+        # 只同步仍然有效的证书；已吊销(R)不得重新插入客户端列表
+        if not line.startswith("V"):
             continue
         parts = line.split("\t")
         if len(parts) < 6:
@@ -169,8 +191,7 @@ def get_openvpn_clients():
         # 解析过期日期为 datetime 对象
         expiry_date = parse_expiry_date(expiry_raw)
 
-        is_revoked = line.startswith("R")
-        is_disabled = name in disabled_clients or is_revoked
+        is_disabled = name in disabled_clients
         is_online = not is_disabled and name in online_clients
 
         oc = online_clients.get(name)
@@ -190,9 +211,19 @@ def sync_clients_to_db():
     session = SessionLocal()
     try:
         clients = get_openvpn_clients()
-        if not clients:
+        valid_names = {c['name'] for c in clients}
+        revoked_names = load_revoked_names()
+        if not clients and not revoked_names:
             log_message("没有客户端数据可同步")
             return
+
+        # 吊销后已从 PKI 有效列表消失的客户端，从 Web 库删除，避免卡片复活
+        stale = session.query(Client).all()
+        for db_c in stale:
+            if db_c.name in revoked_names and db_c.name not in valid_names:
+                session.delete(db_c)
+            elif db_c.name.lower() in {n.lower() for n in revoked_names} and db_c.name not in valid_names:
+                session.delete(db_c)
 
         # 先全部置为离线
         session.query(Client).update({Client.online: False})
@@ -200,12 +231,13 @@ def sync_clients_to_db():
         for c in clients:
             db_c = session.query(Client).filter_by(name=c['name']).first()
             if not db_c:
+                db_c = session.query(Client).filter(Client.name == c['name']).first()
+            if not db_c:
                 db_c = Client(name=c['name'])
                 session.add(db_c)
 
             db_c.expiry = c['expiry']
             db_c.disabled = c['disabled']
-            # disabled / revoked 永远不能 online
             db_c.online = c['online'] if not c['disabled'] else False
             db_c.vpn_ip = c['vpn_ip']
             db_c.real_ip = c['real_ip']

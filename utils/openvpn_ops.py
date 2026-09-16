@@ -39,6 +39,25 @@ def _sudo(cmd: Sequence[str], timeout: int = 60, cwd: Optional[str] = None, env=
     return _run(['sudo', '-n', *cmd], timeout=timeout, cwd=cwd, env=env)
 
 
+def path_exists(path: str) -> bool:
+    """当前用户不可读的 PKI 路径用 sudo test 判断。"""
+    if os.path.exists(path):
+        return True
+    result = _sudo(['test', '-e', path], timeout=10)
+    return result.returncode == 0
+
+
+def read_text(path: str) -> str:
+    try:
+        with open(path, 'r', encoding='utf-8', errors='replace') as fh:
+            return fh.read()
+    except OSError:
+        result = _sudo(['cat', path], timeout=10)
+        if result.returncode != 0:
+            raise OSError(result.stderr or f'无法读取 {path}')
+        return result.stdout or ''
+
+
 def build_client_cert(client_name: str, cert_expiry_days: int = 3650) -> Tuple[bool, str]:
     client_name = validate_client_name(client_name)
     env = os.environ.copy()
