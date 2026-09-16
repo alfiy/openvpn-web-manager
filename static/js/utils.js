@@ -173,22 +173,74 @@ let messageModalTimer = null;
 
 export function showCustomMessage(message, title = '提示', options = {}) {
     const {
-        autoClose = true,   // 默认自动关闭
-        duration = 3000     // 默认 3 秒
+        autoClose = true,
+        duration = 3000,
+        copyText = '',
+        html = false,
     } = options;
 
     const modalEl = qs('#messageModal');
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
 
     qs('#messageModal .modal-title').textContent = title;
-    qs('#messageModal .modal-body').textContent = message;
+    const body = qs('#messageModal .modal-body');
+    if (copyText) {
+        body.innerHTML = `
+            <p class="mb-2">密码重置成功，请复制后发给用户。关闭窗口后将无法再查看。</p>
+            <label class="form-label">新密码</label>
+            <div class="input-group">
+                <input type="text" class="form-control" id="messageModal-pwd" value="" readonly>
+                <button type="button" class="btn btn-primary" id="messageModal-copy-btn">复制新密码</button>
+            </div>
+            <div class="form-text" id="messageModal-copy-hint">也可在输入框内全选后 Ctrl+C</div>
+        `;
+        const pwdInput = qs('#messageModal-pwd');
+        pwdInput.value = copyText;
+        const btn = qs('#messageModal-copy-btn');
+        const hint = qs('#messageModal-copy-hint');
+        const copyPwd = () => {
+            pwdInput.focus();
+            pwdInput.select();
+            pwdInput.setSelectionRange(0, copyText.length);
+            let ok = false;
+            try {
+                ok = document.execCommand('copy');
+            } catch (err) {
+                ok = false;
+            }
+            if (!ok && navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(copyText).then(() => {
+                    btn.textContent = '已复制';
+                    hint.textContent = '已复制到剪贴板';
+                }).catch(() => {
+                    hint.textContent = '自动复制失败，请在输入框中全选后手动复制';
+                });
+                return;
+            }
+            btn.textContent = ok ? '已复制' : '请手动复制';
+            hint.textContent = ok ? '已复制到剪贴板' : '自动复制失败，请在输入框中全选后 Ctrl+C';
+        };
+        btn.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            copyPwd();
+        });
+    } else if (html) {
+        body.innerHTML = message;
+        const oldCopy = qs('#messageModal-copy-btn');
+        if (oldCopy) oldCopy.remove();
+    } else {
+        body.textContent = message;
+        const oldCopy = qs('#messageModal-copy-btn');
+        if (oldCopy) oldCopy.remove();
+    }
 
-    // 清理上一次的定时器，防止连点导致提前关闭
     if (messageModalTimer) {
         clearTimeout(messageModalTimer);
         messageModalTimer = null;
     }
 
+    if (copyText) modalEl.style.zIndex = '1080';
     modal.show();
 
     if (autoClose) {

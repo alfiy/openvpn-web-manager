@@ -207,10 +207,12 @@ export function init() {
                     console.log('✅ 重置成功,返回数据:', data);
 
                     if (data.status === 'success') {
-                        // 如果后端返回了新密码字段，就单独显示它
-                        const message = `密码重置成功！新密码是：[${data.new_password}]`;
-                        // 你可以使用 showCustomMessage 来显示这个消息，可能需要调整 showCustomMessage 支持HTML
-                        showCustomMessage(message);
+                        const pwd = data.new_password || data.data?.new_password || '';
+                        showCustomMessage(
+                            pwd ? `密码重置成功。\n新密码：${pwd}` : '密码重置成功。',
+                            '重置密码',
+                            { autoClose: false, copyText: pwd }
+                        );
                         fetchUsers();
                     } else {
                         console.warn('⚠️ 后端返回非成功状态:', data);
