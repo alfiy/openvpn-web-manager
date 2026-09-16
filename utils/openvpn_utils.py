@@ -34,7 +34,7 @@ _cache: Dict[str, OnlineClient] = {}
 def check_openvpn_status():
     """
     检查 OpenVPN 服务状态并返回 'running', 'installed', 或 'not_installed'。
-    此函数会使用 sudo 确保在普通用户环境下也能正常工作。
+    优先用当前用户执行 systemctl is-active（无需 sudo）；失败再尝试 sudo -n。
     
     返回值:
         - 'running': OpenVPN 服务正在运行
@@ -49,15 +49,25 @@ def check_openvpn_status():
     try:
         # --- 1. 检查运行状态:使用 systemctl is-active 的返回码 ---
         # logger.debug(f"检查服务运行状态: {service_name}")
+        # 普通用户即可查询 systemd 状态，避免 sudoers 未覆盖 --quiet 时误判为未运行
         result_active = subprocess.run(
-            ['sudo', 'systemctl', 'is-active', '--quiet', service_name],
-            check=False,  # 不抛出异常
-            timeout=5,    # 添加超时保护
-            capture_output=True
+            ['systemctl', 'is-active', service_name],
+            check=False,
+            timeout=5,
+            capture_output=True,
+            text=True,
         )
-        
-        if result_active.returncode == 0:
-            # logger.info("✅ OpenVPN 正在运行")
+        if result_active.returncode == 0 and (result_active.stdout or '').strip() == 'active':
+            return 'running'
+
+        result_sudo = subprocess.run(
+            ['sudo', '-n', 'systemctl', 'is-active', service_name],
+            check=False,
+            timeout=5,
+            capture_output=True,
+            text=True,
+        )
+        if result_sudo.returncode == 0 and (result_sudo.stdout or '').strip() == 'active':
             return 'running'
         
         logger.debug(f"服务未运行,返回码: {result_active.returncode}")
