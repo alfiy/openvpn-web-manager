@@ -103,7 +103,10 @@ def clients_data():
 
     rows = query.order_by(Client.name.asc()).all()
     if online_only:
-        rows = [c for c in rows if (c.name or '').lower() in live_by_lower]
+        rows = [
+            c for c in rows
+            if not c.disabled and (c.name or '').lower() in live_by_lower
+        ]
 
     total = len(rows)
     total_pages = max((total + PER_PAGE - 1) // PER_PAGE, 1)
@@ -118,7 +121,9 @@ def clients_data():
     for c in clients_page:
         item = serialize_client(c)
         info = live_online.get(c.name) or live_by_lower.get((c.name or '').lower())
-        if info:
+        if c.disabled:
+            item['online'] = False
+        elif info:
             item['online'] = True
             item['vpn_ip'] = info.vpn_ip or item.get('vpn_ip')
             item['real_ip'] = info.real_ip or item.get('real_ip')

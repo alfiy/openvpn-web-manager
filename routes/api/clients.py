@@ -7,7 +7,7 @@ from flask import jsonify, request
 from flask_login import login_required
 from routes.helpers import admin_required
 from utils.validation import ValidationError, validate_client_name
-from utils.openvpn_ops import set_ccd_disabled
+from utils.openvpn_ops import set_ccd_disabled, kick_client_sessions
 from . import api_bp
 from utils.api_response import api_success, api_error
 from utils.openvpn_utils import log_message
@@ -165,18 +165,21 @@ def api_disable_client():
     except Exception as e:
         return api_error(f"创建禁用文件异常:{e}")
 
-    # ---------- 2. 调用管理接口踢出客户端 ----------
-    host = os.environ.get('OPENVPN_MGMT_HOST', '127.0.0.1')
-    port = int(os.environ.get('OPENVPN_MGMT_PORT', 7505))
-    password = os.environ.get('OPENVPN_MGMT_PASSWORD')
-
-    success, kill_msg = openvpn_client_kill(host, port, client_name, mgmt_password=password)
+    # ---------- 2. 通过 7505 踢掉全部会话（先写 CCD，避免被踢后立刻重连成功）----------
+    success, kill_msg = kick_client_sessions(client_name)
+    log_message(f"禁用踢出 {client_name}: {kill_msg}")
 
     # ---------- 3. 更新数据库 ----------
     try:
         client = Client.query.filter_by(name=client_name).first()
+        if not client:
+            client = Client.query.filter(Client.name.ilike(client_name)).first()
         if client:
             client.disabled = True
+            client.online = False
+            client.vpn_ip = None
+            client.real_ip = None
+            client.duration = None
             db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()

@@ -8,7 +8,7 @@ from utils.api_response import api_success, api_error
 from utils.validation import ValidationError, validate_client_name
 from utils.openvpn_ops import (
     INDEX_TXT, revoke_client_cert, generate_and_install_crl, cleanup_client_files,
-    path_exists, read_text,
+    path_exists, read_text, kick_client_sessions,
 )
 
 revoke_client_bp = Blueprint('revoke_client', __name__)
@@ -96,7 +96,7 @@ def api_revoke_client():
         except Exception as db_err:
             print(f"[WARN] Failed to delete client {client_name} from DB:", db_err)
 
-        disconnected = disconnect_client_via_mgmt(client_name)
+        disconnected, _ = kick_client_sessions(client_name)
         msg = f"客户端 {client_name} 已撤销，CRL 已更新"
         if disconnected:
             msg += "，并已立即断开在线连接"

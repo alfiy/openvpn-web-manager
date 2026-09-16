@@ -3,8 +3,10 @@
 所有路径与文件名必须先经过 utils.validation 校验。
 """
 import os
+import socket
 import subprocess
 import tempfile
+import time
 from typing import List, Optional, Sequence, Tuple
 
 from utils.validation import ValidationError, safe_join, validate_client_name
@@ -152,6 +154,85 @@ def cleanup_client_files(client_name: str) -> None:
         _sudo(['rm', '-f', path], timeout=15)
     if os.path.isfile(IPP_TXT):
         _sudo(['sed', '-i', f'/^{client_name},/d', IPP_TXT], timeout=15)
+
+
+def kick_client_sessions(client_name: str) -> Tuple[bool, str]:
+    """通过 management 口踢掉该 CN 的全部会话，并复查 status 2。"""
+    client_name = validate_client_name(client_name)
+    host = os.environ.get('OPENVPN_MGMT_HOST', '127.0.0.1')
+    port = int(os.environ.get('OPENVPN_MGMT_PORT', '7505'))
+    password = os.environ.get('OPENVPN_MGMT_PASSWORD')
+    notes = []
+    try:
+        with socket.create_connection((host, port), timeout=5) as sock:
+            sock.settimeout(4)
+            banner = sock.recv(4096)
+            if banner and b'PASSWORD' in banner.upper():
+                sock.sendall(((password or '') + '\r\n').encode())
+                sock.recv(4096)
+
+            def command(cmd: str, until_end: bool = False) -> str:
+                sock.sendall((cmd + '\r\n').encode())
+                chunks = []
+                end = time.time() + (3.0 if until_end else 1.2)
+                while time.time() < end:
+                    try:
+                        piece = sock.recv(8192)
+                    except socket.timeout:
+                        break
+                    if not piece:
+                        break
+                    chunks.append(piece)
+                    blob = b''.join(chunks)
+                    if until_end and (b'\nEND' in blob or blob.rstrip().endswith(b'END')):
+                        break
+                    if not until_end and (b'SUCCESS' in blob or b'ERROR' in blob):
+                        break
+                return b''.join(chunks).decode('utf-8', errors='ignore')
+
+            status = command('status 2', until_end=True)
+            targets = []
+            for line in status.splitlines():
+                if not line.startswith('CLIENT_LIST,'):
+                    continue
+                parts = line.split(',')
+                if len(parts) < 3:
+                    continue
+                cn = parts[1].strip()
+                if cn.lower() != client_name.lower():
+                    continue
+                real_addr = parts[2].strip()
+                cid = parts[10].strip() if len(parts) > 10 else ''
+                targets.append((cn, real_addr, cid))
+            if not targets:
+                try:
+                    sock.sendall(b'quit\r\n')
+                except OSError:
+                    pass
+                return True, '管理口中已无该客户端会话'
+
+            for cn, real_addr, cid in targets:
+                if cid.isdigit():
+                    notes.append(command(f'client-kill {cid}'))
+                notes.append(command(f'kill {cn}'))
+                if real_addr:
+                    notes.append(command(f'kill {real_addr}'))
+
+            time.sleep(0.3)
+            remain = command('status 2', until_end=True)
+            still = []
+            for line in remain.splitlines():
+                if line.startswith('CLIENT_LIST,') and line.split(',')[1].strip().lower() == client_name.lower():
+                    still.append(line)
+            try:
+                sock.sendall(b'quit\r\n')
+            except OSError:
+                pass
+            if still:
+                return False, '已发送踢出命令，但会话仍在: ' + '; '.join(notes)
+            return True, '已通过管理口踢出: ' + '; '.join(notes)
+    except OSError as exc:
+        return False, f'无法连接管理口 {host}:{port}: {exc}'
 
 
 def set_ccd_disabled(client_name: str, disabled: bool) -> Tuple[bool, str]:
