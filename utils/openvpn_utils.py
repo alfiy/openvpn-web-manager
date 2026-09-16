@@ -1,4 +1,5 @@
 import os
+import socket
 import subprocess
 import re
 import sys
@@ -174,22 +175,143 @@ def _human_duration(seconds: int) -> str:
     return f"{s}s"
 
 
+def _mgmt_recv_until_end(sock: socket.socket) -> bytes:
+    chunks = []
+    while True:
+        piece = sock.recv(8192)
+        if not piece:
+            break
+        chunks.append(piece)
+        blob = b''.join(chunks)
+        if b'\nEND' in blob or blob.rstrip().endswith(b'END'):
+            break
+    return b''.join(chunks)
+
+
+def _mgmt_query_status() -> Optional[str]:
+    host = os.environ.get('OPENVPN_MGMT_HOST', '127.0.0.1')
+    port = int(os.environ.get('OPENVPN_MGMT_PORT', '7505'))
+    password = os.environ.get('OPENVPN_MGMT_PASSWORD')
+    try:
+        with socket.create_connection((host, port), timeout=3) as sock:
+            sock.settimeout(4)
+            banner = sock.recv(4096)
+            if banner and b'PASSWORD' in banner.upper():
+                sock.sendall(((password or '') + '\r\n').encode())
+                sock.recv(4096)
+            sock.sendall(b'status 2\r\n')
+            raw = _mgmt_recv_until_end(sock)
+            text = raw.decode('utf-8', errors='ignore')
+            if 'CLIENT_LIST,' not in text and 'OpenVPN CLIENT LIST' not in text:
+                sock.sendall(b'status\r\n')
+                raw2 = _mgmt_recv_until_end(sock)
+                extra = raw2.decode('utf-8', errors='ignore')
+                text = text + '\n' + extra
+            try:
+                sock.sendall(b'quit\r\n')
+            except OSError:
+                pass
+            return text
+    except OSError as exc:
+        logger.warning('openvpn management %s:%s 不可用: %s', host, port, exc)
+        return None
+
+
+def _parse_mgmt_status(text: str) -> Dict[str, OnlineClient]:
+    clients: Dict[str, OnlineClient] = {}
+    if not text:
+        return clients
+    routes = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith('ROUTING_TABLE,'):
+            parts = line.split(',')
+            if len(parts) >= 3 and parts[2] not in ('Common Name',):
+                routes[parts[2].strip()] = parts[1].strip()
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.startswith('CLIENT_LIST,'):
+            continue
+        parts = line.split(',')
+        if len(parts) < 5:
+            continue
+        cn = parts[1].strip()
+        if not cn or cn in ('UNDEF', 'Common Name'):
+            continue
+        real_addr = parts[2].strip() if len(parts) > 2 else ''
+        vpn_ip = parts[3].strip() if len(parts) > 3 else ''
+        conn_since = parts[7].strip() if len(parts) > 7 else (parts[4].strip() if len(parts) > 4 else '')
+        conn_dt = _parse_connected_since(conn_since)
+        if conn_dt is None and len(parts) > 8:
+            try:
+                conn_dt = datetime.fromtimestamp(float(parts[8]), tz=timezone.utc)
+                conn_since = parts[8]
+            except (ValueError, OSError):
+                conn_dt = None
+        duration_sec = 0
+        if conn_dt is not None:
+            duration_sec = max(0, int((datetime.now(timezone.utc) - conn_dt).total_seconds()))
+        real_ip = real_addr.split(':')[0] if ':' in real_addr else real_addr
+        clients[cn] = OnlineClient(
+            vpn_ip=vpn_ip or routes.get(cn, ''),
+            real_ip=real_ip,
+            duration_str=_human_duration(duration_sec),
+            duration_sec=duration_sec,
+            connected_since=conn_since,
+        )
+    return clients
+
+
 def get_online_clients(status_file: str = None, cache_ttl: int = 10) -> Dict[str, OnlineClient]:
     global _last_check, _cache
     now = time.time()
     if now - _last_check < cache_ttl and _cache:
         return _cache
 
-    if status_file is None:
-        status_file = "/var/log/openvpn/status.log" 
+    mgmt_text = _mgmt_query_status()
+    if mgmt_text is not None:
+        clients = _parse_mgmt_status(mgmt_text)
+        _last_check = now
+        _cache = clients
+        return clients
 
-    try:
-        with open(status_file, "rb") as f:        # 二进制读,防止中文 locale 异常
-            data = f.read().decode("utf-8", errors="ignore")
-    except OSError as e:
-        # 权限、磁盘故障等,记录日志后返回空
+
+    candidates = []
+    if status_file:
+        candidates.append(status_file)
+    candidates.extend([
+        "/var/log/openvpn/status.log",
+        "/run/openvpn/server.status",
+        "/etc/openvpn/openvpn-status.log",
+    ])
+
+    data = ""
+    last_error = None
+    seen = set()
+    for path in candidates:
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        try:
+            with open(path, "rb") as f:
+                data = f.read().decode("utf-8", errors="ignore")
+            if data.strip():
+                break
+        except OSError as e:
+            last_error = e
+            try:
+                result = subprocess.run(
+                    ["sudo", "-n", "cat", path],
+                    capture_output=True, timeout=5
+                )
+                if result.returncode == 0 and result.stdout:
+                    data = result.stdout.decode("utf-8", errors="ignore")
+                    break
+            except Exception as exc:
+                last_error = exc
+    if not data.strip():
         import logging
-        logging.getLogger(__name__).warning("read status %s failed: %s", status_file, e)
+        logging.getLogger(__name__).warning("read openvpn status failed: %s", last_error)
         return {}
 
     clients: Dict[str, OnlineClient] = {}
@@ -447,7 +569,7 @@ def sync_online_state_to_db():
                     vpn_ip = :vpn_ip,
                     real_ip = :real_ip,
                     duration = :duration
-                WHERE name = :name
+                WHERE lower(name) = lower(:name)
             """), {
                 "name": name,
                 "vpn_ip": info.vpn_ip,

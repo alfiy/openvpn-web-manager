@@ -3,6 +3,7 @@ from flask_login import login_required
 from models import Client  # ORM 模型
 from utils.openvpn_utils import (
     get_openvpn_clients,
+    get_online_clients,
     check_openvpn_status,
     sync_openvpn_clients_to_db,
     sync_online_state_to_db
@@ -84,8 +85,12 @@ def clients_data():
     """
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '', type=str).strip()
+    online_only = request.args.get('online', '', type=str).strip() in ('1', 'true', 'yes')
 
-    # 同步 OpenVPN 客户端状态
+    # 先拉 7505 在线名单，避免多次占用 management 单连接
+    live_online = get_online_clients(cache_ttl=3)
+    live_by_lower = {name.lower(): info for name, info in live_online.items()}
+
     sync_openvpn_clients_to_db()
     sync_online_state_to_db()
 
@@ -96,22 +101,37 @@ def clients_data():
             (Client.description.ilike(f"%{q}%"))
         )
 
-    total = query.count()
+    rows = query.order_by(Client.name.asc()).all()
+    if online_only:
+        rows = [c for c in rows if (c.name or '').lower() in live_by_lower]
+
+    total = len(rows)
     total_pages = max((total + PER_PAGE - 1) // PER_PAGE, 1)
+    if page < 1:
+        page = 1
+    if page > total_pages:
+        page = total_pages
 
-    clients_page = (
-        query
-        .order_by(Client.id.desc())
-        .offset((page - 1) * PER_PAGE)
-        .limit(PER_PAGE)
-        .all()
-    )
+    clients_page = rows[(page - 1) * PER_PAGE: page * PER_PAGE]
 
-    clients_serialized = [serialize_client(c) for c in clients_page]
+    clients_serialized = []
+    for c in clients_page:
+        item = serialize_client(c)
+        info = live_online.get(c.name) or live_by_lower.get((c.name or '').lower())
+        if info:
+            item['online'] = True
+            item['vpn_ip'] = info.vpn_ip or item.get('vpn_ip')
+            item['real_ip'] = info.real_ip or item.get('real_ip')
+            item['duration'] = info.duration_str or item.get('duration')
+        else:
+            item['online'] = False
+        clients_serialized.append(item)
 
     return jsonify({
         "clients": clients_serialized,
         "page": page,
         "total_pages": total_pages,
-        "q": q
+        "total": total,
+        "q": q,
+        "online_only": online_only
     })

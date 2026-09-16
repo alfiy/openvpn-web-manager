@@ -41,11 +41,6 @@ function render(data) {
         clientsToRender = data.clients.filter(c => c.user_id === userId);
     }
 
-    // ⭐ 新增：在线用户筛选
-    if (showOnlyOnline) {
-        clientsToRender = clientsToRender.filter(c => c.online === true);
-    }
-
     if (!clientsToRender.length) {
         tbody.innerHTML = '';
         paging.innerHTML = '';
@@ -187,7 +182,8 @@ export function loadClients(page = currentPage, q = '') {
 
     currentPage = Number(page) || 1;
 
-    authFetch(`/clients/data?page=${currentPage}&q=${encodeURIComponent(q)}`)
+    const onlineParam = showOnlyOnline ? '&online=1' : '';
+    authFetch(`/clients/data?page=${currentPage}&q=${encodeURIComponent(q)}${onlineParam}`)
         .then(render)
         .catch(console.error);
 }
@@ -551,8 +547,12 @@ export function bindClientEvents() {
             filterOnlineBtn.style.display = 'none';
             showAllBtn.style.display = 'block';
 
-            if (input) input.placeholder = '当前仅显示在线用户，点击"显示全部"查看所有客户端...';
-            loadClients(currentPage, input ? input.value.trim() : '');
+            if (input) {
+                input.value = '';
+                input.placeholder = '当前仅显示在线用户，点击"显示全部"查看所有客户端...';
+            }
+            setCurrentSearchQuery('');
+            loadClients(1, '');
         });
     }
 
