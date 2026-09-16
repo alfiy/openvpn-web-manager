@@ -335,23 +335,36 @@
                                 </span>
                                 <input type="text" id="client-search" class="form-control" placeholder="搜索客户端名称或描述信息后回车..."
                                     onfocus="this.value=''">
-                                <button class="btn btn-outline-success" type="button" id="filter-online-btn">
-                                    <i class="fa-solid fa-circle text-success me-1"></i>在线用户
-                                </button>
-                                <button class="btn btn-outline-warning" type="button" id="filter-issue-btn">
-                                    <i class="fa-solid fa-triangle-exclamation me-1"></i>到期/禁用
-                                </button>
-                                <button class="btn btn-outline-secondary" type="button" id="show-all-btn"
-                                    style="display: none;">
-                                    <i class="fa-solid fa-list me-1"></i>显示全部
-                                </button>
+                                <button class="btn btn-secondary" type="button" id="filter-all-btn">全部</button>
+                                <button class="btn btn-outline-success" type="button" id="filter-online-btn">在线</button>
+                                <button class="btn btn-outline-warning" type="button" id="filter-disabled-btn">禁用</button>
+                                <button class="btn btn-outline-danger" type="button" id="filter-expired-btn">到期</button>
                             </div>
+                        </div>
+                        <div id="client-batch-bar" class="d-flex flex-wrap align-items-center gap-2 mb-3" style="display:none;">
+                            <span class="small text-muted" id="client-selected-count">已选 0 个</span>
+                            <button type="button" class="btn btn-sm btn-warning" id="batch-disable-btn">
+                                <i class="fa-solid fa-ban me-1"></i>批量禁用
+                            </button>
+                            <button type="button" class="btn btn-sm btn-success" id="batch-enable-btn">
+                                <i class="fa-solid fa-shield-check me-1"></i>批量启用
+                            </button>
+                            <button type="button" class="btn btn-sm btn-info" id="batch-expiry-btn">
+                                <i class="fa-solid fa-calendar-days me-1"></i>批量改到期
+                            </button>
+                            <button type="button" class="btn btn-sm btn-danger" id="batch-revoke-btn">
+                                <i class="fa-solid fa-trash-can me-1"></i>批量撤销
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="batch-clear-btn">取消选择</button>
                         </div>
         
                         <div class="table-responsive">
                             <table class="table table-hover" id="client-table">
                                 <thead>
                                     <tr>
+                                        <th style="width:2.2rem;">
+                                            <input type="checkbox" class="form-check-input" id="client-select-all" title="全选本页">
+                                        </th>
                                         <th>#</th>
                                         <th>客户端名称</th>
                                         <th>在线状态</th>
@@ -409,6 +422,7 @@
                             <div class="mb-3">
                                 <label class="form-label">客户端名称</label>
                                 <input type="text" class="form-control" id="modify-client-name" name="client_name" readonly>
+                                <input type="hidden" id="modify-expiry-batch" value="0">
                             </div>
 
                             <h6 class="fw-bold mb-2">新的证书有效期</h6>

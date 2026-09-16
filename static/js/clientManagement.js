@@ -28,7 +28,20 @@ const elementsExist = tbody && paging && pageInfo && noData;
 
 // 全局变量当前页为第1页
 export let currentPage = 1;
-let listFilter = 'all'; // all | online | issue
+let listFilter = 'all'; // all | online | disabled | expired
+const selectedClients = new Set();
+let clientMsgTimer = null;
+
+function flashClientMsg(html, holdMs = 5000) {
+    const msgDiv = qs('#client-revoke-msg');
+    if (!msgDiv) return;
+    msgDiv.innerHTML = html;
+    if (clientMsgTimer) clearTimeout(clientMsgTimer);
+    clientMsgTimer = setTimeout(() => {
+        msgDiv.innerHTML = '';
+        clientMsgTimer = null;
+    }, holdMs);
+}
 
 /* 统一渲染表格 */
 function render(data) {
@@ -49,8 +62,10 @@ function render(data) {
         // 根据状态显示不同的提示信息
         if (listFilter === 'online') {
             noData.textContent = '当前无客户端在线。';
-        } else if (listFilter === 'issue') {
-            noData.textContent = '当前没有到期或已禁用的客户端。';
+        } else if (listFilter === 'disabled') {
+            noData.textContent = '当前没有管理员禁用的客户端。';
+        } else if (listFilter === 'expired') {
+            noData.textContent = '当前没有到期客户端。';
         } else if (data.q) {
             noData.textContent = `未找到与 "${data.q}" 相关的客户端。`;
         } else {
@@ -68,7 +83,16 @@ function render(data) {
         const rowIdx = (data.page - 1) * PER_PAGE + idx + 1;
         const actionButtons = [];
 
-        if (c.disabled) {
+        if (c.expired || c.disable_reason === 'expired') {
+            if (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') {
+                actionButtons.push(`<button class="btn btn-sm btn-info modify-expiry-btn" data-client="${c.name}">
+                    <i class="fa-solid fa-calendar-days me-1"></i>改期并启用
+                    </button>`);
+                actionButtons.push(`<button class="btn btn-sm btn-danger revoke-btn" data-client="${c.name}">
+                    <i class="fa-solid fa-trash-can me-1"></i>撤销
+                    </button>`);
+            }
+        } else if (c.disabled) {
             actionButtons.push(`<button class="btn btn-sm btn-success enable-btn" data-client="${c.name}">
                 <i class="fa-solid fa-shield-check me-1"></i>重新启用
                 </button>`);
@@ -109,20 +133,29 @@ function render(data) {
             }
         }
 
+        const checked = selectedClients.has(c.name) ? 'checked' : '';
         return `
             <tr>
+                <td class="align-middle">
+                    <input type="checkbox" class="form-check-input client-select" data-client="${c.name}" ${checked}>
+                </td>
                 <td class="align-middle">${rowIdx}</td>
                 <td class="align-middle">
                     <div><strong>${c.name}</strong></div>
                     ${c.description ? `<div class="text-muted small">${c.description}</div>` : ''}
                 </td>
                 <td class="align-middle">
-                    ${c.online
+                    ${c.expired || c.disable_reason === 'expired'
+                        ? `<span class="badge bg-danger">已到期</span>`
+                        : c.disabled
+                            ? `<span class="badge bg-warning text-dark">管理员禁用</span>`
+                            : ''}
+                    ${c.online && !c.disabled && !c.expired
                         ? `<span class="badge bg-success"><i class="fa-solid fa-circle me-1"></i> 在线</span>
                            ${c.vpn_ip ? `<br><small class="text-success">VPN: ${c.vpn_ip}</small>` : ''}
                            ${c.real_ip ? `<br><small class="text-muted">来源: ${c.real_ip}</small>` : ''}
                            ${c.duration ? `<br><small class="text-info">时长: ${c.duration}</small>` : ''}`
-                        : `<span class="badge bg-secondary"><i class="fa-solid fa-circle me-1"></i> 离线</span>`
+                        : (c.expired || c.disabled ? '' : `<span class="badge bg-secondary"><i class="fa-solid fa-circle me-1"></i> 离线</span>`)
                     }
                 </td>
                 <td class="align-middle"><small class="text-muted">${c.expiry || '未知'}</small></td>
@@ -133,6 +166,7 @@ function render(data) {
                 </td>
             </tr>`;
     }).join('');
+    syncBatchBar();
 
     // ---------- 分页 ----------
     paging.innerHTML = '';
@@ -184,12 +218,63 @@ export function loadClients(page = currentPage, q = '') {
 
     currentPage = Number(page) || 1;
 
-    let filterParam = '';
-    if (listFilter === 'online') filterParam = '&online=1';
-    if (listFilter === 'issue') filterParam = '&issue=1';
-    authFetch(`/clients/data?page=${currentPage}&q=${encodeURIComponent(q)}${filterParam}`)
+    const viewParam = listFilter !== 'all' ? `&view=${encodeURIComponent(listFilter)}` : '';
+    authFetch(`/clients/data?page=${currentPage}&q=${encodeURIComponent(q)}${viewParam}`)
         .then(render)
         .catch(console.error);
+}
+
+function syncBatchBar() {
+    const bar = qs('#client-batch-bar');
+    const countEl = qs('#client-selected-count');
+    const selectAll = qs('#client-select-all');
+    if (countEl) countEl.textContent = `已选 ${selectedClients.size} 个`;
+    if (bar) {
+        if (userRole === 'USER') {
+            bar.style.display = 'none';
+        } else {
+            bar.style.display = selectedClients.size ? 'flex' : 'none';
+        }
+    }
+    if (selectAll) {
+        const boxes = qsa('.client-select');
+        const names = boxes.map(el => el.dataset.client);
+        selectAll.checked = names.length > 0 && names.every(n => selectedClients.has(n));
+    }
+}
+
+async function runBatchAction(action, confirmText) {
+    if (userRole === 'USER') return;
+    const names = Array.from(selectedClients);
+    if (!names.length) {
+        showCustomMessage('请先勾选客户端', 'error');
+        return;
+    }
+    showCustomConfirm(`${confirmText}\n共 ${names.length} 个：${names.slice(0, 8).join(', ')}${names.length > 8 ? '…' : ''}`, async (confirmed) => {
+        if (!confirmed) return;
+        const msgDiv = qs('#client-revoke-msg');
+        try {
+            const data = await authFetch('/api/clients/batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ action, names })
+            });
+            const results = data.data?.results || data.results || [];
+            const failed = results.filter(r => !r.ok);
+            const okN = results.length - failed.length;
+            const actionNames = { disable: '禁用', enable: '启用', revoke: '撤销', expiry: '改到期' };
+            let html = `<div class="alert alert-info">批量${actionNames[action] || action}完成：成功 ${okN}，失败 ${failed.length}</div>`;
+            if (failed.length) {
+                html += `<div class="small text-danger">${failed.map(r => `${r.name}: ${r.detail}`).join('<br>')}</div>`;
+            }
+            flashClientMsg(html, 5000);
+            results.filter(r => r.ok).forEach(r => selectedClients.delete(r.name));
+            syncBatchBar();
+            loadClients(currentPage, input ? input.value.trim() : '');
+        } catch (err) {
+            flashClientMsg(`<div class="alert alert-danger">${err.message || err}</div>`, 5000);
+        }
+    });
 }
 
 
@@ -539,40 +624,97 @@ export function bindClientEvents() {
     document.addEventListener('keydown', markUserActive);
     document.addEventListener('scroll', markUserActive);
 
-    // 在线/显示全部切换按钮
-    const filterOnlineBtn = qs('#filter-online-btn');
-    const filterIssueBtn = qs('#filter-issue-btn');
-    const showAllBtn = qs('#show-all-btn');
+    const filterBtns = {
+        all: qs('#filter-all-btn'),
+        online: qs('#filter-online-btn'),
+        disabled: qs('#filter-disabled-btn'),
+        expired: qs('#filter-expired-btn'),
+    };
 
     function setFilterButtons(mode) {
         listFilter = mode;
         currentPage = 1;
-        if (filterOnlineBtn) filterOnlineBtn.style.display = mode === 'all' ? 'block' : 'none';
-        if (filterIssueBtn) filterIssueBtn.style.display = mode === 'all' ? 'block' : 'none';
-        if (showAllBtn) showAllBtn.style.display = mode === 'all' ? 'none' : 'block';
+        const styles = {
+            all: ['btn-secondary', 'btn-outline-secondary'],
+            online: ['btn-success', 'btn-outline-success'],
+            disabled: ['btn-warning', 'btn-outline-warning'],
+            expired: ['btn-danger', 'btn-outline-danger'],
+        };
+        Object.keys(filterBtns).forEach(key => {
+            const el = filterBtns[key];
+            if (!el) return;
+            const [onCls, offCls] = styles[key];
+            el.classList.remove('btn-secondary', 'btn-success', 'btn-warning', 'btn-danger',
+                'btn-outline-secondary', 'btn-outline-success', 'btn-outline-warning', 'btn-outline-danger');
+            el.classList.add(key === mode ? onCls : offCls);
+        });
         if (input) {
-            input.value = '';
-            if (mode === 'online') {
-                input.placeholder = '当前仅显示在线用户，点击“显示全部”返回...';
-            } else if (mode === 'issue') {
-                input.placeholder = '当前仅显示到期或已禁用用户，点击“显示全部”返回...';
-            } else {
-                input.placeholder = '搜索客户端名称或描述信息后回车...';
-            }
+            const tips = {
+                all: '搜索客户端名称或描述信息后回车...',
+                online: '当前仅显示在线客户端',
+                disabled: '当前仅显示管理员禁用的客户端',
+                expired: '当前仅显示已到期客户端',
+            };
+            input.placeholder = tips[mode] || tips.all;
         }
         setCurrentSearchQuery('');
+        if (input) input.value = '';
         loadClients(1, '');
     }
 
-    if (filterOnlineBtn) {
-        filterOnlineBtn.addEventListener('click', () => setFilterButtons('online'));
+    Object.keys(filterBtns).forEach(key => {
+        if (filterBtns[key]) {
+            filterBtns[key].addEventListener('click', () => setFilterButtons(key));
+        }
+    });
+
+    const selectAll = qs('#client-select-all');
+    if (selectAll) {
+        selectAll.addEventListener('change', () => {
+            qsa('.client-select').forEach(el => {
+                if (selectAll.checked) selectedClients.add(el.dataset.client);
+                else selectedClients.delete(el.dataset.client);
+                el.checked = selectAll.checked;
+            });
+            syncBatchBar();
+        });
     }
-    if (filterIssueBtn) {
-        filterIssueBtn.addEventListener('click', () => setFilterButtons('issue'));
+    if (tbody) {
+        tbody.addEventListener('change', e => {
+            const box = e.target.closest('.client-select');
+            if (!box) return;
+            if (box.checked) selectedClients.add(box.dataset.client);
+            else selectedClients.delete(box.dataset.client);
+            syncBatchBar();
+        });
     }
-    if (showAllBtn) {
-        showAllBtn.addEventListener('click', () => setFilterButtons('all'));
+    const batchDisable = qs('#batch-disable-btn');
+    const batchEnable = qs('#batch-enable-btn');
+    const batchRevoke = qs('#batch-revoke-btn');
+    const batchClear = qs('#batch-clear-btn');
+    if (batchDisable) batchDisable.addEventListener('click', () => runBatchAction('disable', '确认批量禁用选中的客户端？在线会话会被踢掉。'));
+    if (batchEnable) batchEnable.addEventListener('click', () => runBatchAction('enable', '确认批量启用？仅处理“管理员禁用”的客户端；已到期的请用“批量改到期”。'));
+    const batchExpiry = qs('#batch-expiry-btn');
+    if (batchExpiry) {
+        batchExpiry.addEventListener('click', () => {
+            if (!selectedClients.size) {
+                showCustomMessage('请先勾选客户端', 'error');
+                return;
+            }
+            const nameInput = qs('#modify-client-name');
+            const batchFlag = qs('#modify-expiry-batch');
+            if (nameInput) nameInput.value = `已选 ${selectedClients.size} 个客户端`;
+            if (batchFlag) batchFlag.value = '1';
+            const modalEl = qs('#modifyExpiryModal');
+            if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        });
     }
+    if (batchRevoke) batchRevoke.addEventListener('click', () => runBatchAction('revoke', '确认批量撤销选中客户端的证书？此操作不可恢复！'));
+    if (batchClear) batchClear.addEventListener('click', () => {
+        selectedClients.clear();
+        qsa('.client-select').forEach(el => { el.checked = false; });
+        syncBatchBar();
+    });
 
     // 搜索框回车
     if (input) {
@@ -845,6 +987,8 @@ export function bindModifyExpiry() {
         const btn = e.target.closest('.modify-expiry-btn');
         if (btn) {
             qs('#modify-client-name').value = btn.dataset.client;
+            const batchFlag = qs('#modify-expiry-batch');
+            if (batchFlag) batchFlag.value = '0';
             modalIns.show();
         }
     });
@@ -860,50 +1004,72 @@ export function bindModifyExpiry() {
         btnConfirm.setAttribute('data-bound', 'true');
 
         btnConfirm.addEventListener('click', async () => {
+            const isBatch = qs('#modify-expiry-batch')?.value === '1';
             const name = qs('#modify-client-name').value;
-            let days;
+            let payload = {};
             if (qs('#modify-expiryCustom').checked) {
                 const d = qs('#modify-expiry-date').value;
                 if (!d) {
                     qs('#modify-expiry-message').innerHTML = '<div class="alert alert-danger">请选择到期日期</div>';
                     return;
                 }
-                days = Math.ceil((new Date(d) - new Date()) / 86400000).toString();
+                payload.expiry_date = d;
             } else {
                 const selected = document.querySelector('input[name="modify_expiry_choice"]:checked');
-                days = selected ? selected.value : '30';
+                payload.expiry_days = selected ? selected.value : '30';
             }
 
             const loader = qs('#modify-expiry-loader');
             const msg = qs('#modify-expiry-message');
             loader.style.display = 'inline-block';
             btnConfirm.disabled = true;
-
             btnConfirm.blur();
 
             try {
-                const data = await authFetch('/api/clients/modify_expiry', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ client_name: name, expiry_days: days })
-                });
-
-                loader.style.display = 'none';
-                btnConfirm.disabled = false;
-
-                const cls = data.status === 'success' ? 'alert-success' : 'alert-danger';
-                msg.innerHTML = `<div class="alert ${cls}">${data.message}</div>`;
-
-                if (data.status === 'success') {
+                let data;
+                if (isBatch) {
+                    data = await authFetch('/api/clients/batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({
+                            action: 'expiry',
+                            names: Array.from(selectedClients),
+                            ...payload
+                        })
+                    });
+                    const results = data.data?.results || [];
+                    const failed = results.filter(r => !r.ok);
+                    const okN = results.length - failed.length;
+                    msg.innerHTML = `<div class="alert alert-info">批量改到期：成功 ${okN}，失败 ${failed.length}</div>`;
+                    flashClientMsg(`<div class="alert alert-info">批量改到期完成：成功 ${okN}，失败 ${failed.length}</div>`, 5000);
+                    results.filter(r => r.ok).forEach(r => selectedClients.delete(r.name));
+                    loader.style.display = 'none';
+                    btnConfirm.disabled = false;
                     setTimeout(() => {
                         modalIns.hide();
                         loadClients();
-                    }, 1500);
+                    }, 1200);
+                } else {
+                    data = await authFetch('/api/clients/modify_expiry', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ client_name: name, ...payload })
+                    });
+                    loader.style.display = 'none';
+                    btnConfirm.disabled = false;
+                    const cls = data.status === 'success' ? 'alert-success' : 'alert-danger';
+                    msg.innerHTML = `<div class="alert ${cls}">${data.message}</div>`;
+                    if (data.status === 'success') {
+                        setTimeout(() => {
+                            modalIns.hide();
+                            loadClients();
+                        }, 1500);
+                    }
                 }
             } catch (err) {
                 loader.style.display = 'none';
                 btnConfirm.disabled = false;
-                msg.innerHTML = `<div class="alert alert-danger">${err}</div>`;
+                msg.innerHTML = `<div class="alert alert-danger">${err.message || err}</div>`;
                 setTimeout(() => msg.innerHTML = '', 2000);
             }
         });
@@ -915,6 +1081,8 @@ export function bindModifyExpiry() {
         qs('#modify-expiryCustom').checked = false;
         qs('#modifyCustomDateWrapper').classList.add('d-none');
         qs('#modify-client-name').value = '';
+        const batchFlag = qs('#modify-expiry-batch');
+        if (batchFlag) batchFlag.value = '0';
     });
 }
 

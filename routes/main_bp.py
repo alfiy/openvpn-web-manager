@@ -14,17 +14,35 @@ main_bp = Blueprint('main_bp', __name__)
 PER_PAGE = 10
 
 # ---------- 工具函数 ----------
-def serialize_client(c: Client):
+def _is_expired(c: Client, now=None) -> bool:
+    now = now or datetime.now()
+    exp = c.logical_expiry
+    if not exp:
+        return False
+    if getattr(exp, 'tzinfo', None):
+        exp = exp.replace(tzinfo=None)
+    return exp <= now
+
+
+def serialize_client(c: Client, now=None):
     """将 Client ORM 对象序列化为前端需要的字典"""
+    now = now or datetime.now()
+    expired = _is_expired(c, now)
+    disable_reason = None
+    if expired:
+        disable_reason = 'expired'
+    elif c.disabled:
+        disable_reason = 'admin'
     return {
         "name": c.name,
         "description": c.description, 
         "online": c.online,
-        "disabled": c.disabled,
+        "disabled": bool(c.disabled),
+        "expired": expired,
+        "disable_reason": disable_reason,
         "vpn_ip": c.vpn_ip,
         "real_ip": c.real_ip,
         "duration": c.duration,
-        # 前端显示 expiry = logical_expiry
         "expiry": c.logical_expiry.strftime('%Y-%m-%d %H:%M:%S') if c.logical_expiry else None,
         "group": c.group.name if c.group else None,
         "group_id": c.group_id,
@@ -86,8 +104,9 @@ def clients_data():
     """
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '', type=str).strip()
-    online_only = request.args.get('online', '', type=str).strip() in ('1', 'true', 'yes')
-    issue_only = request.args.get('issue', '', type=str).strip() in ('1', 'true', 'yes')
+    view = (request.args.get('view') or '').strip().lower()
+    if request.args.get('online', '', type=str).strip() in ('1', 'true', 'yes'):
+        view = 'online'
 
     # 先拉 7505 在线名单，避免多次占用 management 单连接
     live_online = get_online_clients(cache_ttl=3)
@@ -105,16 +124,15 @@ def clients_data():
 
     rows = query.order_by(Client.name.asc()).all()
     now = datetime.now()
-    if online_only:
+    if view == 'online':
         rows = [
             c for c in rows
-            if not c.disabled and (c.name or '').lower() in live_by_lower
+            if not c.disabled and not _is_expired(c, now) and (c.name or '').lower() in live_by_lower
         ]
-    elif issue_only:
-        rows = [
-            c for c in rows
-            if c.disabled or (c.logical_expiry is not None and c.logical_expiry <= now)
-        ]
+    elif view == 'disabled':
+        rows = [c for c in rows if c.disabled and not _is_expired(c, now)]
+    elif view == 'expired':
+        rows = [c for c in rows if _is_expired(c, now)]
 
     total = len(rows)
     total_pages = max((total + PER_PAGE - 1) // PER_PAGE, 1)
@@ -127,7 +145,7 @@ def clients_data():
 
     clients_serialized = []
     for c in clients_page:
-        item = serialize_client(c)
+        item = serialize_client(c, now)
         info = live_online.get(c.name) or live_by_lower.get((c.name or '').lower())
         if c.disabled:
             item['online'] = False
@@ -146,5 +164,5 @@ def clients_data():
         "total_pages": total_pages,
         "total": total,
         "q": q,
-        "online_only": online_only
+        "view": view or 'all'
     })
