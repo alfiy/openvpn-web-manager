@@ -108,6 +108,10 @@ def _ensure_user_schema():
             print('✅ 已为 users 表添加 must_change_password 列')
     except Exception as exc:
         db.session.rollback()
+        msg = str(exc).lower()
+        if 'duplicate column' in msg or 'already exists' in msg:
+            print('✓ users.must_change_password 列已存在（其它进程已添加）')
+            return
         print(f'⚠️  检查 users 表结构失败: {exc}')
 
 
