@@ -3,11 +3,8 @@ from flask import Blueprint, request, render_template, jsonify
 from flask_login import login_required
 from models import Client  # ORM 模型
 from utils.openvpn_utils import (
-    get_openvpn_clients,
     get_online_clients,
     check_openvpn_status,
-    sync_openvpn_clients_to_db,
-    sync_online_state_to_db
 )
 
 main_bp = Blueprint('main_bp', __name__)
@@ -68,9 +65,6 @@ def clients():
     page = request.args.get('page', 1, type=int)
     q = request.args.get('q', '', type=str).strip()
 
-    sync_openvpn_clients_to_db()
-    sync_online_state_to_db()
-
     query = Client.query
     if q:
         query = query.filter(Client.name.ilike(f"%{q}%"))
@@ -111,9 +105,6 @@ def clients_data():
     # 先拉 7505 在线名单，避免多次占用 management 单连接
     live_online = get_online_clients(cache_ttl=3)
     live_by_lower = {name.lower(): info for name, info in live_online.items()}
-
-    sync_openvpn_clients_to_db()
-    sync_online_state_to_db()
 
     query = Client.query
     if q:

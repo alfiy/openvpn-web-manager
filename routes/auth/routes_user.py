@@ -11,7 +11,8 @@ from utils.password_validator import PasswordValidator
 
 
 # 使用项目统一的 CSRF
-from extensions import csrf, limiter
+from extensions import csrf, limiter, login_user_key
+from flask_limiter.util import get_remote_address
 
 
 # ------------------------------------------------------
@@ -49,7 +50,8 @@ def login():
 # ------------------------------------------------------
 @csrf.exempt
 @auth_bp.route('/api/login', methods=['POST'])
-@limiter.limit("10 per minute")
+@limiter.limit("10 per minute", key_func=get_remote_address)
+@limiter.limit("5 per minute", key_func=login_user_key)
 def api_login():
     data = request.get_json(silent=True)
     if not data:

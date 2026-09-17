@@ -1,8 +1,9 @@
 from functools import wraps
-from flask import request, jsonify, redirect, url_for, flash
+from flask import request, redirect, url_for, flash
 from flask_wtf.csrf import validate_csrf
 from flask_login import current_user
 from models import Role
+from utils.api_response import api_error
 
 
 def login_required(f):
@@ -10,7 +11,7 @@ def login_required(f):
     def decorated(*args, **kwargs):
         if not current_user.is_authenticated:
             if request.is_json or request.path.startswith('/api/'):
-                return jsonify({'status': 'error', 'message': '未登录'}), 401
+                return api_error('未登录', status=401)
             return redirect(url_for('auth_bp.login'))
         return f(*args, **kwargs)
     return decorated
@@ -20,13 +21,13 @@ def require_login():
     """用于 before_request"""
     if not current_user.is_authenticated:
         if request.is_json or request.path.startswith('/api/'):
-            return jsonify({'status': 'error', 'message': '未登录'}), 401
+            return api_error('未登录', status=401)
         return redirect(url_for('auth_bp.login'))
 
 
 def _forbidden(message='您没有权限访问此页面'):
     if request.is_json or request.path.startswith('/api/'):
-        return jsonify({'status': 'error', 'message': message}), 403
+        return api_error(message, status=403)
     flash(message, 'danger')
     try:
         return redirect(url_for('main_bp.index'))
@@ -41,7 +42,7 @@ def role_required(required_roles):
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
                 if request.is_json or request.path.startswith('/api/'):
-                    return jsonify({'status': 'error', 'message': '未登录'}), 401
+                    return api_error('未登录', status=401)
                 return redirect(url_for('auth_bp.login'))
             if not hasattr(current_user, 'role') or current_user.role not in required_roles:
                 return _forbidden('权限不足')
@@ -50,13 +51,18 @@ def role_required(required_roles):
     return decorator
 
 
+def roles_required(*roles):
+    """允许的角色列表，如 @roles_required(Role.ADMIN, Role.SUPER_ADMIN)。"""
+    return role_required(list(roles))
+
+
 def admin_required(f):
     """ADMIN 或 SUPER_ADMIN。"""
-    return role_required([Role.ADMIN, Role.SUPER_ADMIN])(f)
+    return roles_required(Role.ADMIN, Role.SUPER_ADMIN)(f)
 
 
 def super_admin_required(f):
-    return role_required([Role.SUPER_ADMIN])(f)
+    return roles_required(Role.SUPER_ADMIN)(f)
 
 
 def json_csrf_protect(f):
@@ -64,11 +70,11 @@ def json_csrf_protect(f):
     def decorated_function(*args, **kwargs):
         csrf_token = request.headers.get('X-CSRFToken')
         if not csrf_token:
-            return jsonify({'status': 'error', 'message': '缺少 CSRF 令牌'}), 403
+            return api_error('缺少 CSRF 令牌', status=403)
         try:
             validate_csrf(csrf_token)
         except Exception:
-            return jsonify({'status': 'error', 'message': 'CSRF 令牌验证失败，请刷新页面'}), 403
+            return api_error('CSRF 令牌验证失败，请刷新页面', status=403)
         return f(*args, **kwargs)
     return decorated_function
 
@@ -82,8 +88,8 @@ def init_csrf_guard(bp):
             token = request.headers.get('X-CSRFToken') or \
                 (request.json.get('csrf_token') if request.json else None)
             if not token:
-                return jsonify({'status': 'error', 'message': '缺少 CSRF 令牌'}), 403
+                return api_error('缺少 CSRF 令牌', status=403)
             try:
                 validate_csrf(token)
             except Exception:
-                return jsonify({'status': 'error', 'message': 'CSRF 令牌无效'}), 403
+                return api_error('CSRF 令牌无效', status=403)

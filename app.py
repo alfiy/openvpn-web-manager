@@ -304,11 +304,12 @@ def create_app():
             db.session.commit()
             print("✅ 默认用户组已创建: default (不限速: 1000Mbit/1000Mbit)")       
         
-        # 初始化导出 TC 配置
-        try:
-            export_tc_config()
-        except Exception as e:
-            print(f"⚠️  TC 配置初始化失败: {e}")
+        # timer 同步进程不导出 TC，避免每 10 秒重写限速文件
+        if os.getenv('VPNWM_SYNC_MODE') != '1':
+            try:
+                export_tc_config()
+            except Exception as e:
+                print(f"⚠️  TC 配置初始化失败: {e}")
 
     # 列出所有需要 CSRF 校验的纯 JSON 蓝图
     json_blueprints = [

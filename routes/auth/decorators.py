@@ -1,15 +1,8 @@
-from functools import wraps
-from flask import jsonify
-from flask_login import current_user
-from models import Role
-
-
-def admin_required(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        if not current_user.is_authenticated:
-            return jsonify({'status': 'error', 'message': '未登录'}), 401
-        if current_user.role not in {Role.ADMIN, Role.SUPER_ADMIN}:
-            return jsonify({'status': 'error', 'message': '权限不足'}), 403
-        return f(*args, **kwargs)
-    return wrapper
+"""兼容入口：统一使用 routes.helpers 中的装饰器。"""
+from routes.helpers import (  # noqa: F401
+    login_required,
+    admin_required,
+    super_admin_required,
+    roles_required,
+    role_required,
+)

@@ -1,12 +1,15 @@
 # routes/api/auth.py
 from flask import request
 from flask_login import login_user, logout_user, current_user
+from flask_limiter.util import get_remote_address
 from . import api_bp
 from utils.api_response import api_success, api_error
 from models import User
-from werkzeug.security import check_password_hash
+from extensions import limiter, login_user_key
 
 @api_bp.route('/auth/login', methods=['POST'])
+@limiter.limit("10 per minute", key_func=get_remote_address)
+@limiter.limit("5 per minute", key_func=login_user_key)
 def api_login():
     data = request.get_json(silent=True) or request.form
     username = data.get('username')
@@ -26,4 +29,4 @@ def api_login():
     return api_success({
         "redirect": "/",
         "must_change_password": bool(user.must_change_password),
-    }, msg="登录成功" if not user.must_change_password else "请先修改默认密码")
+    }, message="登录成功" if not user.must_change_password else "请先修改默认密码")

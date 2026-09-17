@@ -1,6 +1,7 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request
 from datetime import datetime, timedelta
 from routes.helpers import admin_required
+from utils.api_response import api_success, api_error
 from utils.validation import ValidationError, validate_client_name
 from utils.openvpn_ops import set_ccd_disabled
 from models import Client, db
@@ -19,17 +20,17 @@ def modify_client_expiry():
     """
     data = request.get_json()
     if not data:
-        return jsonify({'status': 'error', 'message': '请求数据格式错误'}), 400
+        return api_error('请求数据格式错误', status=400)
 
     try:
         client_name = validate_client_name(data.get('client_name', '').strip())
     except ValidationError as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        return api_error(str(exc), status=400)
     expiry_days = data.get('expiry_days')
     expiry_date = data.get('expiry_date')  # 新字段
 
     if not client_name:
-        return jsonify({'status': 'error', 'message': '客户端名称不能为空'}), 400
+        return api_error('客户端名称不能为空', status=400)
 
     # 计算新的到期时间
     try:
@@ -38,22 +39,22 @@ def modify_client_expiry():
             try:
                 new_expiry_date = datetime.fromisoformat(expiry_date)
             except ValueError:
-                return jsonify({'status': 'error', 'message': 'expiry_date 格式无效,应为 YYYY-MM-DD'}), 400
+                return api_error('expiry_date 格式无效,应为 YYYY-MM-DD', status=400)
         elif expiry_days:
             expiry_days = int(expiry_days)
             if expiry_days <= 0:
-                return jsonify({'status': 'error', 'message': 'expiry_days 必须为正整数'}), 400
+                return api_error('expiry_days 必须为正整数', status=400)
             new_expiry_date = datetime.now() + timedelta(days=expiry_days)
         else:
-            return jsonify({'status': 'error', 'message': '必须提供 expiry_days 或 expiry_date'}), 400
+            return api_error('必须提供 expiry_days 或 expiry_date', status=400)
     except Exception as e:
-        return jsonify({'status': 'error', 'message': f'解析到期时间失败: {str(e)}'}), 400
+        return api_error(f'解析到期时间失败: {str(e)}', status=400)
 
     try:
         # 查找客户端
         client = Client.query.filter_by(name=client_name).first()
         if not client:
-            return jsonify({'status': 'error', 'message': f'客户端 {client_name} 不存在'}), 404
+            return api_error(f'客户端 {client_name} 不存在', status=404)
 
         # 更新数据库（logical_expiry 优先）
         if hasattr(client, 'logical_expiry'):
@@ -77,8 +78,8 @@ def modify_client_expiry():
             message += ', 客户端已重新启用'
         message += '。证书本身保持10年有效期不变,无需重新下发证书。'
 
-        return jsonify({'status': 'success', 'message': message})
+        return api_success(message=message)
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'status': 'error', 'message': f'修改到期时间失败: {str(e)}'}), 500
+        return api_error(f'修改到期时间失败: {str(e)}', status=500)
