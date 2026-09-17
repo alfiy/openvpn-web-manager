@@ -213,6 +213,16 @@ def api_kick_client():
     success, kill_msg = kick_client_sessions(client_name)
     log_message(f"踢下线 {client_name}: {kill_msg}")
     try:
+        from utils.openvpn_ops import release_first_wins_lock
+        release_first_wins_lock(client_name)
+    except Exception as exc:
+        log_message(f"清 first-wins 锁失败 {client_name}: {exc}")
+    try:
+        from utils.openvpn_utils import mark_client_kicked
+        mark_client_kicked(client_name)
+    except Exception:
+        pass
+    try:
         client = Client.query.filter_by(name=client_name).first()
         if not client:
             client = Client.query.filter(Client.name.ilike(client_name)).first()

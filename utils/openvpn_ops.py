@@ -248,6 +248,17 @@ def kick_client_sessions(client_name: str) -> Tuple[bool, str]:
         return False, f'无法连接管理口 {host}:{port}: {exc}'
 
 
+def release_first_wins_lock(client_name: str) -> None:
+    """踢人后清掉 first-wins 锁，否则同一证书会一直 DENY。"""
+    try:
+        name = validate_client_name(client_name)
+    except ValidationError:
+        return
+    safe = ''.join(ch if ch.isalnum() or ch in '._-' else '_' for ch in name)
+    lock = f'/etc/openvpn/first-wins/locks/{safe}.lock'
+    _sudo(['rm', '-f', lock], timeout=10)
+
+
 def set_ccd_disabled(client_name: str, disabled: bool) -> Tuple[bool, str]:
     client_name = validate_client_name(client_name)
     dest = safe_join(CCD_DIR, client_name, '')

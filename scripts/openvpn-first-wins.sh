@@ -53,7 +53,7 @@ cn_listed() {
 }
 
 mkdir -p "$LOCK_DIR" 2>/dev/null || true
-log "HOOK start v4"
+log "HOOK start v5"
 
 if [ -z "$CN" ]; then
     log "ALLOW no-common-name"
@@ -76,6 +76,15 @@ if [ "$STYPE" = "client-disconnect" ]; then
         log "UNLOCK no-lock"
     fi
     exit 0
+fi
+
+# 同一 CN 串行判断，避免踢人后两台同时重连都看到「无锁」
+GATE="${LOCK}.gate"
+touch "$GATE" 2>/dev/null || true
+exec 9>"$GATE"
+if ! flock -w 8 9; then
+    log "DENY flock-timeout"
+    exit 1
 fi
 
 if [ -f "$LOCK" ]; then
