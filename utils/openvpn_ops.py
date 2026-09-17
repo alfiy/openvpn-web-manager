@@ -218,8 +218,21 @@ def kick_client_sessions(client_name: str) -> Tuple[bool, str]:
                 if real_addr:
                     notes.append(command(f'kill {real_addr}'))
 
-            time.sleep(0.3)
+            time.sleep(0.4)
             remain = command('status 2', until_end=True)
+            still_now = [
+                line for line in remain.splitlines()
+                if line.startswith('CLIENT_LIST,') and line.split(',')[1].strip().lower() == client_name.lower()
+            ]
+            if still_now:
+                for line in still_now:
+                    parts = line.split(',')
+                    cid = parts[10].strip() if len(parts) > 10 else ''
+                    if cid.isdigit():
+                        notes.append(command(f'client-kill {cid}'))
+                    notes.append(command(f'kill {client_name}'))
+                time.sleep(0.4)
+                remain = command('status 2', until_end=True)
             still = []
             for line in remain.splitlines():
                 if line.startswith('CLIENT_LIST,') and line.split(',')[1].strip().lower() == client_name.lower():

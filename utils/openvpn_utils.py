@@ -30,6 +30,75 @@ class OnlineClient(NamedTuple):
 # 缓存 10 s,避免并发刷爆 IO
 _last_check: float = 0
 _cache: Dict[str, OnlineClient] = {}
+KICK_FILE = os.environ.get('VPNWM_KICK_FILE', '/opt/vpnwm/data/kicked-sessions.tsv')
+KICK_HOLD_SEC = 180
+
+
+def mark_client_kicked(client_name: str) -> None:
+    """记录踢人时间，避免 status.log / 管理口缓存把旧会话立刻标回在线。"""
+    global _last_check, _cache
+    name = (client_name or '').strip().lower()
+    if not name:
+        return
+    now = int(time.time())
+    rows = {}
+    try:
+        with open(KICK_FILE, 'r', encoding='utf-8') as fh:
+            for line in fh:
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    rows[parts[0]] = parts[1]
+    except OSError:
+        pass
+    rows[name] = str(now)
+    try:
+        os.makedirs(os.path.dirname(KICK_FILE), exist_ok=True)
+        with open(KICK_FILE, 'w', encoding='utf-8') as fh:
+            for key, ts in rows.items():
+                fh.write(f'{key} {ts}\n')
+    except OSError as exc:
+        logger.warning('write kick file failed: %s', exc)
+    _cache = {}
+    _last_check = 0
+
+
+def _kick_ts(client_name: str) -> float:
+    name = (client_name or '').strip().lower()
+    try:
+        with open(KICK_FILE, 'r', encoding='utf-8') as fh:
+            for line in fh:
+                parts = line.strip().split()
+                if len(parts) >= 2 and parts[0] == name:
+                    return float(parts[1])
+    except OSError:
+        return 0
+    return 0
+
+
+def _session_started_after(info: OnlineClient, kick_ts: float) -> bool:
+    raw = (info.connected_since or '').strip()
+    if not raw or kick_ts <= 0:
+        return False
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M'):
+        try:
+            started = datetime.strptime(raw, fmt)
+            return started.timestamp() > kick_ts + 1
+        except ValueError:
+            continue
+    return False
+
+
+def _apply_kick_hold(clients: Dict[str, OnlineClient]) -> Dict[str, OnlineClient]:
+    now = time.time()
+    kept = {}
+    for cn, info in clients.items():
+        kicked_at = _kick_ts(cn)
+        if kicked_at and now - kicked_at < KICK_HOLD_SEC:
+            if _session_started_after(info, kicked_at):
+                kept[cn] = info
+            continue
+        kept[cn] = info
+    return kept
 
 
 def check_openvpn_status():
@@ -262,6 +331,58 @@ def _parse_mgmt_status(text: str) -> Dict[str, OnlineClient]:
     return clients
 
 
+def _is_vpn_ip(ip: str) -> bool:
+    ip = (ip or '').strip()
+    if not ip:
+        return False
+    return ip.startswith('10.') or ip.startswith('172.') or ip.startswith('192.168.')
+
+
+def _ping_ok(ip: str) -> bool:
+    if not _is_vpn_ip(ip):
+        return False
+    try:
+        result = subprocess.run(
+            ['ping', '-c', '1', '-W', '1', ip],
+            capture_output=True,
+            timeout=2,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _filter_by_ping(clients: Dict[str, OnlineClient]) -> Dict[str, OnlineClient]:
+    """管理口/status 可能仍列出已断开会话；VPN 虚拟 IP ping 不通则视为离线。"""
+    if not clients:
+        return clients
+    targets = {cn: info for cn, info in clients.items() if _is_vpn_ip(info.vpn_ip)}
+    if not targets:
+        return clients
+    reachable = set()
+    try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=min(16, len(targets))) as pool:
+            futs = {pool.submit(_ping_ok, info.vpn_ip): cn for cn, info in targets.items()}
+            for fut in as_completed(futs):
+                cn = futs[fut]
+                try:
+                    if fut.result():
+                        reachable.add(cn)
+                except Exception:
+                    pass
+    except Exception:
+        for cn, info in targets.items():
+            if _ping_ok(info.vpn_ip):
+                reachable.add(cn)
+    kept = {}
+    for cn, info in clients.items():
+        if cn in targets and cn not in reachable:
+            continue
+        kept[cn] = info
+    return kept
+
+
 def get_online_clients(status_file: str = None, cache_ttl: int = 10) -> Dict[str, OnlineClient]:
     global _last_check, _cache
     now = time.time()
@@ -270,7 +391,7 @@ def get_online_clients(status_file: str = None, cache_ttl: int = 10) -> Dict[str
 
     mgmt_text = _mgmt_query_status()
     if mgmt_text is not None:
-        clients = _parse_mgmt_status(mgmt_text)
+        clients = _filter_by_ping(_apply_kick_hold(_parse_mgmt_status(mgmt_text)))
         _last_check = now
         _cache = clients
         return clients
@@ -374,6 +495,7 @@ def get_online_clients(status_file: str = None, cache_ttl: int = 10) -> Dict[str
         if cn in clients:
             clients[cn] = clients[cn]._replace(vpn_ip=vpn_ip)
 
+    clients = _filter_by_ping(_apply_kick_hold(clients))
     _last_check = now
     _cache = clients
     return clients

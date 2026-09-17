@@ -200,6 +200,40 @@ def api_disable_client():
         )
 
 
+@api_bp.route('/clients/kick', methods=['POST'])
+@admin_required
+def api_kick_client():
+    """只断开当前会话，不写 CCD、不改 disabled。客户端可自动重连。"""
+    data = request.get_json() or {}
+    try:
+        client_name = validate_client_name(data.get('client_name', '').strip())
+    except ValidationError as exc:
+        return api_error(str(exc), 400)
+
+    success, kill_msg = kick_client_sessions(client_name)
+    log_message(f"踢下线 {client_name}: {kill_msg}")
+    try:
+        client = Client.query.filter_by(name=client_name).first()
+        if not client:
+            client = Client.query.filter(Client.name.ilike(client_name)).first()
+        if client:
+            client.online = False
+            client.vpn_ip = None
+            client.real_ip = None
+            client.duration = None
+            db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        log_message(f"踢下线后更新库失败 {client_name}: {exc}")
+
+    if success:
+        return api_success(
+            message=f"已踢下线 {client_name}，未禁用，客户端可能自动重连",
+            data={"client_name": client_name, "kill_response": kill_msg}
+        )
+    return api_error(message=f"踢下线失败（请确认已打开 management 127.0.0.1 7505）: {kill_msg}")
+
+
 def _batch_disable_one(name: str):
     ok, err = set_ccd_disabled(name, True)
     if not ok:

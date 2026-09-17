@@ -122,6 +122,11 @@ function render(data) {
                                             <i class="fa-solid fa-calendar-days me-1"></i>修改到期
                                             </button>
                                 `);
+                if (c.online) {
+                    actionButtons.push(`<button class="btn btn-sm btn-outline-danger kick-btn" data-client="${c.name}">
+                                        <i class="fa-solid fa-plug-circle-xmark me-1"></i>踢下线
+                                        </button>`);
+                }
                 actionButtons.push(`<button class="btn btn-sm btn-warning disconnect-btn" data-client="${c.name}">
                                     <i class="fa-solid fa-ban me-1"></i>禁用
                                     </button>
@@ -744,7 +749,7 @@ export function bindClientEvents() {
 
     // 统一处理客户端按钮点击事件
     document.body.addEventListener('click', async e => {
-        const btn = e.target.closest('[data-action], .revoke-btn, .disconnect-btn, .enable-btn, .modify-group-btn');
+        const btn = e.target.closest('[data-action], .revoke-btn, .disconnect-btn, .kick-btn, .enable-btn, .modify-group-btn');
         if (!btn) return;
 
         const clientName = btn.dataset.client;
@@ -817,6 +822,9 @@ export function bindClientEvents() {
         if (btn.classList.contains('revoke-btn')) {
             url = '/api/clients/revoke';
             confirmMessage = `确定撤销客户端 "${clientName}" 的证书吗?此操作不可恢复!`;
+        } else if (btn.classList.contains('kick-btn')) {
+            url = '/api/clients/kick';
+            confirmMessage = `确认踢下线 "${clientName}" ？只断开当前会话，不禁用，客户端可能会自动重连。`;
         } else if (btn.classList.contains('disconnect-btn')) {
             url = '/api/clients/disable';
             confirmMessage = `确认要禁用客户端 "${clientName}" 吗?`;
