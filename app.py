@@ -106,6 +106,12 @@ def _ensure_user_schema():
             ))
             db.session.commit()
             print('✅ 已为 users 表添加 must_change_password 列')
+        if 'session_token' not in cols:
+            db.session.execute(text(
+                'ALTER TABLE users ADD COLUMN session_token VARCHAR(64)'
+            ))
+            db.session.commit()
+            print('✅ 已为 users 表添加 session_token 列')
     except Exception as exc:
         db.session.rollback()
         msg = str(exc).lower()
@@ -240,6 +246,38 @@ def create_app():
         'static',
         'health.health_check',
     }
+
+    ALLOW_WITHOUT_TOKEN = {
+        'auth_bp.login',
+        'auth_bp.logout',
+        'auth_bp.api_login',
+        'auth_bp.forgot_password',
+        'auth_bp.reset_password_page',
+        'api_bp.api_login',
+        'static',
+        'health.health_check',
+    }
+
+    @app.before_request
+    def _single_session():
+        from flask import request, session, redirect, url_for, flash
+        from flask_login import current_user, logout_user
+        if not getattr(current_user, 'is_authenticated', False):
+            return None
+        endpoint = request.endpoint or ''
+        if endpoint in ALLOW_WITHOUT_TOKEN or endpoint.startswith('static'):
+            return None
+        token = session.get('login_token')
+        live = getattr(current_user, 'session_token', None)
+        if live and token and token == live:
+            return None
+        logout_user()
+        session.pop('login_token', None)
+        if request.is_json or request.path.startswith('/api/'):
+            from utils.api_response import api_error
+            return api_error('该账号已在其他地方登录', status=401)
+        flash('该账号已在其他地方登录，请重新登录', 'warning')
+        return redirect(url_for('auth_bp.login'))
 
     @app.before_request
     def _force_password_change():

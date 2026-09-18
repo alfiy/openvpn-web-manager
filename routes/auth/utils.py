@@ -7,6 +7,18 @@ from flask import current_app
 from flask_mail import Message
 
 
+def issue_login_session(user) -> str:
+    """签发新的登录令牌并写入 session，使该账号其它浏览器中的会话失效。"""
+    from flask import session
+    from models import db
+    token = secrets.token_hex(16)
+    user.session_token = token
+    db.session.commit()
+    session.permanent = True
+    session['login_token'] = token
+    return token
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 

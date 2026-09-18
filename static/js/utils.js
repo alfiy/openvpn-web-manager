@@ -106,6 +106,10 @@ export async function authFetch(url, options = {}) {
         
         // ⭐ 检查后端返回的 code 字段或 HTTP 状态码
         // 优先使用 data.code，因为后端可能返回 HTTP 400 但在 JSON 中有详细错误信息
+        if (response.status === 401 && (data?.message || '').includes('其他地方登录')) {
+            window.location.href = document.body.dataset.logoutUrl || '/auth/logout';
+            throw new Error(data.message);
+        }
         if (!response.ok || (data.code !== undefined && data.code !== 0)) {
             // console.error('❌ 请求失败:', data);
             // ⭐ 从 data.data.error 或其他字段提取错误消息

@@ -5,7 +5,7 @@ from werkzeug.exceptions import BadRequest
 from datetime import timedelta, timezone
 from models import db, User, Role
 from . import auth_bp
-from .utils import generate_token, hash_token, utc_now, send_mail
+from .utils import generate_token, hash_token, utc_now, send_mail, issue_login_session
 from flask_wtf.csrf import generate_csrf
 from utils.password_validator import PasswordValidator
 
@@ -69,7 +69,7 @@ def api_login():
             user.must_change_password = True
             db.session.commit()
         login_user(user, remember=False)
-        session.permanent = True
+        issue_login_session(user)
         current_app.logger.info("用户 %s 登录", username)
         payload = {
             'status': 'success',

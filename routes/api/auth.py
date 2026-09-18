@@ -26,7 +26,8 @@ def api_login():
         from models import db
         db.session.commit()
     login_user(user, remember=False)
-    session.permanent = True
+    from routes.auth.utils import issue_login_session
+    issue_login_session(user)
     return api_success({
         "redirect": "/",
         "must_change_password": bool(user.must_change_password),
