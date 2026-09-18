@@ -244,6 +244,34 @@ def api_kick_client():
     return api_error(message=f"踢下线失败（请确认已打开 management 127.0.0.1 7505）: {kill_msg}")
 
 
+@api_bp.route('/clients/description', methods=['POST'])
+@admin_required
+def api_update_client_description():
+    data = request.get_json() or {}
+    try:
+        client_name = validate_client_name(data.get('client_name', '').strip())
+    except ValidationError as exc:
+        return api_error(str(exc), 400)
+    raw = data.get('description', '')
+    if raw is None:
+        raw = ''
+    description = str(raw).strip()
+    if len(description) > 255:
+        return api_error('描述最多 255 个字符', 400)
+    client = Client.query.filter_by(name=client_name).first()
+    if not client:
+        client = Client.query.filter(Client.name.ilike(client_name)).first()
+    if not client:
+        return api_error(f'客户端 {client_name} 不存在', 404)
+    client.description = description or None
+    db.session.commit()
+    log_message(f'更新客户端描述 {client_name}')
+    return api_success(
+        message='描述已更新',
+        data={'client_name': client.name, 'description': client.description or ''}
+    )
+
+
 def _batch_disable_one(name: str):
     ok, err = set_ccd_disabled(name, True)
     if not ok:

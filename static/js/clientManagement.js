@@ -139,6 +139,11 @@ function render(data) {
         }
 
         const checked = selectedClients.has(c.name) ? 'checked' : '';
+        const canEditDesc = userRole === 'SUPER_ADMIN' || userRole === 'ADMIN';
+        const descAttr = encodeURIComponent(c.description || '');
+        const nameBlock = canEditDesc
+            ? `<a href="#" class="edit-desc-btn text-decoration-none" data-client="${c.name}" data-description="${descAttr}" title="点击编辑描述">${c.name}</a>`
+            : `<strong>${c.name}</strong>`;
         return `
             <tr>
                 <td class="align-middle">
@@ -146,8 +151,8 @@ function render(data) {
                 </td>
                 <td class="align-middle">${rowIdx}</td>
                 <td class="align-middle">
-                    <div><strong>${c.name}</strong></div>
-                    ${c.description ? `<div class="text-muted small">${c.description}</div>` : ''}
+                    <div>${nameBlock}</div>
+                    ${c.description ? `<div class="text-muted small">${String(c.description).replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]))}</div>` : ''}
                 </td>
                 <td class="align-middle">
                     ${c.expired || c.disable_reason === 'expired'
@@ -749,6 +754,21 @@ export function bindClientEvents() {
 
     // 统一处理客户端按钮点击事件
     document.body.addEventListener('click', async e => {
+        const descBtn = e.target.closest('.edit-desc-btn');
+        if (descBtn) {
+            e.preventDefault();
+            const modalEl = document.getElementById('editDescModal');
+            if (!modalEl) return;
+            qs('#edit-desc-name').value = descBtn.dataset.client || '';
+            try {
+                qs('#edit-desc-text').value = decodeURIComponent(descBtn.dataset.description || '');
+            } catch (err) {
+                qs('#edit-desc-text').value = descBtn.dataset.description || '';
+            }
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            return;
+        }
+
         const btn = e.target.closest('[data-action], .revoke-btn, .disconnect-btn, .kick-btn, .enable-btn, .modify-group-btn');
         if (!btn) return;
 
@@ -1095,9 +1115,34 @@ export function bindModifyExpiry() {
 }
 
 // 统一的初始化函数,用于在页面加载时调用
+function bindEditDescription() {
+    const saveBtn = document.getElementById('confirm-edit-desc');
+    if (!saveBtn || saveBtn.dataset.bound) return;
+    saveBtn.dataset.bound = '1';
+    saveBtn.addEventListener('click', async () => {
+        const name = qs('#edit-desc-name')?.value.trim();
+        const description = qs('#edit-desc-text')?.value ?? '';
+        if (!name) return;
+        try {
+            const data = await authFetch('/api/clients/description', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ client_name: name, description })
+            });
+            const modalEl = document.getElementById('editDescModal');
+            if (modalEl) bootstrap.Modal.getInstance(modalEl)?.hide();
+            flashClientMsg(`<div class="alert alert-success">${data.message || data.msg || '描述已更新'}</div>`, 5000);
+            loadClients(currentPage);
+        } catch (err) {
+            flashClientMsg(`<div class="alert alert-danger">${err.message || '保存失败'}</div>`, 5000);
+        }
+    });
+}
+
 export function init() {
     loadClients(currentPage);
     bindClientEvents();
     bindAddClient();
     bindModifyExpiry();
+    bindEditDescription();
 }

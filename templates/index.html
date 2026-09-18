@@ -457,6 +457,31 @@
             </div>
         </div>
 
+        <div class="modal fade" id="editDescModal" tabindex="-1" aria-labelledby="editDescModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="editDescModalLabel"><i class="fa-solid fa-pen-to-square me-2"></i>编辑客户端描述</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">客户端名称（不可修改）</label>
+                            <input type="text" class="form-control" id="edit-desc-name" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="edit-desc-text">描述</label>
+                            <textarea class="form-control" id="edit-desc-text" rows="3" maxlength="255" placeholder="选填，最多 255 字"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="button" class="btn btn-primary" id="confirm-edit-desc">保存</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="modal fade" id="installModal" tabindex="-1" aria-labelledby="installModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-sm">
                 <div class="modal-content">
