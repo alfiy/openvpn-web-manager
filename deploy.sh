@@ -423,7 +423,7 @@ WorkingDirectory=$APP_DIR
 Environment="FLASK_ENV=production"
 Environment="PYTHONUNBUFFERED=1"
 EnvironmentFile=-$APP_DIR/.env
-ExecStart=$APP_DIR/venv/bin/gunicorn --timeout 600 -w 1 -b 0.0.0.0:$APP_PORT --access-logfile /dev/null --error-logfile - "app:app"
+ExecStart=$APP_DIR/venv/bin/gunicorn --timeout 600 -w 2 -b 0.0.0.0:$APP_PORT --access-logfile /dev/null --error-logfile - "app:app"
 Restart=always
 RestartSec=10
 
@@ -435,29 +435,25 @@ echo "✓ Flask 服务配置完成"
 echo "=== 8. 配置 OpenVPN 客户端同步服务 ==="
 sudo tee /etc/systemd/system/sync_openvpn_clients.service > /dev/null <<EOF
 [Unit]
-# Description=Sync OpenVPN Clients to DB after OpenVPN is ready
+Description=Sync OpenVPN Clients to DB
 Requires=openvpn@server.service
 After=openvpn@server.service
-PartOf=openvpn@server.service
 
 [Service]
 Type=oneshot
-User=root
+User=$APP_USER
+Group=$APP_USER
 WorkingDirectory=$APP_DIR
-
 Environment="VPNWM_APP_DIR=$APP_DIR"
 Environment="VPNWM_DATA_DIR=$APP_DIR/data"
 Environment="OPENVPN_STATUS_FILE=/var/log/openvpn/status.log"
 Environment="OPENVPN_CCD_DIR=/etc/openvpn/ccd"
 Environment="OPENVPN_INDEX_TXT=/etc/openvpn/easy-rsa/pki/index.txt"
-
+Environment="VPNWM_SYNC_MODE=1"
+EnvironmentFile=-$APP_DIR/.env
 ExecStart=$APP_DIR/venv/bin/python3 sync_clients.py
-
-LogLevelMax=notice          # 只记录 notice/warning/err/crit
-
-#  调试时将null 改为journal
-StandardOutput=null
-StandardError=null
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

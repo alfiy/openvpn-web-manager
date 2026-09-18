@@ -17,6 +17,7 @@ import { init as initInstallUninstall } from './installUninstall.js';
 import { init as initPasswordConfirm } from './password-confirm.js';
 import { init as ChangePassword } from './changePassword.js';
 import { initNetworkInterfaceSettings } from './changeInterface.js';
+import { initIdleTimeout } from './idleTimeout.js';
 
 /**
  * 统一绑定所有模块的事件和初始化逻辑
@@ -99,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 调用统一的绑定函数，启动整个应用
     bindAll();
+    initIdleTimeout(document.body.dataset.logoutUrl || '/auth/logout');
 
     // 启动自动刷新，只在需要它的页面上调用
     // 检查 body 标签是否有 data-page-type 属性，并且其值为 'auto-refresh'

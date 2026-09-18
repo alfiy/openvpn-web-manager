@@ -148,7 +148,8 @@ def create_app():
         app.config['RATELIMIT_STORAGE_URI'] = 'memory://'
         print("⚠️  Using memory storage for rate limiting (Redis unavailable)")
     app.config['SESSION_TYPE'] = 'filesystem'
-    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15)
+    app.config['SESSION_REFRESH_EACH_REQUEST'] = True
 
     # 邮件配置
     app.config.update(
@@ -183,7 +184,8 @@ def create_app():
     app.config['SESSION_TYPE'] = 'filesystem'
     app.config['SESSION_FILE_DIR'] = os.path.join(DATA_DIR, "session")
     os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
-    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=15)
+    app.config['SESSION_REFRESH_EACH_REQUEST'] = True
 
     # 配置CSRF保护
     app.config['WTF_CSRF_ENABLED'] = True

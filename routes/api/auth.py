@@ -1,5 +1,5 @@
 # routes/api/auth.py
-from flask import request
+from flask import request, session
 from flask_login import login_user, logout_user, current_user
 from flask_limiter.util import get_remote_address
 from . import api_bp
@@ -25,7 +25,8 @@ def api_login():
         user.must_change_password = True
         from models import db
         db.session.commit()
-    login_user(user)
+    login_user(user, remember=False)
+    session.permanent = True
     return api_success({
         "redirect": "/",
         "must_change_password": bool(user.must_change_password),

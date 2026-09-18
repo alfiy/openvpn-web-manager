@@ -1,5 +1,5 @@
 # routes/auth/routes_user.py
-from flask import render_template, request, jsonify, url_for, redirect, flash, current_app
+from flask import render_template, request, jsonify, url_for, redirect, flash, current_app, session
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.exceptions import BadRequest
 from datetime import timedelta, timezone
@@ -68,7 +68,8 @@ def api_login():
         if user.check_password('admin123'):
             user.must_change_password = True
             db.session.commit()
-        login_user(user)
+        login_user(user, remember=False)
+        session.permanent = True
         current_app.logger.info("用户 %s 登录", username)
         payload = {
             'status': 'success',
