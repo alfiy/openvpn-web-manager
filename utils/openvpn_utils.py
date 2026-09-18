@@ -353,7 +353,10 @@ def _ping_ok(ip: str) -> bool:
 
 
 def _filter_by_ping(clients: Dict[str, OnlineClient]) -> Dict[str, OnlineClient]:
-    """管理口/status 可能仍列出已断开会话；VPN 虚拟 IP ping 不通则视为离线。"""
+    """默认不 ping。Windows 常禁 ICMP，7505 已在线会被误判离线。
+    需要时设置环境变量 VPNWM_ONLINE_PING=1。"""
+    if os.environ.get('VPNWM_ONLINE_PING', '').strip() not in ('1', 'true', 'yes'):
+        return clients
     if not clients:
         return clients
     targets = {cn: info for cn, info in clients.items() if _is_vpn_ip(info.vpn_ip)}
