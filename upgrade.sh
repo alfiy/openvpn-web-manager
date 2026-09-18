@@ -5,12 +5,26 @@ set -euo pipefail
 
 APP_USER="${APP_USER:-$USER}"
 APP_DIR="${APP_DIR:-/opt/vpnwm}"
+if [ "$APP_USER" = "root" ] && [ -f /etc/systemd/system/vpnwm.service ]; then
+    EXISTING_USER=$(awk -F= '/^User=/{print $2; exit}' /etc/systemd/system/vpnwm.service)
+    if [ -n "$EXISTING_USER" ] && [ "$EXISTING_USER" != "root" ]; then
+        APP_USER="$EXISTING_USER"
+        echo "以 root 执行，沿用现有 vpnwm.service 的 User=$APP_USER"
+    fi
+fi
+if [ "$APP_USER" = "root" ]; then
+    echo "不要把 Web/sync 跑成 root。请指定业务用户，例如:"
+    echo "  APP_USER=am_openvpn bash ./upgrade.sh"
+    echo "  APP_USER=vpnv2ray  bash ./upgrade.sh"
+    exit 1
+fi
+echo "本次升级 APP_USER=$APP_USER  APP_DIR=$APP_DIR"
 DATA_DIR="$APP_DIR/data"
 DB_FILE="$DATA_DIR/vpn_users.db"
 BACKUP_ROOT="${BACKUP_ROOT:-$HOME/vpnwm-upgrade-backup}"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP_DIR="$BACKUP_ROOT/$STAMP"
-# 生产若前面有 Nginx，保持 127.0.0.1；直连访问可: BIND=0.0.0.0:8080
+# 与当前生产一致：对外监听 8080、2 个 worker。前面有 Nginx 时可: BIND=127.0.0.1:8080 WORKERS=1
 BIND="${BIND:-0.0.0.0:8080}"
 WORKERS="${WORKERS:-2}"
 
@@ -88,12 +102,14 @@ else
     echo "✓ 保留原 SECRET_KEY"
 fi
 sudo chown "$APP_USER":"$APP_USER" "$ENV_FILE"
-sudo chmod 600 "$ENV_FILE"
+sudo chmod 640 "$ENV_FILE"
 
 echo "=== 5. 数据目录与 TC 导出权限 ==="
-sudo mkdir -p "$DATA_DIR"
+sudo mkdir -p "$DATA_DIR/session"
 sudo chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 sudo chmod 750 "$DATA_DIR"
+sudo chmod 770 "$DATA_DIR/session"
+sudo find "$DATA_DIR/session" -user root -delete 2>/dev/null || true
 if [ -f "$DB_FILE" ]; then
     sudo chmod 640 "$DB_FILE"
 fi
@@ -131,6 +147,32 @@ EnvironmentFile=-$APP_DIR/.env
 ExecStart=$APP_DIR/venv/bin/gunicorn --timeout 600 -w $WORKERS -b $BIND --access-logfile /dev/null --error-logfile - "app:app"
 Restart=always
 RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "=== 7.1 更新 sync_openvpn_clients.service（与 Web 同一用户，禁止 root）==="
+sudo tee /etc/systemd/system/sync_openvpn_clients.service > /dev/null <<EOF
+[Unit]
+Description=Sync OpenVPN Clients to DB
+After=openvpn@server.service
+
+[Service]
+Type=oneshot
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$APP_DIR
+Environment="VPNWM_APP_DIR=$APP_DIR"
+Environment="VPNWM_DATA_DIR=$APP_DIR/data"
+Environment="OPENVPN_STATUS_FILE=/var/log/openvpn/status.log"
+Environment="OPENVPN_CCD_DIR=/etc/openvpn/ccd"
+Environment="OPENVPN_INDEX_TXT=/etc/openvpn/easy-rsa/pki/index.txt"
+Environment="VPNWM_SYNC_MODE=1"
+EnvironmentFile=-$APP_DIR/.env
+ExecStart=$APP_DIR/venv/bin/python3 sync_clients.py
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -197,6 +239,7 @@ fi
 sudo systemctl daemon-reload
 sudo systemctl start vpnwm
 sleep 2
+sudo systemctl start sync_openvpn_clients.service 2>/dev/null || true
 sudo systemctl start sync_openvpn_clients.timer 2>/dev/null || true
 
 echo "=== 8. 检查 ===="
@@ -225,5 +268,12 @@ echo "  1. 若 admin/super_admin 仍是 admin123，登录后必须先改密"
 echo "  2. 若这次新写了 SECRET_KEY，旧 Session 会失效，重新登录即可，库数据不受影响"
 echo "  3. 回滚库: sudo systemctl stop vpnwm sync_openvpn_clients.timer && sudo cp $BACKUP_DIR/vpn_users.backup.sqlite $DB_FILE && sudo rm -f ${DB_FILE}-wal ${DB_FILE}-shm && sudo systemctl start vpnwm"
 echo "  4. 不要执行 Web 上的「卸载 OpenVPN」，那会删 /etc/openvpn"
-echo "  5. 直连 8080（无 Nginx）请用: BIND=0.0.0.0:8080 bash ./upgrade.sh"
+echo "  5. 当前默认 BIND=0.0.0.0:8080 WORKERS=2；若只本机反代可 BIND=127.0.0.1:8080 WORKERS=1"
 echo "  6. 新功能（在线筛选/批量/7505 踢人）已包含在本次 rsync 的代码里，无需另拷文件"
+echo "  7. vpnwm 与 sync 必须是同一用户 $APP_USER，不要用 root"
+echo "  8. first-wins 脚本仍需手工: sudo cp scripts/openvpn-first-wins.sh /etc/openvpn/scripts/"
+if sudo -u "$APP_USER" sudo -n cat /etc/openvpn/easy-rsa/pki/index.txt >/dev/null 2>&1; then
+    echo "✓ $APP_USER 免密读取 index.txt 正常"
+else
+    echo "⚠️  $APP_USER 无法免密 sudo cat index.txt，请检查 /etc/sudoers.d/vpnwm 用户名是否为 $APP_USER"
+fi

@@ -5,9 +5,16 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-APP_USER=$USER
+APP_USER="${APP_USER:-$USER}"
 APP_DIR="/opt/vpnwm"
 APP_PORT=8080
+if [ "$APP_USER" = "root" ]; then
+    echo "不要用 root 部署 Web。请指定业务用户，例如:"
+    echo "  APP_USER=vpnv2ray bash ./deploy.sh"
+    echo "  APP_USER=am_openvpn bash ./deploy.sh"
+    exit 1
+fi
+echo "部署用户 APP_USER=$APP_USER"
 
 # TC 限速相关配置
 TC_DAEMON_SCRIPT="/usr/local/sbin/vpn-tc-daemon.sh"
@@ -57,22 +64,25 @@ if ! grep -q '^SECRET_KEY=' "$ENV_FILE" 2>/dev/null; then
     SK=$(openssl rand -hex 32)
     echo "SECRET_KEY=$SK" | sudo tee -a "$ENV_FILE" >/dev/null
     sudo chown "$APP_USER":"$APP_USER" "$ENV_FILE"
-    sudo chmod 600 "$ENV_FILE"
+    sudo chmod 640 "$ENV_FILE"
     echo "✓ 已生成 SECRET_KEY 并写入 $ENV_FILE"
 else
     echo "✓ SECRET_KEY 已存在，跳过"
 fi
+sudo chown "$APP_USER":"$APP_USER" "$ENV_FILE"
+sudo chmod 640 "$ENV_FILE"
 
 echo "=== 3. 创建数据库目录和文件 ==="
 DATA_DIR="$APP_DIR/data"
 echo "创建数据目录：$DATA_DIR"
-sudo -u "$APP_USER" mkdir -p "$DATA_DIR"
+sudo -u "$APP_USER" mkdir -p "$DATA_DIR/session"
 
 sudo chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 echo "✓ 目录所有权已设置"
 
 echo "=== 3.1 设置 /opt/vpnwm/data 权限 ==="
-sudo chmod -R 750 "$DATA_DIR"
+sudo chmod 750 "$DATA_DIR"
+sudo chmod 770 "$DATA_DIR/session"
 echo "✓ data 目录权限设置完成"
 
 echo "=== 3.2 初始化数据库文件（确保属主正确）==="
@@ -423,7 +433,7 @@ WorkingDirectory=$APP_DIR
 Environment="FLASK_ENV=production"
 Environment="PYTHONUNBUFFERED=1"
 EnvironmentFile=-$APP_DIR/.env
-ExecStart=$APP_DIR/venv/bin/gunicorn --timeout 600 -w 2 -b 0.0.0.0:$APP_PORT --access-logfile /dev/null --error-logfile - "app:app"
+ExecStart=$APP_DIR/venv/bin/gunicorn --timeout 600 -w 1 -b 127.0.0.1:$APP_PORT --access-logfile /dev/null --error-logfile - "app:app"
 Restart=always
 RestartSec=10
 
