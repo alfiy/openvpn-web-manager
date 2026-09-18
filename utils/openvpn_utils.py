@@ -700,6 +700,11 @@ def sync_online_state_to_db():
             })
 
         db.session.commit()
+        try:
+            from utils.openvpn_ops import cleanup_stale_first_wins_locks
+            cleanup_stale_first_wins_locks(online.keys())
+        except Exception as exc:
+            log_message(f"清理 first-wins 残留锁失败: {exc}")
 
     except SQLAlchemyError as e:
         db.session.rollback()

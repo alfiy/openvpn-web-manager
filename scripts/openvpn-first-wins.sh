@@ -11,6 +11,7 @@ LOG="${FIRST_WINS_LOG:-/etc/openvpn/first-wins/first-wins.log}"
 LOCK_DIR="${FIRST_WINS_LOCK_DIR:-/etc/openvpn/first-wins/locks}"
 STATUS_FILES="/run/openvpn/server.status /var/log/openvpn/status.log /etc/openvpn/openvpn-status.log"
 STALE_AFTER="${FIRST_WINS_STALE_AFTER:-90}"
+HOLD_GRACE="${FIRST_WINS_HOLD_GRACE:-15}"
 
 log() {
     printf '%s type=%s cn=%s ip=%s port=%s %s\n' \
@@ -52,8 +53,40 @@ cn_listed() {
     return 1
 }
 
+holder_session_listed() {
+    local want_cn="$1" want_addr="$2"
+    local f line addr in_list=0
+    [ -z "$want_addr" ] && return 1
+    for f in $STATUS_FILES; do
+        [ -r "$f" ] || continue
+        in_list=0
+        while IFS= read -r line; do
+            case "$line" in
+                "OpenVPN CLIENT LIST"*) in_list=1; continue ;;
+                "ROUTING TABLE"*|"GLOBAL STATS"*) in_list=0; continue ;;
+                CLIENT_LIST,"$want_cn",*)
+                    addr="${line#CLIENT_LIST,$want_cn,}"
+                    addr="${addr%%,*}"
+                    [ "$addr" = "$want_addr" ] && return 0
+                    ;;
+            esac
+            if [ "$in_list" = 1 ]; then
+                case "$line" in
+                    "Common Name"*|"Updated"*) ;;
+                    "$want_cn",*)
+                        addr="${line#${want_cn},}"
+                        addr="${addr%%,*}"
+                        [ "$addr" = "$want_addr" ] && return 0
+                        ;;
+                esac
+            fi
+        done < "$f"
+    done
+    return 1
+}
+
 mkdir -p "$LOCK_DIR" 2>/dev/null || true
-log "HOOK start v5"
+log "HOOK start v6"
 
 if [ -z "$CN" ]; then
     log "ALLOW no-common-name"
@@ -93,16 +126,17 @@ if [ -f "$LOCK" ]; then
     holder_ts="$(awk -F= '/^ts=/{print $2}' "$LOCK" 2>/dev/null || true)"
     now=$(date +%s)
     age=$((now - ${holder_ts:-0}))
-    if [ "$age" -lt "$STALE_AFTER" ]; then
-        log "DENY holder=${holder_ip:-?}:${holder_port:-?} age=${age}s (lock-fresh)"
+    holder_addr="${holder_ip}:${holder_port}"
+    if holder_session_listed "$CN" "$holder_addr"; then
+        log "DENY holder=$holder_addr still-online age=${age}s"
         exit 1
     fi
-    if cn_listed "$CN"; then
-        log "DENY holder=${holder_ip:-?}:${holder_port:-?} still-in-status age=${age}s"
+    if [ "$age" -lt "$HOLD_GRACE" ]; then
+        log "DENY holder=$holder_addr age=${age}s (lock-fresh)"
         exit 1
     fi
     rm -f "$LOCK"
-    log "STALE lock cleared age=${age}s"
+    log "STALE lock cleared holder=$holder_addr age=${age}s (offline)"
 fi
 
 {

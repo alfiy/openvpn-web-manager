@@ -259,6 +259,34 @@ def release_first_wins_lock(client_name: str) -> None:
     _sudo(['rm', '-f', lock], timeout=10)
 
 
+def cleanup_stale_first_wins_locks(online_names) -> None:
+    """页面/7505+ping 已不视为在线的 CN，清掉残留 first-wins 锁。"""
+    lock_dir = '/etc/openvpn/first-wins/locks'
+    try:
+        names = os.listdir(lock_dir)
+    except OSError:
+        return
+    live = {(n or '').strip().lower() for n in (online_names or [])}
+    now = time.time()
+    for name in names:
+        path = os.path.join(lock_dir, name)
+        if name.endswith('.gate'):
+            _sudo(['rm', '-f', path], timeout=10)
+            continue
+        if not name.endswith('.lock'):
+            continue
+        cn = name[:-5]
+        if cn.lower() in live:
+            continue
+        try:
+            age = now - os.path.getmtime(path)
+        except OSError:
+            age = 999
+        if age < 30:
+            continue
+        _sudo(['rm', '-f', path], timeout=10)
+
+
 def set_ccd_disabled(client_name: str, disabled: bool) -> Tuple[bool, str]:
     client_name = validate_client_name(client_name)
     dest = safe_join(CCD_DIR, client_name, '')
