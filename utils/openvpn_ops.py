@@ -259,15 +259,24 @@ def release_first_wins_lock(client_name: str) -> None:
     _sudo(['rm', '-f', lock], timeout=10)
 
 
-def cleanup_stale_first_wins_locks(online_names) -> None:
-    """页面/7505+ping 已不视为在线的 CN，清掉残留 first-wins 锁。"""
+def _lock_safe_name(client_name: str) -> str:
+    return ''.join(ch if ch.isalnum() or ch in '._-' else '_' for ch in client_name)
+
+
+def cleanup_stale_first_wins_locks(online) -> None:
+    """以 7505 在线名单对齐锁：在线补锁，离线删锁。"""
     lock_dir = '/etc/openvpn/first-wins/locks'
+    os.makedirs(lock_dir, exist_ok=True)
+    if isinstance(online, dict):
+        live = {str(k).strip(): v for k, v in online.items() if str(k).strip()}
+    else:
+        live = {str(n).strip(): None for n in (online or []) if str(n).strip()}
+    live_lower = {k.lower(): k for k in live}
+    now = int(time.time())
     try:
         names = os.listdir(lock_dir)
     except OSError:
-        return
-    live = {(n or '').strip().lower() for n in (online_names or [])}
-    now = time.time()
+        names = []
     for name in names:
         path = os.path.join(lock_dir, name)
         if name.endswith('.gate'):
@@ -276,15 +285,46 @@ def cleanup_stale_first_wins_locks(online_names) -> None:
         if not name.endswith('.lock'):
             continue
         cn = name[:-5]
-        if cn.lower() in live:
+        if cn.lower() in live_lower:
             continue
         try:
-            age = now - os.path.getmtime(path)
+            age = time.time() - os.path.getmtime(path)
         except OSError:
             age = 999
         if age < 30:
             continue
         _sudo(['rm', '-f', path], timeout=10)
+    for cn, info in live.items():
+        try:
+            validate_client_name(cn)
+        except ValidationError:
+            continue
+        safe = _lock_safe_name(cn)
+        path = os.path.join(lock_dir, f'{safe}.lock')
+        if os.path.isfile(path):
+            continue
+        real_addr = ''
+        if info is not None:
+            real_addr = getattr(info, 'real_addr', '') or ''
+            if not real_addr:
+                rip = getattr(info, 'real_ip', '') or ''
+                real_addr = rip
+        ip, port = real_addr, ''
+        if ':' in real_addr:
+            ip, port = real_addr.rsplit(':', 1)
+        body = f'cn={cn}\nip={ip}\nport={port}\nts={now}\n'
+        fd, tmp_path = tempfile.mkstemp(prefix='vpnwm-fw-')
+        try:
+            with os.fdopen(fd, 'w') as fh:
+                fh.write(body)
+            _sudo(['cp', tmp_path, path], timeout=10)
+            _sudo(['chown', 'nobody:nogroup', path], timeout=10)
+            _sudo(['chmod', '644', path], timeout=10)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 def set_ccd_disabled(client_name: str, disabled: bool) -> Tuple[bool, str]:

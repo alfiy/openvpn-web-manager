@@ -25,6 +25,7 @@ class OnlineClient(NamedTuple):
     duration_str: str          # 人类可读
     duration_sec: int          # 秒数,方便排序
     connected_since: str       # 原始字符串
+    real_addr: str = ''        # ip:port，给 first-wins 补锁用
 
 
 # 缓存 10 s,避免并发刷爆 IO
@@ -327,6 +328,7 @@ def _parse_mgmt_status(text: str) -> Dict[str, OnlineClient]:
             duration_str=_human_duration(duration_sec),
             duration_sec=duration_sec,
             connected_since=conn_since,
+            real_addr=real_addr,
         )
     return clients
 
@@ -479,7 +481,8 @@ def get_online_clients(status_file: str = None, cache_ttl: int = 10) -> Dict[str
             real_ip=real_ip,
             duration_str=_human_duration(duration_sec),
             duration_sec=duration_sec,
-            connected_since=conn_since
+            connected_since=conn_since,
+            real_addr=real_addr,
         )
 
     # 二次扫描:补 vpn_ip(ROUTING TABLE 段)
@@ -705,7 +708,7 @@ def sync_online_state_to_db():
         db.session.commit()
         try:
             from utils.openvpn_ops import cleanup_stale_first_wins_locks
-            cleanup_stale_first_wins_locks(online.keys())
+            cleanup_stale_first_wins_locks(online)
         except Exception as exc:
             log_message(f"清理 first-wins 残留锁失败: {exc}")
 
